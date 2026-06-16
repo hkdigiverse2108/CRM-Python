@@ -7,7 +7,7 @@ import {
   Download, Send, Check, X, Laptop, FileText, Upload, 
   ShieldAlert, Edit3, User, MapPin, Activity, FileSpreadsheet,
   TrendingUp, BarChart3, Star, AlertTriangle, ArrowRight, Award, Trash2,
-  LogIn, LogOut
+  LogIn, LogOut, ChevronLeft, ChevronRight, Coffee
 } from 'lucide-react';
 
 export default function HRMSDashboard() {
@@ -1070,184 +1070,223 @@ export default function HRMSDashboard() {
           <div className="xl:col-span-3 space-y-6">
             {/* PUNCH IN / OUT SYSTEM */}
             {activeTab === 'ess-punch' && (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Visual Live Clock Panel */}
-                <div className="lg:col-span-2 bg-card border border-border p-6 rounded-2xl shadow-sm flex flex-col items-center justify-center text-center space-y-5">
-                  <p className="text-xs uppercase font-bold text-muted-foreground tracking-widest">
-                    📅 {currentTime.toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                  </p>
-
-                  <div className="w-40 h-40 rounded-full border-4 border-indigo-500/20 flex flex-col items-center justify-center bg-muted/40 shadow-inner">
-                    <p className="text-2xl font-extrabold tracking-wider font-mono text-indigo-600 dark:text-indigo-400">
-                      {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                    </p>
-                    <p className="text-[9px] text-muted-foreground mt-1 uppercase font-semibold tracking-wider">Live Time Clock</p>
-                  </div>
-
-                  {/* Worked duration display */}
-                  <div className="bg-muted/65 border border-border/40 p-3.5 rounded-xl w-full max-w-sm flex items-center justify-between text-xs font-semibold">
-                    <div className="text-left">
-                      <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-widest">Worked Duration</p>
-                      <p className="text-xl font-mono font-extrabold text-foreground mt-0.5">{elapsedWorkingTime}</p>
-                    </div>
-                    
-                    <div className="text-right">
-                      <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-widest">Shift Status</p>
-                      <div className="mt-0.5">
-                        {!currentEmployeeAttendance?.checkIn || currentEmployeeAttendance.checkIn === '-' ? (
-                          <span className="text-[10px] text-slate-500 font-extrabold uppercase">Not Checked-In</span>
-                        ) : currentEmployeeAttendance.checkOut && currentEmployeeAttendance.checkOut !== '-' ? (
-                          <span className="text-[10px] text-slate-400 font-extrabold uppercase">Clocked Out</span>
-                        ) : currentEmployeeAttendance.breaks?.some(b => b.end === null) ? (
-                          <span className="text-[10px] text-amber-500 font-extrabold uppercase animate-pulse">On Break</span>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                
+                {/* Left Card: Punch & Working Stats */}
+                <div className="lg:col-span-2 bg-card border border-border rounded-3xl p-6 shadow-xs space-y-6 relative overflow-hidden">
+                  
+                  {/* Greeting & Profile Header */}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div className="flex items-center gap-3.5">
+                      <div className="relative shrink-0">
+                        {currentEmployee?.avatar_url ? (
+                          <img 
+                            src={currentEmployee.avatar_url} 
+                            alt={currentEmployee.name} 
+                            className="w-14 h-14 rounded-full object-cover border-2 border-primary/20" 
+                          />
                         ) : (
-                          <span className="text-[10px] text-success font-extrabold uppercase animate-pulse">Active Working</span>
+                          <div className="w-14 h-14 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-600 font-bold text-xl uppercase border-2 border-primary/20">
+                            {currentEmployee?.name?.split(' ').map(w => w[0]).join('').slice(0, 2)}
+                          </div>
                         )}
+                        <span className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 bg-emerald-500 border-2 border-card rounded-full animate-pulse"></span>
                       </div>
+                      <div>
+                        <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-50/70 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold">
+                          <span>☀️</span> Good morning, {currentEmployee?.name?.split(' ')?.[0] || 'Parth'}
+                        </div>
+                        <h3 className="text-base font-extrabold text-slate-900 dark:text-white mt-1.5">{currentEmployee?.name || 'Parth Ashvinbhai Devani'}</h3>
+                        <p className="text-xs text-muted-foreground mt-0.5 font-semibold">{currentEmployee?.role || 'Python Developer'}</p>
+                      </div>
+                    </div>
+
+                    {/* Current Time Display */}
+                    <div className="bg-muted/50 border border-border/40 p-4 rounded-2xl text-right min-w-[140px]">
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Current Time</p>
+                      <p className="text-xl font-mono font-extrabold text-slate-900 dark:text-white mt-1">
+                        {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground font-semibold mt-0.5">
+                        {currentTime.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                      </p>
                     </div>
                   </div>
 
-                  {/* Unified 4-button console */}
-                  <div className="grid grid-cols-2 gap-3 w-full max-w-sm pt-1">
-                    {/* 1. Punch In */}
-                    <button
-                      onClick={handlePunchIn}
-                      disabled={currentEmployeeAttendance && currentEmployeeAttendance.checkIn && currentEmployeeAttendance.checkIn !== '-'}
-                      className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm ${
-                        !(currentEmployeeAttendance && currentEmployeeAttendance.checkIn && currentEmployeeAttendance.checkIn !== '-')
-                          ? 'bg-green-600 hover:bg-green-700 text-white shadow-green-600/10'
-                          : 'bg-slate-100 text-slate-450 dark:bg-slate-800 dark:text-slate-500 border border-border/40 cursor-not-allowed'
-                      }`}
-                    >
-                      <LogIn size={13} /> Punch In
-                    </button>
+                  {/* Live Clock Card */}
+                  <div className="bg-emerald-500/[0.03] dark:bg-emerald-500/[0.01] border border-emerald-500/10 rounded-2xl p-6 flex flex-col items-center justify-center text-center space-y-3">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                      Live Working Time <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-black bg-emerald-500 text-white animate-pulse">LIVE</span>
+                    </span>
+                    <h1 className="text-4xl sm:text-5xl font-mono font-black tracking-tight text-slate-900 dark:text-white py-1">
+                      {elapsedWorkingTime}
+                    </h1>
+                    {currentEmployeeAttendance?.checkIn && currentEmployeeAttendance.checkIn !== '-' && (!currentEmployeeAttendance.checkOut || currentEmployeeAttendance.checkOut === '-') ? (
+                      <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                        <span className="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></span> Live Tracking Active
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground font-bold flex items-center gap-1">
+                        <span className="w-2 h-2 bg-slate-400 rounded-full"></span> Live Tracking Inactive
+                      </span>
+                    )}
+                  </div>
 
-                    {/* 2. Break In */}
-                    <button
-                      onClick={handleBreakIn}
-                      disabled={
-                        !currentEmployeeAttendance || 
-                        !currentEmployeeAttendance.active || 
-                        currentEmployeeAttendance.breaks?.some(b => b.end === null)
-                      }
-                      className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm ${
-                        currentEmployeeAttendance && 
-                        currentEmployeeAttendance.active && 
-                        !currentEmployeeAttendance.breaks?.some(b => b.end === null)
-                          ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/10'
-                          : 'bg-slate-100 text-slate-450 dark:bg-slate-800 dark:text-slate-500 border border-border/40 cursor-not-allowed'
-                      }`}
-                    >
-                      <Clock size={13} /> Break In
-                    </button>
+                  {/* Punch Status Banner */}
+                  <div className={`w-full py-3 px-4 rounded-xl flex items-center justify-center gap-2 text-xs font-bold ${
+                    currentEmployeeAttendance?.checkIn && currentEmployeeAttendance.checkIn !== '-' && (!currentEmployeeAttendance.checkOut || currentEmployeeAttendance.checkOut === '-')
+                      ? 'bg-emerald-500/10 text-emerald-700 dark:bg-emerald-500/5 dark:text-emerald-400 border border-emerald-500/20'
+                      : 'bg-muted text-muted-foreground border border-border/40'
+                  }`}>
+                    {currentEmployeeAttendance?.checkIn && currentEmployeeAttendance.checkIn !== '-' ? (
+                      <>
+                        <span className="w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center text-[10px] text-emerald-600 font-bold">✓</span>
+                        Punched in at {currentEmployeeAttendance.checkIn}
+                      </>
+                    ) : (
+                      <>
+                        <span className="w-4 h-4 rounded-full bg-muted-foreground/20 flex items-center justify-center text-[10px] text-muted-foreground">!</span>
+                        Not Checked In Today
+                      </>
+                    )}
+                  </div>
 
-                    {/* 3. Break Out */}
-                    <button
-                      onClick={handleBreakOut}
-                      disabled={
-                        !currentEmployeeAttendance || 
-                        !currentEmployeeAttendance.active || 
-                        !currentEmployeeAttendance.breaks?.some(b => b.end === null)
-                      }
-                      className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm ${
-                        currentEmployeeAttendance && 
-                        currentEmployeeAttendance.active && 
-                        currentEmployeeAttendance.breaks?.some(b => b.end === null)
-                          ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/10'
-                          : 'bg-slate-100 text-slate-450 dark:bg-slate-800 dark:text-slate-500 border border-border/40 cursor-not-allowed'
-                      }`}
-                    >
-                      <Clock size={13} /> Break Out
-                    </button>
+                  {/* Unified Actions Console */}
+                  <div className="pt-2">
+                    {!currentEmployeeAttendance?.checkIn || currentEmployeeAttendance.checkIn === '-' ? (
+                      /* Not Checked In: Big Green Punch In Button */
+                      <button
+                        onClick={handlePunchIn}
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3.5 px-6 rounded-2xl shadow-md transition-all flex items-center justify-center gap-2.5 hover:scale-[1.01] active:scale-[0.99] text-sm"
+                      >
+                        <LogIn size={18} /> Punch In & Start Working
+                      </button>
+                    ) : (
+                      /* Already Checked In: Actions Panel */
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {/* Break Toggle Button */}
+                        <button
+                          onClick={currentEmployeeAttendance.breaks?.some(b => b.end === null) ? handleBreakOut : handleBreakIn}
+                          className={`py-3 px-4 border border-border hover:bg-muted/50 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
+                            currentEmployeeAttendance.breaks?.some(b => b.end === null)
+                              ? 'bg-amber-500 text-white hover:bg-amber-600 border-transparent shadow-xs'
+                              : 'text-foreground'
+                          }`}
+                        >
+                          <Coffee size={14} /> 
+                          {currentEmployeeAttendance.breaks?.some(b => b.end === null) ? 'Resume Work' : 'Take Break'}
+                        </button>
 
-                    {/* 4. Punch Out */}
-                    <button
-                      onClick={handlePunchOut}
-                      disabled={!currentEmployeeAttendance || !currentEmployeeAttendance.active}
-                      className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm ${
-                        currentEmployeeAttendance && currentEmployeeAttendance.active
-                          ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/10'
-                          : 'bg-slate-100 text-slate-450 dark:bg-slate-800 dark:text-slate-500 border border-border/40 cursor-not-allowed'
-                      }`}
+                        {/* Meeting Simulation Button */}
+                        <button
+                          onClick={() => addToast('Meeting status updated.', 'info')}
+                          className="py-3 px-4 border border-border hover:bg-muted/50 text-foreground rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all"
+                        >
+                          <Calendar size={14} /> Going for Meeting
+                        </button>
+
+                        {/* Punch Out Button */}
+                        <button
+                          onClick={handlePunchOut}
+                          className="py-3 px-4 border border-rose-500/20 hover:bg-rose-500/5 text-rose-600 dark:text-rose-400 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all"
+                        >
+                          <LogOut size={14} /> Punch Out
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Summary Metrics Table */}
+                  <div className="border border-border/60 rounded-2xl overflow-hidden divide-x divide-border/60 grid grid-cols-2 sm:grid-cols-4 bg-muted/20">
+                    <div className="p-4 text-center space-y-1">
+                      <p className="text-[9px] uppercase font-extrabold text-muted-foreground tracking-wider">First In</p>
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-250">{currentEmployeeAttendance?.checkIn || '--'}</p>
+                    </div>
+                    <div className="p-4 text-center space-y-1">
+                      <p className="text-[9px] uppercase font-extrabold text-muted-foreground tracking-wider">Last Out</p>
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-250">
+                        {currentEmployeeAttendance?.checkOut || (currentEmployeeAttendance?.checkIn ? 'Active' : '--')}
+                      </p>
+                    </div>
+                    <div className="p-4 text-center space-y-1">
+                      <p className="text-[9px] uppercase font-extrabold text-muted-foreground tracking-wider">Break In Time</p>
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-250">
+                        {currentEmployeeAttendance?.breakDuration || '0.5 hrs'}
+                      </p>
+                    </div>
+                    <div className="p-4 text-center space-y-1">
+                      <p className="text-[9px] uppercase font-extrabold text-muted-foreground tracking-wider">Worked Time</p>
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-250 font-mono">
+                        {currentEmployeeAttendance?.checkOut 
+                          ? `${currentEmployeeAttendance.workingHours || 0} hrs` 
+                          : currentEmployeeAttendance?.checkIn ? 'Active' : '--'}
+                      </p>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Right Card: Calendar Sidebar */}
+                <div className="bg-card border border-border rounded-3xl p-5 shadow-xs space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">View Events</h3>
+                      <p className="text-[10px] text-muted-foreground font-semibold mt-0.5">This month events</p>
+                    </div>
+                    <button 
+                      onClick={() => addToast('Viewing all events...', 'info')}
+                      className="text-[10px] font-extrabold bg-muted border border-border/60 text-muted-foreground hover:bg-border/60 px-2.5 py-1.5 rounded-lg transition-colors"
                     >
-                      <LogOut size={13} /> Punch Out
+                      View all
                     </button>
+                  </div>
+
+                  {/* Calendar Widget */}
+                  <div className="border border-border/50 rounded-2xl p-4 bg-muted/10 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <button className="text-muted-foreground hover:text-foreground"><ChevronLeft size={16} /></button>
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">June 2026</span>
+                      <button className="text-muted-foreground hover:text-foreground"><ChevronRight size={16} /></button>
+                    </div>
+
+                    <div className="grid grid-cols-7 gap-y-2.5 text-center text-[10px] font-bold">
+                      {/* Weekday headers */}
+                      {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => (
+                        <span key={d} className="text-muted-foreground font-bold">{d}</span>
+                      ))}
+
+                      {/* Week 1 padding (June 2026 starts on Monday, so Sunday is empty) */}
+                      <span className="text-slate-350"></span>
+
+                      {/* June Days */}
+                      {Array.from({ length: 30 }).map((_, idx) => {
+                        const day = idx + 1;
+                        const hasEvent = [3, 5].includes(day);
+                        const isToday = day === 16;
+
+                        return (
+                          <div key={day} className="flex items-center justify-center relative h-6 w-full">
+                            <span className={`flex items-center justify-center w-6 h-6 rounded-full text-xs transition-colors ${
+                              isToday 
+                                ? 'bg-primary text-white font-black shadow-xs' 
+                                : hasEvent 
+                                  ? 'border border-emerald-500/40 text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/[0.05]' 
+                                  : 'text-foreground'
+                            }`}>
+                              {day}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Scheduled Events details footer */}
+                  <div className="pt-2 text-center text-xs text-muted-foreground font-medium">
+                    No events scheduled.
                   </div>
                 </div>
 
-                {/* Verification Toggles */}
-                <div className="bg-card border border-border p-5 rounded-2xl shadow-sm space-y-4">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                    ⚙ Verification Parameters
-                  </h3>
-
-                  <div className="space-y-4 text-xs font-medium">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-slate-800 dark:text-slate-100">GPS Tracker Verification</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">Mock longitude/latitude logger.</p>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={simGps}
-                        onChange={e => setSimGps(e.target.checked)}
-                        className="rounded border-gray-300 text-primary focus:ring-primary h-4 w-4"
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-slate-800 dark:text-slate-100">Geofencing Authorization</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">Verify coordinates within HQ.</p>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={simGeofencing}
-                        onChange={e => setSimGeofencing(e.target.checked)}
-                        className="rounded border-gray-300 text-primary focus:ring-primary h-4 w-4"
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-slate-800 dark:text-slate-100">Selfie Match Biometrics</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">Biometric facial matching check.</p>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={simSelfie}
-                        onChange={e => setSimSelfie(e.target.checked)}
-                        className="rounded border-gray-300 text-primary focus:ring-primary h-4 w-4"
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-slate-800 dark:text-slate-100">IP Address Verification</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">Checks corporate subnet whitelist.</p>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={simIpCheck}
-                        onChange={e => setSimIpCheck(e.target.checked)}
-                        className="rounded border-gray-300 text-primary focus:ring-primary h-4 w-4"
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-slate-800 dark:text-slate-100">Authorized Device Token</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">Verify hardware UUID credentials.</p>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={simDevice}
-                        onChange={e => setSimDevice(e.target.checked)}
-                        className="rounded border-gray-300 text-primary focus:ring-primary h-4 w-4"
-                      />
-                    </div>
-                  </div>
-                </div>
               </div>
             )}
 
