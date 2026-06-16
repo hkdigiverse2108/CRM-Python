@@ -329,7 +329,7 @@ export default function WorkspaceAdmin() {
     } else {
       setRoleLocalPermissions([]);
     }
-  }, [selectedRole, selectedRoleId, roles]);
+  }, [selectedRole?.id]);
 
   const handleToggleRolePage = (pageKey) => {
     if (!selectedRole?.isCustom) return;
