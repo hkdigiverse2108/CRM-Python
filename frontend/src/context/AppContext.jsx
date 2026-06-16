@@ -467,6 +467,7 @@ export function AppProvider({ children }) {
   const [attendance, setAttendance] = useState([]);
   const [letterRequests, setLetterRequests] = useState([]);
   const [flatDocs, setFlatDocs] = useState([]);
+  const [payrollAdjustments, setPayrollAdjustments] = useState([]);
 
   const [recruitmentJobs, setRecruitmentJobs] = useState(() => {
     const saved = localStorage.getItem('hrms-recruitment');
@@ -1700,6 +1701,25 @@ export function AppProvider({ children }) {
     }
   }, [token, tenantId]);
 
+  const fetchPayrollAdjustments = useCallback(async () => {
+    if (!token) return;
+    try {
+      const resp = await fetch(`${API_BASE}/payroll/adjustments`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+        }
+      });
+      const data = await resp.json();
+      if (data.success && data.data) {
+        setPayrollAdjustments(data.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch adjustments:', err);
+    }
+  }, [token, tenantId]);
+
   useEffect(() => {
     if (token) {
       fetchInvoices();
@@ -1720,8 +1740,9 @@ export function AppProvider({ children }) {
       fetchClients();
       fetchLetters();
       fetchSubmissions();
+      fetchPayrollAdjustments();
     }
-  }, [token, fetchInvoices, fetchQuotes, fetchPayments, fetchLedger, fetchExpenses, fetchGstRecords, fetchEmployees, fetchLeaves, fetchPayroll, fetchAttendance, fetchTasks, fetchReminders, fetchRoles, fetchAuditLogs, fetchContacts, fetchClients, fetchLetters, fetchSubmissions]);
+  }, [token, fetchInvoices, fetchQuotes, fetchPayments, fetchLedger, fetchExpenses, fetchGstRecords, fetchEmployees, fetchLeaves, fetchPayroll, fetchAttendance, fetchTasks, fetchReminders, fetchRoles, fetchAuditLogs, fetchContacts, fetchClients, fetchLetters, fetchSubmissions, fetchPayrollAdjustments]);
 
   useEffect(() => {
     localStorage.setItem('marketing-campaigns', JSON.stringify(campaigns));
@@ -2879,6 +2900,59 @@ export function AppProvider({ children }) {
     }
   }, [token, tenantId, addToast]);
 
+  const addPayrollAdjustment = useCallback(async (payload) => {
+    if (!token) return null;
+    try {
+      const resp = await fetch(`${API_BASE}/payroll/adjustments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json();
+      if (data.success && data.data) {
+        setPayrollAdjustments(prev => [data.data, ...prev]);
+        addToast('Payroll adjustment added successfully.', 'success');
+        return data.data;
+      } else {
+        throw new Error(data.message || 'Failed to add adjustment');
+      }
+    } catch (err) {
+      console.error(err);
+      addToast(err.message, 'error');
+      return null;
+    }
+  }, [token, tenantId, addToast]);
+
+  const deletePayrollAdjustment = useCallback(async (adjustmentId) => {
+    if (!token) return false;
+    try {
+      const resp = await fetch(`${API_BASE}/payroll/adjustments/${adjustmentId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+        }
+      });
+      const data = await resp.json();
+      if (data.success) {
+        setPayrollAdjustments(prev => prev.filter(item => item.id !== adjustmentId));
+        addToast('Payroll adjustment deleted successfully.', 'success');
+        return true;
+      } else {
+        throw new Error(data.message || 'Failed to delete adjustment');
+      }
+    } catch (err) {
+      console.error(err);
+      addToast(err.message, 'error');
+      return false;
+    }
+  }, [token, tenantId, addToast]);
+
   const uploadDocument = useCallback(async (empId, docData) => {
     if (!token) return;
     try {
@@ -3424,6 +3498,9 @@ export function AppProvider({ children }) {
       setFlatDocs,
       createLetterRequest,
       updateLetterRequestStatus,
+      payrollAdjustments,
+      addPayrollAdjustment,
+      deletePayrollAdjustment,
       hrmsRole,
       setHrmsRole,
       hrmsEmployeeId,

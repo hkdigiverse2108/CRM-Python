@@ -129,7 +129,17 @@ const sidebarGroups = [
       { label: 'Directory', path: '/hrms/directory', module: 'hrms', pageKey: 'hrms_directory' },
       { label: 'Attendance', path: '/hrms/attendance', module: 'hrms', pageKey: 'hrms_attendance' },
       { label: 'Leaves', path: '/hrms/leaves', module: 'hrms', pageKey: 'hrms_leaves' },
-      { label: 'Payroll', path: '/hrms/payroll', module: 'hrms', pageKey: 'hrms_payroll' },
+      {
+        label: 'Payroll',
+        path: '/hrms/payroll',
+        module: 'hrms',
+        pageKey: 'hrms_payroll',
+        subItems: [
+          { label: 'Payroll Processing', path: '/hrms/payroll' },
+          { label: 'Payslips', path: '/hrms/payroll/payslips' },
+          { label: 'Bonuses & Deductions', path: '/hrms/payroll/bonuses-deductions' }
+        ]
+      },
       { label: 'Documents', path: '/hrms/documents', module: 'hrms', pageKey: 'hrms_documents' },
     ]
   },
@@ -365,7 +375,7 @@ export default function Sidebar() {
                                   <NavLink
                                     key={sub.path}
                                     to={sub.path}
-                                    end={sub.path === '/omnichannel/whatsapp'}
+                                    end={sub.path === '/omnichannel/whatsapp' || sub.path === '/hrms/payroll'}
                                     className={`flex items-center gap-2 py-1 px-2.5 rounded-lg text-[11px] font-medium transition-all ${
                                       isSubActive
                                         ? 'bg-primary text-primary-foreground font-semibold shadow-sm shadow-primary/10'

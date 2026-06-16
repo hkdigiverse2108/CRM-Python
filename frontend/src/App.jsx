@@ -202,6 +202,8 @@ export default function App() {
             <Route path="/hrms/attendance" element={<PermissionGuard module="hrms"><Attendance /></PermissionGuard>} />
             <Route path="/hrms/leaves" element={<PermissionGuard module="hrms"><Leaves /></PermissionGuard>} />
             <Route path="/hrms/payroll" element={<PermissionGuard module="hrms"><Payroll /></PermissionGuard>} />
+            <Route path="/hrms/payroll/payslips" element={<PermissionGuard module="hrms"><Payroll /></PermissionGuard>} />
+            <Route path="/hrms/payroll/bonuses-deductions" element={<PermissionGuard module="hrms"><Payroll /></PermissionGuard>} />
             <Route path="/hrms/documents" element={<PermissionGuard module="hrms"><Documents /></PermissionGuard>} />
 
             {/* Projects */}
