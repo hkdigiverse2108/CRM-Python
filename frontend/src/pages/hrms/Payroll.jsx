@@ -187,34 +187,10 @@ export default function Payroll() {
   };
 
   const handleDownloadPayslip = (row) => {
-    addToast(`Exporting payslip for ${row.employeeName}...`, 'success');
-    
-    const csvContent = [
-      ["HK DIGIVERSE CRM - MONTHLY PAYSLIP"],
-      ["Employee ID", row.employeeId],
-      ["Name", row.employeeName],
-      ["Department", row.department],
-      ["Designation", row.designation],
-      ["Pay Month", selectedMonth],
-      ["Status", row.status],
-      [""],
-      ["EARNINGS COMPONENT", "AMOUNT (INR)"],
-      ["Basic Salary (Earned)", row.basic],
-      ["Allowances", row.bonus],
-      ["Gross Salary", row.basic + row.bonus],
-      [""],
-      ["DEDUCTIONS COMPONENT", "AMOUNT (INR)"],
-      ["Deductions (Unpaid & Statutory)", row.deductions],
-      [""],
-      ["NET TAKE HOME PAY", row.netPay]
-    ].map(line => line.map(val => `"${val}"`).join(',')).join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.setAttribute('href', url);
-    a.setAttribute('download', `Payslip_${row.employeeName}_${selectedMonth.replace(' ', '_')}.csv`);
-    a.click();
+    setInspectedRecord(row);
+    setTimeout(() => {
+      window.print();
+    }, 150);
   };
 
   // Payslips view logic
