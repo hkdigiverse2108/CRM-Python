@@ -10,6 +10,7 @@ export default function Attendance() {
     employees = [], 
     clockInOut,
     user,
+    hrmsEmployeeId,
     addToast 
   } = useApp();
 
@@ -29,10 +30,13 @@ export default function Attendance() {
 
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
 
-  // Find corresponding employee record for logged-in user
+  // Find corresponding employee record for logged-in user or active simulator employee
   const currentEmployee = useMemo(() => {
-    return employees.find(emp => emp.email === user?.email) || null;
-  }, [employees, user]);
+    return employees.find(emp => emp.employee_id === hrmsEmployeeId || emp.id === hrmsEmployeeId) || 
+           employees.find(emp => emp.email === user?.email) || 
+           employees[0] || 
+           null;
+  }, [employees, hrmsEmployeeId, user]);
 
   // Filter attendance records to ONLY show the logged-in user's records
   const myAttendance = useMemo(() => {
@@ -258,11 +262,11 @@ export default function Attendance() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 dark:border-slate-800/50 pb-5">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full bg-indigo-50 dark:bg-indigo-950/30 flex items-center justify-center text-indigo-600 font-extrabold text-sm border border-indigo-100 dark:border-indigo-900/40">
-                {user?.full_name?.split(' ').map(w => w[0]).join('') || 'U'}
+                {(currentEmployee?.name || user?.full_name)?.split(' ').map(w => w[0]).join('') || 'U'}
               </div>
               <div>
                 <h4 className="font-bold text-slate-900 dark:text-white flex items-center gap-1">
-                  {user?.full_name || 'User Name'} <span className="text-[10px] text-indigo-500 font-bold bg-indigo-50 dark:bg-indigo-950/40 px-1.5 py-0.5 rounded-md">(You)</span>
+                  {currentEmployee?.name || user?.full_name || 'User Name'} <span className="text-[10px] text-indigo-500 font-bold bg-indigo-50 dark:bg-indigo-950/40 px-1.5 py-0.5 rounded-md">(You)</span>
                 </h4>
                 <p className="text-[10px] text-slate-450 mt-0.5">
                   Employee • {currentEmployee?.role || 'Staff Member'}
