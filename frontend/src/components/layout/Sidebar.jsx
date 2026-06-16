@@ -51,10 +51,10 @@ const sidebarGroups = [
     module: 'projects',
     items: [
       { label: 'Dashboard', path: '/projects/dashboard', module: 'projects', pageKey: 'projects_dashboard' },
-      { label: 'All Projects', path: '/projects/all', module: 'projects', pageKey: 'projects_taskboard' },
-      { label: 'Pipeline Board', path: '/projects/pipeline', module: 'projects', pageKey: 'projects_taskboard' },
+      { label: 'All Projects', path: '/projects/all', module: 'projects', pageKey: 'projects_all' },
+      { label: 'Pipeline Board', path: '/projects/pipeline', module: 'projects', pageKey: 'projects_pipeline' },
       { label: 'Gantt Chart', path: '/projects/gantt', module: 'projects', pageKey: 'projects_gantt' },
-      { label: 'Reports', path: '/projects/reports', module: 'projects', pageKey: 'projects_dashboard' },
+      { label: 'Reports', path: '/projects/reports', module: 'projects', pageKey: 'projects_reports' },
     ]
   },
   {
@@ -72,9 +72,9 @@ const sidebarGroups = [
           { label: 'Automation Dashboard', path: '/omnichannel/whatsapp/automation' }
         ]
       },
-      { label: 'Call Dialer', path: '/omnichannel/calls', module: 'whatsapp', pageKey: 'whatsapp_analytics' },
-      { label: 'Email Inbox', path: '/omnichannel/email', module: 'whatsapp', pageKey: 'whatsapp_inbox' },
-      { label: 'SMS Inbox', path: '/omnichannel/sms', module: 'whatsapp', pageKey: 'whatsapp_inbox' },
+      { label: 'Call Dialer', path: '/omnichannel/calls', module: 'whatsapp', pageKey: 'whatsapp_calls' },
+      { label: 'Email Inbox', path: '/omnichannel/email', module: 'whatsapp', pageKey: 'email_inbox' },
+      { label: 'SMS Inbox', path: '/omnichannel/sms', module: 'whatsapp', pageKey: 'sms_inbox' },
     ]
   },
   {
@@ -111,13 +111,13 @@ const sidebarGroups = [
     icon: FileText,
     module: 'finance',
     items: [
-      { label: 'Billing Dashboard', path: '/finance/billing', module: 'finance', pageKey: 'finance_invoices' },
+      { label: 'Billing Dashboard', path: '/finance/billing', module: 'finance', pageKey: 'finance_dashboard' },
       { label: 'Invoices', path: '/finance/invoices', module: 'finance', pageKey: 'finance_invoices' },
       { label: 'Quotes', path: '/finance/quotes', module: 'finance', pageKey: 'sales_quotations' },
       { label: 'Payments', path: '/finance/payments', module: 'finance', pageKey: 'finance_payments' },
       { label: 'Ledger', path: '/finance/ledger', module: 'finance', pageKey: 'finance_ledger' },
-      { label: 'Expenses', path: '/finance/expenses', module: 'finance', pageKey: 'finance_ledger' },
-      { label: 'GST Reports', path: '/finance/gst', module: 'finance', pageKey: 'finance_ledger' },
+      { label: 'Expenses', path: '/finance/expenses', module: 'finance', pageKey: 'finance_expenses' },
+      { label: 'GST Reports', path: '/finance/gst', module: 'finance', pageKey: 'finance_gst' },
     ]
   },
   {
@@ -149,7 +149,7 @@ const sidebarGroups = [
     module: 'projects',
     items: [
       { label: 'Task Board', path: '/tasks', module: 'projects', pageKey: 'projects_taskboard' },
-      { label: 'Reminders', path: '/tasks/reminders', module: 'projects', pageKey: 'projects_taskboard' },
+      { label: 'Reminders', path: '/tasks/reminders', module: 'projects', pageKey: 'projects_reminders' },
     ]
   },
   {

@@ -114,6 +114,9 @@ const HIERARCHICAL_PAGES = [
     module: 'WhatsApp',
     pages: [
       { key: 'whatsapp_inbox', label: 'Inbox' },
+      { key: 'whatsapp_calls', label: 'Call Dialer' },
+      { key: 'email_inbox', label: 'Email Inbox' },
+      { key: 'sms_inbox', label: 'SMS Inbox' },
       { key: 'whatsapp_templates', label: 'Templates' },
       { key: 'whatsapp_campaigns', label: 'Campaigns' },
       { key: 'whatsapp_analytics', label: 'Analytics' }
@@ -135,9 +138,12 @@ const HIERARCHICAL_PAGES = [
   {
     module: 'Finance',
     pages: [
+      { key: 'finance_dashboard', label: 'Billing Dashboard' },
       { key: 'finance_invoices', label: 'Invoices' },
       { key: 'finance_payments', label: 'Payments' },
-      { key: 'finance_ledger', label: 'Ledger' }
+      { key: 'finance_ledger', label: 'Ledger' },
+      { key: 'finance_expenses', label: 'Expenses' },
+      { key: 'finance_gst', label: 'GST Reports' }
     ]
   },
   {
@@ -155,8 +161,12 @@ const HIERARCHICAL_PAGES = [
     module: 'Projects',
     pages: [
       { key: 'projects_dashboard', label: 'Dashboard' },
+      { key: 'projects_all', label: 'All Projects' },
+      { key: 'projects_pipeline', label: 'Pipeline Board' },
+      { key: 'projects_gantt', label: 'Gantt Chart' },
+      { key: 'projects_reports', label: 'Reports' },
       { key: 'projects_taskboard', label: 'Task Board' },
-      { key: 'projects_gantt', label: 'Gantt Chart' }
+      { key: 'projects_reminders', label: 'Reminders' }
     ]
   },
   {
@@ -267,7 +277,7 @@ export default function WorkspaceAdmin() {
   const [roleLocalPermissions, setRoleLocalPermissions] = useState([]);
 
   // Forms
-  const blankUser = { email: '', full_name: '', role_name: 'Regular Employee', password: '', phone: '' };
+  const blankUser = { email: '', full_name: '', role_name: 'Regular Employee', password: '', phone: '', reporting_manager: '' };
   const [newUserForm, setNewUserForm] = useState({ ...blankUser });
   const [passwordForm, setPasswordForm] = useState({ password: '' });
 
@@ -1508,6 +1518,18 @@ export default function WorkspaceAdmin() {
                 .map(r => (
                   <option key={r.role_id} value={r.role_name}>{r.role_name}</option>
                 ))}
+            </SelectField>
+            <SelectField 
+              label="Reporting Manager" 
+              value={newUserForm.reporting_manager || ''} 
+              onChange={e => setNewUserForm(p => ({ ...p, reporting_manager: e.target.value }))}
+            >
+              <option value="">No Manager (Admin)</option>
+              {users.map(u => (
+                <option key={u.user_id} value={u.employee_id || u.full_name}>
+                  {u.full_name} ({u.role_name})
+                </option>
+              ))}
             </SelectField>
             <InputField 
               label="Initial Password" 

@@ -41,11 +41,12 @@ def get_security_context(db, user_id: str, tenant_id: str, module: str) -> Dict[
         return {"scope": "all", "user_ids": [], "current_user_id": user_id}
 
     # 4. Fetch matching Employee profile to determine Department/Team relationships
-    emp_sql = text("SELECT department, name, reporting_manager FROM hrms_employees WHERE email = :email AND workspace_id = :tenant_id AND deleted_at IS NULL")
+    emp_sql = text("SELECT employee_id, department, name, reporting_manager FROM hrms_employees WHERE email = :email AND workspace_id = :tenant_id AND deleted_at IS NULL")
     emp_row = db.execute(emp_sql, {"email": email, "tenant_id": tenant_id}).mappings().first()
     if not emp_row:
         return {"scope": scope, "user_ids": [user_id], "current_user_id": user_id}
 
+    emp_id = emp_row["employee_id"]
     dept = emp_row["department"]
     emp_name = emp_row["name"]
     manager = emp_row["reporting_manager"]
@@ -76,12 +77,14 @@ def get_security_context(db, user_id: str, tenant_id: str, module: str) -> Dict[
             FROM users u
             JOIN hrms_employees e ON u.email = e.email
             WHERE (e.reporting_manager = :emp_name 
+                   OR e.reporting_manager = :emp_id
                    OR (e.reporting_manager = :manager AND :manager != '') 
                    OR u.user_id = :user_id)
               AND u.workspace_id = :tenant_id AND e.deleted_at IS NULL
         """)
         team_user_ids = db.execute(team_sql, {
             "emp_name": emp_name,
+            "emp_id": emp_id,
             "manager": manager or "",
             "user_id": user_id,
             "tenant_id": tenant_id

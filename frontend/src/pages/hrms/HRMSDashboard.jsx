@@ -88,6 +88,15 @@ export default function HRMSDashboard() {
     return () => clearInterval(timer);
   }, []);
 
+  const getGreeting = () => {
+    const hour = currentTime.getHours();
+    if (hour < 12) return { text: 'Good morning', emoji: '☀️' };
+    if (hour < 17) return { text: 'Good afternoon', emoji: '☀️' };
+    if (hour < 22) return { text: 'Good evening', emoji: '🌇' };
+    return { text: 'Good night', emoji: '🌙' };
+  };
+  const greeting = getGreeting();
+
   // Simulator Toggles for clocking
   const [simGps, setSimGps] = useState(true);
   const [simGeofencing, setSimGeofencing] = useState(true);
@@ -611,7 +620,7 @@ export default function HRMSDashboard() {
                       </div>
                       <div>
                         <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-50/70 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold">
-                          <span>☀️</span> Good morning, {user?.full_name?.split(' ')?.[0] || 'Employee'}
+                          <span>{greeting.emoji}</span> {greeting.text}, {user?.full_name?.split(' ')?.[0] || 'Employee'}
                         </div>
                         <h3 className="text-base font-extrabold text-slate-900 dark:text-white mt-1.5">{currentEmployee?.name || '-'}</h3>
                         <p className="text-xs text-muted-foreground mt-0.5 font-semibold">{currentEmployee?.role || '-'}</p>

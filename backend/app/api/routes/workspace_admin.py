@@ -50,6 +50,7 @@ class UserCreatePayload(BaseModel):
     role_name: Optional[str] = "Employee"
     password: str = Field(..., min_length=6, max_length=50)
     phone: Optional[str] = Field(None, max_length=20)
+    reporting_manager: Optional[str] = Field(None, max_length=100)
 
 class PasswordResetPayload(BaseModel):
     password: str = Field(..., min_length=6, max_length=50)
@@ -118,9 +119,10 @@ async def list_workspace_users(
         if search:
             # Using ft_users FULLTEXT search
             users_query = text("""
-                SELECT u.user_id, u.email, u.full_name, u.phone, u.status, u.role_id, u.created_at, r.role_name
+                SELECT u.user_id, u.email, u.full_name, u.phone, u.status, u.role_id, u.created_at, r.role_name, e.employee_id
                 FROM users u
                 LEFT JOIN roles r ON u.role_id = r.role_id
+                LEFT JOIN hrms_employees e ON u.email = e.email AND e.workspace_id = u.workspace_id AND e.deleted_at IS NULL
                 WHERE u.workspace_id = :workspace_id AND u.deleted_at IS NULL
                   AND MATCH(u.full_name, u.email, u.phone) AGAINST(:search IN NATURAL LANGUAGE MODE)
                 LIMIT :limit OFFSET :offset
@@ -134,9 +136,10 @@ async def list_workspace_users(
             params = {"workspace_id": workspace_id, "search": search, "limit": per_page, "offset": offset}
         else:
             users_query = text("""
-                SELECT u.user_id, u.email, u.full_name, u.phone, u.status, u.role_id, u.created_at, r.role_name
+                SELECT u.user_id, u.email, u.full_name, u.phone, u.status, u.role_id, u.created_at, r.role_name, e.employee_id
                 FROM users u
                 LEFT JOIN roles r ON u.role_id = r.role_id
+                LEFT JOIN hrms_employees e ON u.email = e.email AND e.workspace_id = u.workspace_id AND e.deleted_at IS NULL
                 WHERE u.workspace_id = :workspace_id AND u.deleted_at IS NULL
                 LIMIT :limit OFFSET :offset
             """)
@@ -159,6 +162,7 @@ async def list_workspace_users(
                 "phone": r["phone"],
                 "status": r["status"],
                 "role_name": r["role_name"] or "Custom Role",
+                "employee_id": r["employee_id"],
                 "created_at": r["created_at"].isoformat() if r["created_at"] else None
             })
 
@@ -296,6 +300,57 @@ async def create_workspace_user(
             "phone": payload.phone,
             "hashed": hashed
         })
+
+        # Sync/Create employee record in hrms_employees table
+        existing_emp = db.execute(text("""
+            SELECT employee_id FROM hrms_employees WHERE email = :email AND workspace_id = :ws_id
+        """), {"email": payload.email, "ws_id": workspace_id}).scalar()
+
+        role_designation = payload.role_name or "Sales Executive"
+        dept_name = "Sales"
+        rd_lower = role_designation.lower()
+        if "super" in rd_lower or "admin" in rd_lower:
+            role_designation = "Python Developer"
+            dept_name = "Engineering"
+        elif "hr" in rd_lower:
+            dept_name = "HR"
+        elif "marketing" in rd_lower:
+            dept_name = "Marketing"
+        elif "finance" in rd_lower or "account" in rd_lower:
+            dept_name = "Finance"
+        elif "support" in rd_lower:
+            dept_name = "Support"
+
+        if not existing_emp:
+            emp_id = f"EMP-{str(uuid.uuid4())[:6].upper()}"
+            insert_emp_sql = text("""
+                INSERT INTO hrms_employees (employee_id, workspace_id, name, role, department, email, phone, status, reporting_manager, join_date)
+                VALUES (:emp_id, :ws_id, :name, :role, :department, :email, :phone, 'Active', :reporting_manager, CURRENT_DATE)
+            """)
+            db.execute(insert_emp_sql, {
+                "emp_id": emp_id,
+                "ws_id": workspace_id,
+                "name": payload.full_name,
+                "role": role_designation,
+                "department": dept_name,
+                "email": payload.email,
+                "phone": payload.phone,
+                "reporting_manager": payload.reporting_manager
+            })
+        else:
+            update_emp_sql = text("""
+                UPDATE hrms_employees 
+                SET reporting_manager = :reporting_manager, role = :role, department = :department, name = :name, phone = :phone, deleted_at = NULL
+                WHERE employee_id = :emp_id
+            """)
+            db.execute(update_emp_sql, {
+                "reporting_manager": payload.reporting_manager,
+                "role": role_designation,
+                "department": dept_name,
+                "name": payload.full_name,
+                "phone": payload.phone,
+                "emp_id": existing_emp
+            })
         
         log_audit_event(
             db, workspace_id, current_user["id"], current_user["email"],

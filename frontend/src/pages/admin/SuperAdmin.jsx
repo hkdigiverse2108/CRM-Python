@@ -506,14 +506,6 @@ export default function SuperAdmin() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-3">
         <PageHeader title="Super Admin Dashboard" subtitle="Control Center for Multi-Tenant CRM Platform" />
-        <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl text-xs font-semibold">
-          {[{ key: 'dashboard', label: 'Dashboard' }, { key: 'organizations', label: 'Organizations' }, { key: 'users', label: 'Users' }, { key: 'logs', label: 'Audit Logs' }].map(t => (
-            <button key={t.key} onClick={() => setActiveTab(t.key)}
-              className={`px-3.5 py-1.5 rounded-lg capitalize transition-all cursor-pointer ${activeTab === t.key ? 'bg-white dark:bg-slate-900 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-slate-500 hover:text-slate-700'}`}>
-              {t.label}
-            </button>
-          ))}
-        </div>
       </div>
 
       {loading && (
