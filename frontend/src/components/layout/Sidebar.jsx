@@ -125,10 +125,10 @@ const sidebarGroups = [
     icon: Users,
     module: 'hrms',
     items: [
-      { label: 'HRMS Dashboard', path: '/hrms/dashboard', module: 'hrms', pageKey: 'hrms_attendance' },
-      { label: 'Directory', path: '/hrms/directory', module: 'hrms', pageKey: 'hrms_attendance' },
+      { label: 'HRMS Dashboard', path: '/hrms/dashboard', module: 'hrms', pageKey: 'hrms_dashboard' },
+      { label: 'Directory', path: '/hrms/directory', module: 'hrms', pageKey: 'hrms_directory' },
       { label: 'Attendance', path: '/hrms/attendance', module: 'hrms', pageKey: 'hrms_attendance' },
-      { label: 'Leaves', path: '/hrms/leaves', module: 'hrms', pageKey: 'hrms_attendance' },
+      { label: 'Leaves', path: '/hrms/leaves', module: 'hrms', pageKey: 'hrms_leaves' },
       { label: 'Payroll', path: '/hrms/payroll', module: 'hrms', pageKey: 'hrms_payroll' },
     ]
   },
