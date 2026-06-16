@@ -22,6 +22,8 @@ class Attendance:
     method: str = "Manual Entry"
     status: str = "Present"
     active: bool = False
+    current_status: str = "punch-out"
+    break_history: Optional[str] = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -41,6 +43,8 @@ class Attendance:
             "method": self.method,
             "status": self.status,
             "active": self.active,
+            "currentStatus": self.current_status,
+            "breakHistory": self.break_history or "",
             "createdAt": self.created_at.isoformat() if self.created_at else "",
             "updatedAt": self.updated_at.isoformat() if self.updated_at else "",
         }

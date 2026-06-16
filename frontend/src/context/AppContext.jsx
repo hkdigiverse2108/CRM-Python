@@ -2525,11 +2525,12 @@ export function AppProvider({ children }) {
         name: employees.find(e => e.id === empId)?.name || 'Staff Member',
         role: employees.find(e => e.id === empId)?.role || 'Staff',
         date: todayStr,
-        checkIn: type === 'in' ? timeStr : null,
-        checkOut: type === 'out' ? timeStr : null,
+        checkIn: type === 'in' ? timeStr : (details.action === 'punch-in' ? timeStr : null),
+        checkOut: type === 'out' ? timeStr : (details.action === 'punch-out' ? timeStr : null),
         status: details.status || 'Present',
         method: details.method || 'Web Portal',
-        active: type === 'in'
+        active: type === 'in' || details.action === 'punch-in',
+        action: details.action || null
       };
 
       const resp = await fetch(`${API_BASE}/attendance/clock-in-out`, {
@@ -2544,7 +2545,13 @@ export function AppProvider({ children }) {
       const data = await resp.json();
       if (data.success) {
         fetchAttendance();
-        addToast(type === 'in' ? 'Clocked In successfully.' : 'Clocked Out successfully.', 'success');
+        let msg = 'Attendance status updated.';
+        if (details.action === 'punch-in') msg = 'Clocked In successfully.';
+        else if (details.action === 'punch-out') msg = 'Clocked Out successfully.';
+        else if (details.action === 'break-in') msg = 'Break started successfully.';
+        else if (details.action === 'break-out') msg = 'Break ended successfully.';
+        else msg = type === 'in' ? 'Clocked In successfully.' : 'Clocked Out successfully.';
+        addToast(msg, 'success');
       } else {
         throw new Error(data.message || 'Failed to check-in/out');
       }

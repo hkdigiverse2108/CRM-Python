@@ -16,6 +16,9 @@ class AttendanceCreate(BaseModel):
     method: Optional[str] = "Manual Entry"
     status: Optional[str] = "Present"
     active: Optional[bool] = False
+    action: Optional[str] = None
+    currentStatus: Optional[str] = None
+    breakHistory: Optional[str] = None
 
 
 class AttendanceUpdate(BaseModel):
@@ -27,3 +30,5 @@ class AttendanceUpdate(BaseModel):
     status: Optional[str] = None
     active: Optional[bool] = None
     method: Optional[str] = None
+    currentStatus: Optional[str] = None
+    breakHistory: Optional[str] = None

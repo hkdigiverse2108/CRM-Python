@@ -47,6 +47,8 @@ class AttendanceRepository(BaseRepository[Attendance]):
             method=row.get("method") or "Manual Entry",
             status=row.get("status") or "Present",
             active=bool(row.get("active") or False),
+            current_status=row.get("current_status") or "punch-out",
+            break_history=row.get("break_history"),
             created_at=created_at or datetime.now(timezone.utc),
             updated_at=updated_at or datetime.now(timezone.utc),
         )
@@ -118,11 +120,11 @@ class AttendanceRepository(BaseRepository[Attendance]):
                     INSERT INTO hrms_attendance (
                         attendance_id, workspace_id, employee_id, name, role, date,
                         check_in, check_out, working_hours, break_duration, overtime_hours,
-                        method, status, active, created_at, updated_at
+                        method, status, active, current_status, break_history, created_at, updated_at
                     ) VALUES (
                         :attendance_id, :workspace_id, :employee_id, :name, :role, :date,
                         :check_in, :check_out, :working_hours, :break_duration, :overtime_hours,
-                        :method, :status, :active, :created_at, :updated_at
+                        :method, :status, :active, :current_status, :break_history, :created_at, :updated_at
                     )
                 """)
                 db.execute(sql, {
@@ -140,6 +142,8 @@ class AttendanceRepository(BaseRepository[Attendance]):
                     "method": entity.method,
                     "status": entity.status,
                     "active": int(entity.active),
+                    "current_status": entity.current_status,
+                    "break_history": entity.break_history,
                     "created_at": entity.created_at,
                     "updated_at": entity.updated_at,
                 })
@@ -162,6 +166,8 @@ class AttendanceRepository(BaseRepository[Attendance]):
                     "status": "status",
                     "active": "active",
                     "method": "method",
+                    "currentStatus": "current_status",
+                    "breakHistory": "break_history",
                 }
 
                 for key, val in data.items():
