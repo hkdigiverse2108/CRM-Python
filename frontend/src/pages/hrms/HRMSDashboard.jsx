@@ -79,6 +79,7 @@ export default function HRMSDashboard() {
   // Self-Service Form States
   const [leaveForm, setLeaveForm] = useState({ type: 'Casual Leave', start: '', end: '', days: 1, reason: '' });
   const [docFile, setDocFile] = useState({ name: '', type: 'Aadhaar Card' });
+  const [profileSubTab, setProfileSubTab] = useState('personal');
 
   // ATS active job selection
   const [selectedJobId, setSelectedJobId] = useState(recruitmentJobs[0]?.id || '');
@@ -828,78 +829,265 @@ export default function HRMSDashboard() {
 
             {/* MY PAYSLIPS CABINET */}
             {activeTab === 'ess-profile' && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Profile detail view */}
-                <div className="md:col-span-2 bg-card border border-border p-5 rounded-2xl shadow-sm space-y-4">
-                  <h3 className="text-sm font-bold">Personal Profile & Payroll Ledger</h3>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold">
-                    <div className="space-y-1">
-                      <p className="text-[10px] text-muted-foreground">Mobile Number</p>
-                      <input
-                        type="text"
-                        value={currentEmployee?.phone || ''}
-                        onChange={e => editEmployee(currentEmployee.id, { phone: e.target.value })}
-                        className="bg-card border border-border w-full p-2 rounded focus:outline-none"
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <p className="text-[10px] text-muted-foreground">Email Address</p>
-                      <p className="p-2 bg-muted border border-border/40 rounded text-muted-foreground">{currentEmployee?.email}</p>
-                    </div>
-
-                    <div className="space-y-1">
-                      <p className="text-[10px] text-muted-foreground">Permanent Address</p>
-                      <p className="p-2 bg-muted border border-border/40 rounded text-muted-foreground">{currentEmployee?.permanentAddress}</p>
-                    </div>
-
-                    <div className="space-y-1">
-                      <p className="text-[10px] text-muted-foreground">Date of Birth</p>
-                      <p className="p-2 bg-muted border border-border/40 rounded text-muted-foreground font-mono">{currentEmployee?.dob}</p>
-                    </div>
-
-                    <div className="space-y-1">
-                      <p className="text-[10px] text-muted-foreground">Reporting Manager</p>
-                      <p className="p-2 bg-muted border border-border/40 rounded text-muted-foreground">{currentEmployee?.reportingManager}</p>
-                    </div>
-
-                    <div className="space-y-1">
-                      <p className="text-[10px] text-muted-foreground">Permanent Account (PAN) / Aadhaar</p>
-                      <p className="p-2 bg-muted border border-border/40 rounded text-muted-foreground font-mono">
-                        {currentEmployee?.panNumber} / {currentEmployee?.aadhaarNumber}
-                      </p>
-                    </div>
-                  </div>
+              <div className="space-y-6">
+                {/* Header Title */}
+                <div className="space-y-1">
+                  <h2 className="text-lg font-extrabold text-slate-900 dark:text-white">My Profile</h2>
+                  <p className="text-xs text-muted-foreground">
+                    Manage your personal details and bank info. Sensitive administrative, identity, and salary parameters are locked for standard employees.
+                  </p>
                 </div>
 
-                {/* Monthly Payslips Download list */}
-                <div className="bg-card border border-border p-5 rounded-2xl shadow-sm space-y-4">
-                  <h3 className="text-sm font-bold flex items-center gap-1.5"><CircleDollarSign size={15} /> Payroll Slips</h3>
-                  
-                  <div className="space-y-2.5">
-                    {payroll.filter(p => p.employeeId === currentEmployee.id).map(p => (
-                      <div key={p.month} className="p-3 border border-border/40 rounded-xl flex items-center justify-between text-xs">
-                        <div>
-                          <p className="font-bold text-foreground">{p.month}</p>
-                          <p className="text-[10px] text-success font-semibold mt-0.5">Net Pay: {formatCurrency(p.netPay)}</p>
-                          <p className="text-[9px] font-bold text-muted-foreground mt-0.5 uppercase">Status: {p.status}</p>
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                  {/* Left Column Sidebar */}
+                  <div className="lg:col-span-1 bg-card border border-border p-6 rounded-3xl shadow-xs text-center flex flex-col items-center justify-center space-y-5">
+                    <div className="relative">
+                      {currentEmployee?.avatar_url ? (
+                        <img 
+                          src={currentEmployee.avatar_url} 
+                          alt="Profile" 
+                          className="w-24 h-24 rounded-full object-cover border border-border shadow-xs" 
+                        />
+                      ) : (
+                        <div className="w-24 h-24 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-600 font-bold text-2xl uppercase border border-border">
+                          {currentEmployee?.name?.split(' ').map(w => w[0]).join('').slice(0, 2)}
                         </div>
+                      )}
+                    </div>
 
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => {
-                              addToast(`Generating payslip PDF for ${p.month}...`, 'success');
-                              exportCSV([p], `Payslip_${currentEmployee.name}_${p.month.replace(' ', '_')}.csv`);
-                            }}
-                            title="Download CSV Payslip"
-                            className="p-1.5 rounded hover:bg-muted text-primary"
-                          >
-                            <Download size={14} />
-                          </button>
-                        </div>
+                    <div>
+                      <h3 className="text-base font-extrabold text-slate-900 dark:text-white">{currentEmployee?.name || 'Parth Ashvinbhai Devani'}</h3>
+                      <p className="text-xs font-semibold text-primary mt-1">{currentEmployee?.role || 'Python Developer'}</p>
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[9px] font-black tracking-wider uppercase bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 mt-3">
+                        ACTIVE
+                      </span>
+                    </div>
+
+                    <div className="w-full pt-4 border-t border-border/50 text-left space-y-3">
+                      <div className="flex items-center gap-3 p-3 bg-muted/20 border border-border/40 rounded-2xl text-[11px] font-semibold text-muted-foreground">
+                        <LogIn size={13} className="text-muted-foreground/75" />
+                        <span className="truncate">{currentEmployee?.email || 'devaniparth27@gmail.com'}</span>
                       </div>
-                    ))}
+                      <div className="flex items-center gap-3 p-3 bg-muted/20 border border-border/40 rounded-2xl text-[11px] font-semibold text-muted-foreground">
+                        <Activity size={13} className="text-muted-foreground/75" />
+                        <span>{currentEmployee?.phone || '6355809873'}</span>
+                      </div>
+                      <div className="flex items-center gap-3 p-3 bg-muted/20 border border-border/40 rounded-2xl text-[11px] font-semibold text-muted-foreground">
+                        <Building2 size={13} className="text-muted-foreground/75" />
+                        <span>{currentEmployee?.department || 'Development'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column details tab panel */}
+                  <div className="lg:col-span-3 bg-card border border-border rounded-3xl shadow-xs overflow-hidden flex flex-col">
+                    <div className="flex border-b border-border/50 px-6 pt-5 gap-6">
+                      {[
+                        { id: 'personal', label: 'Personal & Identity' },
+                        { id: 'professional', label: 'Professional Info' },
+                        { id: 'bank', label: 'Bank & Family' }
+                      ].map(tab => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setProfileSubTab(tab.id)}
+                          className={`pb-3 text-xs font-bold transition-all relative ${
+                            profileSubTab === tab.id
+                              ? 'text-primary'
+                              : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          {tab.label}
+                          {profileSubTab === tab.id && (
+                            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="p-6">
+                      {profileSubTab === 'personal' && (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
+                            <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
+                              <User size={10} /> First Name
+                            </span>
+                            <p className="text-xs font-bold text-foreground">{currentEmployee?.name?.split(' ')?.[0] || 'Parth'}</p>
+                          </div>
+                          <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
+                            <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
+                              <User size={10} /> Middle Name
+                            </span>
+                            <p className="text-xs font-bold text-foreground">{currentEmployee?.name?.split(' ')?.[1] || 'Ashvinbhai'}</p>
+                          </div>
+                          <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
+                            <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
+                              <User size={10} /> Last Name
+                            </span>
+                            <p className="text-xs font-bold text-foreground">{currentEmployee?.name?.split(' ')?.[2] || 'Devani'}</p>
+                          </div>
+                          <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
+                            <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
+                              <LogIn size={10} /> Email Address
+                            </span>
+                            <p className="text-xs font-bold text-foreground">{currentEmployee?.email || 'devaniparth27@gmail.com'}</p>
+                          </div>
+                          <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
+                            <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
+                              <Activity size={10} /> Phone Number
+                            </span>
+                            <p className="text-xs font-bold text-foreground">{currentEmployee?.phone || '6355809873'}</p>
+                          </div>
+                          <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
+                            <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
+                              <Calendar size={10} /> Date of Birth
+                            </span>
+                            <p className="text-xs font-bold text-foreground font-mono">{currentEmployee?.dob || '2005-09-06'}</p>
+                          </div>
+                          <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
+                            <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
+                              <User size={10} /> Gender
+                            </span>
+                            <p className="text-xs font-bold text-foreground">{currentEmployee?.gender || 'Male'}</p>
+                          </div>
+                          <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
+                            <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center justify-between">
+                              <span className="flex items-center gap-1"><FileText size={10} /> Aadhaar Card Number</span>
+                              <ShieldAlert size={10} className="text-muted-foreground" />
+                            </span>
+                            <p className="text-xs font-bold text-foreground font-mono">{currentEmployee?.aadhaarNumber || '5753 4762 1886'}</p>
+                          </div>
+                          <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
+                            <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center justify-between">
+                              <span className="flex items-center gap-1"><FileText size={10} /> PAN Card Number</span>
+                              <ShieldAlert size={10} className="text-muted-foreground" />
+                            </span>
+                            <p className="text-xs font-bold text-foreground font-mono">{currentEmployee?.panNumber || 'JEPPD0579P'}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {profileSubTab === 'professional' && (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
+                            <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center justify-between">
+                              <span className="flex items-center gap-1"><Building2 size={10} /> Department</span>
+                              <ShieldAlert size={10} className="text-muted-foreground" />
+                            </span>
+                            <p className="text-xs font-bold text-foreground">{currentEmployee?.department || 'Development'}</p>
+                          </div>
+                          <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
+                            <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center justify-between">
+                              <span className="flex items-center gap-1"><Briefcase size={10} /> Designation</span>
+                              <ShieldAlert size={10} className="text-muted-foreground" />
+                            </span>
+                            <p className="text-xs font-bold text-foreground">{currentEmployee?.role || 'Python Developer'}</p>
+                          </div>
+                          <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
+                            <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center justify-between">
+                              <span className="flex items-center gap-1"><Activity size={10} /> Status</span>
+                              <ShieldAlert size={10} className="text-muted-foreground" />
+                            </span>
+                            <p className="text-xs font-bold text-foreground">active</p>
+                          </div>
+                          <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
+                            <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center justify-between">
+                              <span className="flex items-center gap-1"><Calendar size={10} /> Joining Date</span>
+                              <ShieldAlert size={10} className="text-muted-foreground" />
+                            </span>
+                            <p className="text-xs font-bold text-foreground font-mono">{currentEmployee?.joinDate || '2026-05-20'}</p>
+                          </div>
+                          <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
+                            <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center justify-between">
+                              <span className="flex items-center gap-1"><CircleDollarSign size={10} /> Salary</span>
+                              <ShieldAlert size={10} className="text-muted-foreground" />
+                            </span>
+                            <p className="text-xs font-bold text-foreground">—</p>
+                          </div>
+                          <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
+                            <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center justify-between">
+                              <span className="flex items-center gap-1"><Clock size={10} /> Start Time</span>
+                              <ShieldAlert size={10} className="text-muted-foreground" />
+                            </span>
+                            <p className="text-xs font-bold text-foreground font-mono">09:30 AM</p>
+                          </div>
+                          <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
+                            <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center justify-between">
+                              <span className="flex items-center gap-1"><Clock size={10} /> End Time</span>
+                              <ShieldAlert size={10} className="text-muted-foreground" />
+                            </span>
+                            <p className="text-xs font-bold text-foreground font-mono">06:30 AM</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {profileSubTab === 'bank' && (
+                        <div className="space-y-6">
+                          <div>
+                            <h4 className="text-[11px] font-extrabold uppercase tracking-widest text-primary mb-3 flex items-center gap-1.5">
+                              <CircleDollarSign size={13} /> Bank Account Details
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
+                                <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
+                                  <User size={10} /> Account Holder Name
+                                </span>
+                                <p className="text-xs font-bold text-foreground">{currentEmployee?.bankDetails?.holderName || 'Devani Parth Ashvinbhai'}</p>
+                              </div>
+                              <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
+                                <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
+                                  <Building2 size={10} /> Bank Name
+                                </span>
+                                <p className="text-xs font-bold text-foreground">{currentEmployee?.bankDetails?.bankName || 'The Varacha Co-op'}</p>
+                              </div>
+                              <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
+                                <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
+                                  <FileText size={10} /> Account Number
+                                </span>
+                                <p className="text-xs font-bold text-foreground font-mono">{currentEmployee?.bankDetails?.accountNumber || '100160136007'}</p>
+                              </div>
+                              <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
+                                <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
+                                  <FileText size={10} /> IFSC Code
+                                </span>
+                                <p className="text-xs font-bold text-foreground font-mono">{currentEmployee?.bankDetails?.ifscCode || 'VARA0289016'}</p>
+                              </div>
+                              <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
+                                <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
+                                  <LogIn size={10} /> UPI ID
+                                </span>
+                                <p className="text-xs font-bold text-foreground">{currentEmployee?.bankDetails?.upiId || 'devaniparth27-1@okicici'}</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="pt-4 border-t border-border/50">
+                            <h4 className="text-[11px] font-extrabold uppercase tracking-widest text-primary mb-3 flex items-center gap-1.5">
+                              <Users size={13} /> Parent Details
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
+                                <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
+                                  <User size={10} /> Parent Name
+                                </span>
+                                <p className="text-xs font-bold text-foreground">{currentEmployee?.familyDetails?.parentName || 'Ashvinbhai Devani'}</p>
+                              </div>
+                              <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
+                                <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
+                                  <Activity size={10} /> Parent Phone Number
+                                </span>
+                                <p className="text-xs font-bold text-foreground font-mono">{currentEmployee?.familyDetails?.parentPhone || '9913465573'}</p>
+                              </div>
+                              <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
+                                <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
+                                  <User size={10} /> Relationship
+                                </span>
+                                <p className="text-xs font-bold text-foreground">{currentEmployee?.familyDetails?.relationship || 'Father'}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
