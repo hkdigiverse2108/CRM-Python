@@ -45,6 +45,15 @@ export default function Attendance() {
     return myAttendance.find(a => a.date === todayStr) || null;
   }, [myAttendance, todayStr]);
 
+  const todayBreaks = useMemo(() => {
+    if (!todayLog || !todayLog.breakHistory) return [];
+    try {
+      return JSON.parse(todayLog.breakHistory);
+    } catch (e) {
+      return [];
+    }
+  }, [todayLog]);
+
   // Helper: parse string time (e.g. "08:44 AM") into milliseconds from today start
   const parseTimeToMs = (timeStr) => {
     if (!timeStr) return 0;
@@ -286,28 +295,63 @@ export default function Attendance() {
             </div>
           </div>
 
-          {/* Action buttons */}
-          <div className="flex flex-wrap gap-3 mt-6">
+          {/* Action buttons & Details */}
+          <div className="mt-5 space-y-4">
             {todayLog && todayLog.currentStatus !== 'punch-out' ? (
-              todayLog.currentStatus !== 'break-in' ? (
-                <button
-                  onClick={() => handleAction('break-in')}
-                  className="flex items-center gap-1.5 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-amber-200 dark:shadow-none cursor-pointer"
-                >
-                  Break In
-                </button>
-              ) : (
-                <button
-                  onClick={() => handleAction('break-out')}
-                  className="flex items-center gap-1.5 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-200 dark:shadow-none cursor-pointer"
-                >
-                  Break Out
-                </button>
-              )
+              <>
+                {/* Worked progress bar */}
+                <div className="space-y-1.5 p-3.5 bg-slate-50/50 dark:bg-slate-850/30 rounded-xl border border-slate-100 dark:border-slate-800/40">
+                  <div className="flex justify-between items-center text-[10px] font-bold text-slate-450 uppercase tracking-wider">
+                    <span>Shift Progress (8h standard)</span>
+                    <span className="text-indigo-600 dark:text-indigo-400 font-extrabold">
+                      {Math.min(100, Math.round(((parseInt(liveWorkedTime.match(/(\d+)h/)?.[1] || 0) * 60 + parseInt(liveWorkedTime.match(/(\d+)m/)?.[1] || 0)) / 480) * 100))}% ({liveWorkedTime} / 8h)
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                    <div 
+                      className="bg-indigo-600 h-full rounded-full transition-all duration-500" 
+                      style={{ width: `${Math.min(100, Math.round(((parseInt(liveWorkedTime.match(/(\d+)h/)?.[1] || 0) * 60 + parseInt(liveWorkedTime.match(/(\d+)m/)?.[1] || 0)) / 480) * 100))}%` }}
+                    ></div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pt-2">
+                  {todayLog.currentStatus !== 'break-in' ? (
+                    <button
+                      onClick={() => handleAction('break-in')}
+                      className="flex items-center gap-1.5 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-amber-200 dark:shadow-none cursor-pointer"
+                    >
+                      Break In
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleAction('break-out')}
+                      className="flex items-center gap-1.5 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-200 dark:shadow-none cursor-pointer"
+                    >
+                      Break Out
+                    </button>
+                  )}
+
+                  {todayBreaks.length > 0 && (
+                    <div className="flex flex-wrap gap-2 items-center">
+                      <span className="text-[10px] font-bold text-slate-450 uppercase tracking-wider mr-1">Today's Breaks:</span>
+                      {todayBreaks.map((b, idx) => (
+                        <span key={idx} className="text-[9px] font-bold px-2 py-0.5 bg-slate-50 dark:bg-slate-850 rounded-lg border border-slate-200/60 dark:border-slate-800 text-slate-500 flex items-center gap-1">
+                          <Coffee size={9} className="text-amber-500" /> {b.start} - {b.end || 'Active'}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
             ) : (
-              <span className="text-[10px] font-bold text-slate-400 bg-slate-50 dark:bg-slate-850/40 px-3 py-2 border border-dashed border-slate-200 dark:border-slate-850 rounded-xl">
-                Please Clock In from the HRMS Dashboard to start your day and manage breaks.
-              </span>
+              <div className="flex items-center gap-3 p-4 bg-slate-50/50 dark:bg-slate-850/20 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
+                <AlertCircle className="text-slate-400 shrink-0" size={18} />
+                <div className="text-xs">
+                  <p className="font-bold text-slate-900 dark:text-white">Not Clocked In Today</p>
+                  <p className="text-slate-455 text-[10px] mt-0.5">Please Clock In from the main HRMS Dashboard to record your worked time and manage breaks.</p>
+                </div>
+              </div>
             )}
           </div>
         </div>
