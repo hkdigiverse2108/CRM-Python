@@ -235,7 +235,8 @@ export default function HRMSDashboard() {
       lat: simGeofencing ? '12.9716' : '0.0000',
       lng: simGeofencing ? '77.5946' : '0.0000',
       ip: '192.168.1.100',
-      selfie: simSelfie ? 'Captured_Selfie.jpg' : null
+      selfie: simSelfie ? 'Captured_Selfie.jpg' : null,
+      action: 'punch-in'
     };
     setLocalBreaks([]); // Reset breaks for new punch in
     clockInOut(hrmsEmployeeId, 'in', details);
@@ -244,17 +245,17 @@ export default function HRMSDashboard() {
   const handlePunchOut = () => {
     // End any active break on punch out
     setLocalBreaks(prev => prev.map(b => b.end === null ? { ...b, end: new Date().toISOString() } : b));
-    clockInOut(hrmsEmployeeId, 'out');
+    clockInOut(hrmsEmployeeId, 'out', { action: 'punch-out' });
   };
 
   const handleBreakIn = () => {
     setLocalBreaks(prev => [...prev, { start: new Date().toISOString(), end: null }]);
-    addToast('Break started.', 'info');
+    clockInOut(hrmsEmployeeId, 'in', { action: 'break-in' });
   };
 
   const handleBreakOut = () => {
     setLocalBreaks(prev => prev.map(b => b.end === null ? { ...b, end: new Date().toISOString() } : b));
-    addToast('Break ended. Resumed work.', 'success');
+    clockInOut(hrmsEmployeeId, 'in', { action: 'break-out' });
   };
 
   const handleAddJob = (e) => {
