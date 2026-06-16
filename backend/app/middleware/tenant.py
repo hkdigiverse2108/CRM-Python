@@ -17,6 +17,7 @@ from backend.app.core.tenant import get_tenant_registry
 TENANT_SKIP_PATHS = {
     "/",
     "/favicon.ico",
+    "/api/auth/login",
     "/api/auth/meta/login",
     "/api/auth/meta/callback",
     "/api/meta/test-webhook",

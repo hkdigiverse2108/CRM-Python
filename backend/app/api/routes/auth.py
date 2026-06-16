@@ -16,7 +16,6 @@ router = APIRouter()
 
 @router.post("/login")
 async def login(
-    request: Request,
     payload: LoginRequest,
     auth_service: AuthService = Depends(get_auth_service),
 ):
@@ -25,11 +24,9 @@ async def login(
     
     Returns JWT access and refresh tokens.
     """
-    tenant_id = request.state.tenant.id
     tokens = await auth_service.login(
         email=payload.email,
         password=payload.password,
-        tenant_id=tenant_id,
     )
     return success_response(data=tokens, message="Logged in successfully")
 
