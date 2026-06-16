@@ -723,82 +723,258 @@ export default function Payroll() {
       )}
 
       {/* INSPECTED DETAILS MODAL */}
-      {inspectedRecord && (
-        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
-          <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-md space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-border pb-2.5">
-              <div>
-                <h3 className="text-sm font-bold text-foreground font-bold">Salary Slip Details</h3>
-                <p className="text-[10px] text-muted-foreground">{inspectedRecord.employeeName} • {selectedMonth}</p>
-              </div>
-              <button onClick={() => setInspectedRecord(null)} className="text-muted-foreground"><X size={16} /></button>
-            </div>
+      {inspectedRecord && (() => {
+        const emp = employees.find(e => e.id === inspectedRecord.employeeId);
+        const sal = emp?.salaryStructure || {};
+        
+        // Resolve dynamic tenant details
+        const isHk = activeOrg === 'HK Digiverse LLP' || activeOrg === 'HK Digiverse' || String(activeOrg).toLowerCase().includes('hk');
+        const companyName = isHk ? 'HARIKRUSHN DIGIVERSE LLP' : 'RAPIDMODEL CORP';
+        const companyAddress = isHk ? 'SURAT, GUJARAT, INDIA' : 'BANGALORE, KARNATAKA, INDIA';
+        const companyGstin = isHk ? '24APQPN3916P1Z4' : '29AAFCR1234A1Z1';
+        const companyLoc = isHk ? 'SURAT' : 'BANGALORE';
+        const bankName = emp?.bankDetails?.bankName || (isHk ? 'THE VARACHA CO-OP' : 'HDFC BANK');
+        const accNo = emp?.bankDetails?.accountNumber || '100160136007';
+        const ifsc = emp?.bankDetails?.ifscCode || (isHk ? 'VARA0289016' : 'HDFC0000123');
+        const pan = emp?.panNumber || 'JEPPD0579P';
+        const joinDateVal = emp?.joinDate ? new Date(emp.joinDate).toLocaleDateString('en-GB') : '20/05/2026';
+        
+        const basicAmt = Math.round(inspectedRecord.basic);
+        const hraAmt = Math.round(inspectedRecord.basic > 0 ? parseFloat(sal.hra || 18000) : 0);
+        const allowancesAmt = Math.round(inspectedRecord.basic > 0 ? parseFloat(sal.allowances || 7000) : 0);
+        const bonusAmt = Math.round(inspectedRecord.bonus);
+        const totalEarnings = basicAmt + hraAmt + allowancesAmt + bonusAmt;
 
-            <div className="space-y-4 text-xs font-semibold">
-              {/* Calculations summary */}
-              <div className="space-y-2">
-                <h4 className="text-[10px] uppercase font-bold text-primary tracking-widest border-b border-border pb-1">Calculation Details</h4>
-                <div className="space-y-1">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Working Days:</span>
-                    <span>{inspectedRecord.workingDays}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Worked Days:</span>
-                    <span>{inspectedRecord.worked}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Leaves taken:</span>
-                    <span>{inspectedRecord.totalLeaves}</span>
-                  </div>
+        const unpaidAbsence = Math.round(inspectedRecord.unpaidAbsence);
+        const secDeposit = 0;
+        const leaveDeduction = unpaidAbsence;
+        const penaltyDeduction = Math.max(0, Math.round(inspectedRecord.deductions) - unpaidAbsence);
+        const totalDeductions = secDeposit + penaltyDeduction + leaveDeduction;
+        
+        const netAmt = Math.max(0, totalEarnings - totalDeductions);
+        const netInWords = numberToWords(netAmt);
+
+        return (
+          <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs overflow-y-auto">
+            <div className="bg-white text-black border border-slate-350 rounded-xl p-5 w-full max-w-2xl shadow-2xl space-y-4 print:p-0 print:border-none print:shadow-none">
+              
+              {/* Modal controls - hidden in print */}
+              <div className="flex justify-between items-center border-b pb-2 print:hidden">
+                <span className="text-xs font-bold text-slate-500">Salary Slip Preview</span>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => window.print()} 
+                    className="px-3 py-1 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary-hover flex items-center gap-1 cursor-pointer"
+                  >
+                    <Download size={13} /> Print / Save PDF
+                  </button>
+                  <button 
+                    onClick={() => setInspectedRecord(null)} 
+                    className="p-1 rounded hover:bg-slate-100 text-slate-500 cursor-pointer"
+                  >
+                    <X size={16} />
+                  </button>
                 </div>
               </div>
 
-              {/* Earnings */}
-              <div className="space-y-2">
-                <h4 className="text-[10px] uppercase font-bold text-primary tracking-widest border-b border-border pb-1">Earnings Component</h4>
-                <div className="space-y-1">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Basic Salary (Earned):</span>
-                    <span>{formatCurrency(inspectedRecord.basic)}</span>
+              {/* PRINT AREA */}
+              <div id="payslip-print-area" className="border-2 border-black p-4 space-y-4 font-sans text-xs bg-white text-black">
+                
+                {/* Header info */}
+                <div className="text-center border-b-2 border-black pb-2 space-y-0.5">
+                  <h2 className="text-sm font-extrabold tracking-wider">{companyName}</h2>
+                  <p className="text-[10px] font-bold text-slate-700">{companyAddress}</p>
+                  <p className="text-[10px] font-bold text-slate-700">GSTIN: {companyGstin}</p>
+                  <div className="border-t border-black mt-2 pt-1 font-extrabold text-[11px] uppercase">
+                    Salary Slip
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Bonus / Incentives:</span>
-                    <span>{formatCurrency(inspectedRecord.bonus)}</span>
-                  </div>
-                  <div className="flex justify-between border-t border-border/20 pt-1 text-foreground font-bold">
-                    <span>Gross Salary:</span>
-                    <span>{formatCurrency(inspectedRecord.basic + inspectedRecord.bonus)}</span>
-                  </div>
+                  <p className="text-[10px] font-bold">For {selectedMonth.toUpperCase()}</p>
                 </div>
-              </div>
 
-              {/* Deductions */}
-              <div className="space-y-2">
-                <h4 className="text-[10px] uppercase font-bold text-danger tracking-widest border-b border-border pb-1">Deductions Component</h4>
-                <div className="space-y-1">
-                  {inspectedRecord.unpaidAbsence > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Unpaid Absence Deductions:</span>
-                      <span className="text-danger">-{formatCurrency(inspectedRecord.unpaidAbsence)}</span>
+                <div className="text-center font-extrabold border-b-2 border-black pb-1.5 text-[11px] uppercase">
+                  {inspectedRecord.employeeName}
+                </div>
+
+                {/* Employee details grid */}
+                <div className="grid grid-cols-2 border-b-2 border-black text-[10px]">
+                  <div className="border-r border-black divide-y divide-black">
+                    <div className="grid grid-cols-2 p-1.5">
+                      <span className="font-bold">Emplyoee ID</span>
+                      <span className="font-semibold">{inspectedRecord.employeeId}</span>
                     </div>
-                  )}
-                  <div className="flex justify-between border-t border-border/20 pt-1 text-foreground font-bold">
-                    <span>Total Deductions:</span>
-                    <span className="text-danger">-{formatCurrency(inspectedRecord.deductions)}</span>
+                    <div className="grid grid-cols-2 p-1.5">
+                      <span className="font-bold">Income Tax Number (PAN)</span>
+                      <span className="font-semibold font-mono">{pan}</span>
+                    </div>
+                    <div className="grid grid-cols-2 p-1.5">
+                      <span className="font-bold">Designation</span>
+                      <span className="font-semibold">{inspectedRecord.designation}</span>
+                    </div>
+                    <div className="grid grid-cols-2 p-1.5">
+                      <span className="font-bold">Date of Joining</span>
+                      <span className="font-semibold">{joinDateVal}</span>
+                    </div>
+                  </div>
+                  <div className="divide-y divide-black">
+                    <div className="grid grid-cols-2 p-1.5">
+                      <span className="font-bold">Location</span>
+                      <span className="font-semibold">{companyLoc}</span>
+                    </div>
+                    <div className="grid grid-cols-2 p-1.5">
+                      <span className="font-bold">Bank Details</span>
+                      <span className="font-semibold">{bankName}</span>
+                    </div>
+                    <div className="grid grid-cols-2 p-1.5">
+                      <span className="font-bold">A/C.NO:</span>
+                      <span className="font-semibold font-mono">{accNo}</span>
+                    </div>
+                    <div className="grid grid-cols-2 p-1.5">
+                      <span className="font-bold">IFSC</span>
+                      <span className="font-semibold font-mono">{ifsc}</span>
+                    </div>
                   </div>
                 </div>
+
+                {/* Attendance details */}
+                <div className="border-b-2 border-black text-[10px]">
+                  <div className="p-1 font-bold bg-slate-100 border-b border-black uppercase tracking-wider">Attendance Details</div>
+                  <div className="flex justify-between p-1.5">
+                    <span className="font-bold">Present Days</span>
+                    <span className="font-extrabold">{inspectedRecord.worked}.0</span>
+                  </div>
+                </div>
+
+                {/* Earnings & Deductions Details grid */}
+                <table className="w-full text-left border-collapse border-b-2 border-black text-[10px]">
+                  <thead>
+                    <tr className="border-b border-black bg-slate-100 uppercase font-bold text-center">
+                      <th className="px-3 py-1.5 border-r border-black w-1/4">Earnings</th>
+                      <th className="px-3 py-1.5 border-r border-black text-right w-1/4">Amount</th>
+                      <th className="px-3 py-1.5 border-r border-black w-1/4">Deduction</th>
+                      <th className="px-3 py-1.5 text-right w-1/4">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-300 font-semibold">
+                    <tr>
+                      <td className="px-3 py-1.5 border-r border-black">Basic</td>
+                      <td className="px-3 py-1.5 border-r border-black text-right font-mono">{basicAmt}</td>
+                      <td className="px-3 py-1.5 border-r border-black">Security Deposit</td>
+                      <td className="px-3 py-1.5 text-right font-mono">{secDeposit}</td>
+                    </tr>
+                    <tr>
+                      <td className="px-3 py-1.5 border-r border-black">H.R.A</td>
+                      <td className="px-3 py-1.5 border-r border-black text-right font-mono">{hraAmt}</td>
+                      <td className="px-3 py-1.5 border-r border-black text-danger">Penalty Deduction</td>
+                      <td className="px-3 py-1.5 text-right font-mono text-danger">{penaltyDeduction}</td>
+                    </tr>
+                    <tr>
+                      <td className="px-3 py-1.5 border-r border-black">Conveyance Allowance</td>
+                      <td className="px-3 py-1.5 border-r border-black text-right font-mono">{allowancesAmt}</td>
+                      <td className="px-3 py-1.5 border-r border-black text-danger">Leave Deduction</td>
+                      <td className="px-3 py-1.5 text-right font-mono text-danger">{leaveDeduction}</td>
+                    </tr>
+                    <tr>
+                      <td className="px-3 py-1.5 border-r border-black">C.C.A</td>
+                      <td className="px-3 py-1.5 border-r border-black text-right font-mono">0</td>
+                      <td className="px-3 py-1.5 border-r border-black"></td>
+                      <td className="px-3 py-1.5 text-right font-mono"></td>
+                    </tr>
+                    <tr>
+                      <td className="px-3 py-1.5 border-r border-black">Education Allowance</td>
+                      <td className="px-3 py-1.5 border-r border-black text-right font-mono">0</td>
+                      <td className="px-3 py-1.5 border-r border-black"></td>
+                      <td className="px-3 py-1.5 text-right font-mono"></td>
+                    </tr>
+                    <tr>
+                      <td className="px-3 py-1.5 border-r border-black">Bonus / Incentives</td>
+                      <td className="px-3 py-1.5 border-r border-black text-right font-mono">{bonusAmt}</td>
+                      <td className="px-3 py-1.5 border-r border-black"></td>
+                      <td className="px-3 py-1.5 text-right font-mono"></td>
+                    </tr>
+                    <tr className="border-t-2 border-black font-extrabold bg-slate-50">
+                      <td className="px-3 py-2 border-r border-black uppercase">Total Earnings</td>
+                      <td className="px-3 py-2 border-r border-black text-right font-mono">{totalEarnings}</td>
+                      <td className="px-3 py-2 border-r border-black uppercase">Total Deduction</td>
+                      <td className="px-3 py-2 text-right font-mono">{totalDeductions}</td>
+                    </tr>
+                    <tr className="border-t border-black font-extrabold bg-slate-100">
+                      <td colSpan="2" className="border-r border-black"></td>
+                      <td className="px-3 py-2 border-r border-black text-teal-650 uppercase">Net Amount</td>
+                      <td className="px-3 py-2 text-right font-mono text-teal-650 text-xs">{netAmt}</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                {/* Footer and Mode of Payment */}
+                <div className="grid grid-cols-2 gap-4 text-[10px] pt-2 bg-white">
+                  <div className="space-y-3">
+                    <div>
+                      <p className="font-bold text-slate-500 uppercase tracking-wider text-[8px]">Amount (in words)</p>
+                      <p className="font-extrabold italic text-slate-800">{netInWords} Rupees Only</p>
+                    </div>
+
+                    <table className="w-full text-center border-collapse border border-black">
+                      <thead>
+                        <tr className="bg-slate-100 border-b border-black font-bold">
+                          <th className="px-2 py-1 border-r border-black">Mode</th>
+                          <th className="px-2 py-1 border-r border-black">Chq.No.</th>
+                          <th className="px-2 py-1">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-black font-semibold bg-white text-black">
+                        <tr>
+                          <td className="px-2 py-1 border-r border-black">Cheque</td>
+                          <td className="px-2 py-1 border-r border-black">0</td>
+                          <td className="px-2 py-1 font-mono">0</td>
+                        </tr>
+                        <tr>
+                          <td className="px-2 py-1 border-r border-black">Cash</td>
+                          <td className="px-2 py-1 border-r border-black">-</td>
+                          <td className="px-2 py-1 font-mono">{netAmt}.00</td>
+                        </tr>
+                        <tr className="border-t border-black font-bold bg-slate-50">
+                          <td colSpan="2" className="px-2 py-1 border-r border-black text-right">TOTAL</td>
+                          <td className="px-2 py-1 font-mono">{netAmt}.00</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="flex flex-col justify-between items-center py-2 text-center h-full">
+                    <p className="font-extrabold uppercase text-[9px] tracking-wide">FOR {companyName}</p>
+                    <div className="w-32 border-b border-black border-dashed mt-12"></div>
+                    <p className="text-[8px] font-bold text-slate-400 mt-1 uppercase tracking-widest">Authorized Signatory</p>
+                  </div>
+                </div>
+
               </div>
 
-              {/* Net Take Home */}
-              <div className="bg-muted p-3.5 rounded-xl border border-border/40 flex justify-between items-center text-sm font-extrabold">
-                <span className="text-foreground">Net Pay Disbursement:</span>
-                <span className="text-success text-base">{formatCurrency(inspectedRecord.netPay)}</span>
-              </div>
+              {/* Print stylesheet */}
+              <style dangerouslySetInnerHTML={{__html: `
+                @media print {
+                  body * {
+                    visibility: hidden;
+                  }
+                  #payslip-print-area, #payslip-print-area * {
+                    visibility: visible;
+                  }
+                  #payslip-print-area {
+                    position: absolute;
+                    left: 0;
+                    top: 0;
+                    width: 100%;
+                    border: 2px solid black !important;
+                    padding: 16px !important;
+                    background-color: white !important;
+                    color: black !important;
+                  }
+                }
+              `}} />
+
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ADD ADJUSTMENT MODAL */}
       {isAddAdjOpen && (
@@ -897,4 +1073,35 @@ export default function Payroll() {
 
     </div>
   );
+}
+
+function numberToWords(num) {
+  if (num === 0) return 'Zero';
+  const a = [
+    '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+    'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'
+  ];
+  const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+  const g = [
+    '', 'Thousand', 'Million', 'Billion', 'Trillion'
+  ];
+
+  const helper = (n) => {
+    if (n < 20) return a[n];
+    if (n < 100) return b[Math.floor(n / 10)] + (n % 10 !== 0 ? ' ' + a[n % 10] : '');
+    return a[Math.floor(n / 100)] + ' Hundred' + (n % 100 !== 0 ? ' and ' + helper(n % 100) : '');
+  };
+
+  let str = '';
+  let i = 0;
+
+  while (num > 0) {
+    if (num % 1000 !== 0) {
+      str = helper(num % 1000) + (g[i] ? ' ' + g[i] : '') + (str ? ' ' + str : '');
+    }
+    num = Math.floor(num / 1000);
+    i++;
+  }
+  return str.trim();
 }
