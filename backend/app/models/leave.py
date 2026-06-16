@@ -19,6 +19,9 @@ class Leave:
     days: int = 1
     reason: Optional[str] = None
     status: str = "Pending"
+    day_type: str = "Full Day"
+    approved_by: Optional[str] = None
+    proof_of_leave: Optional[str] = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -35,6 +38,9 @@ class Leave:
             "days": self.days,
             "reason": self.reason or "",
             "status": self.status,
+            "dayType": self.day_type,
+            "approvedBy": self.approved_by or "",
+            "proofOfLeave": self.proof_of_leave or "",
             "createdAt": self.created_at.isoformat() if self.created_at else "",
             "updatedAt": self.updated_at.isoformat() if self.updated_at else "",
         }

@@ -2471,7 +2471,9 @@ export function AppProvider({ children }) {
         endDate: req.end,
         days: req.days,
         reason: req.reason,
-        status: req.status || 'Pending'
+        status: req.status || 'Pending',
+        dayType: req.dayType || 'Full Day',
+        proofOfLeave: req.proofOfLeave || ''
       };
       const resp = await fetch(`${API_BASE}/leaves`, {
         method: 'POST',
@@ -2495,9 +2497,13 @@ export function AppProvider({ children }) {
     }
   }, [token, tenantId, fetchLeaves, addToast]);
 
-  const updateLeaveStatus = useCallback(async (leaveId, nextStatus) => {
+  const updateLeaveStatus = useCallback(async (leaveId, nextStatus, approverName = null) => {
     if (!token) return;
     try {
+      const body = { status: nextStatus };
+      if (approverName) {
+        body.approvedBy = approverName;
+      }
       const resp = await fetch(`${API_BASE}/leaves/${leaveId}`, {
         method: 'PUT',
         headers: {
@@ -2505,7 +2511,7 @@ export function AppProvider({ children }) {
           'Authorization': `Bearer ${token}`,
           'X-Tenant-ID': tenantId || 'rapidmodel_corp',
         },
-        body: JSON.stringify({ status: nextStatus }),
+        body: JSON.stringify(body),
       });
       const data = await resp.json();
       if (data.success) {

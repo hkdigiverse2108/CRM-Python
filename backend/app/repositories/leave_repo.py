@@ -48,6 +48,9 @@ class LeaveRepository(BaseRepository[Leave]):
             days=int(row["days"]),
             reason=row.get("reason"),
             status=row.get("status") or "Pending",
+            day_type=row.get("day_type") or "Full Day",
+            approved_by=row.get("approved_by"),
+            proof_of_leave=row.get("proof_of_leave"),
             created_at=created_at or datetime.now(timezone.utc),
             updated_at=updated_at or datetime.now(timezone.utc),
         )
@@ -102,10 +105,12 @@ class LeaveRepository(BaseRepository[Leave]):
                     INSERT INTO hrms_leaves (
                         leave_id, workspace_id, employee_id, employee_name, department,
                         type, start_date, end_date, days, reason, status,
+                        day_type, approved_by, proof_of_leave,
                         created_at, updated_at
                     ) VALUES (
                         :leave_id, :workspace_id, :employee_id, :employee_name, :department,
                         :type, :start_date, :end_date, :days, :reason, :status,
+                        :day_type, :approved_by, :proof_of_leave,
                         :created_at, :updated_at
                     )
                 """)
@@ -121,6 +126,9 @@ class LeaveRepository(BaseRepository[Leave]):
                     "days": entity.days,
                     "reason": entity.reason,
                     "status": entity.status,
+                    "day_type": entity.day_type,
+                    "approved_by": entity.approved_by,
+                    "proof_of_leave": entity.proof_of_leave,
                     "created_at": entity.created_at,
                     "updated_at": entity.updated_at,
                 })
@@ -141,6 +149,9 @@ class LeaveRepository(BaseRepository[Leave]):
                     "startDate": "start_date",
                     "endDate": "end_date",
                     "days": "days",
+                    "dayType": "day_type",
+                    "approvedBy": "approved_by",
+                    "proofOfLeave": "proof_of_leave",
                 }
 
                 for key, val in data.items():

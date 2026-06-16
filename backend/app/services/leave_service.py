@@ -62,6 +62,9 @@ class LeaveService:
             days=days,
             reason=data.get("reason"),
             status=data.get("status") or "Pending",
+            day_type=data.get("dayType") or "Full Day",
+            approved_by=data.get("approvedBy"),
+            proof_of_leave=data.get("proofOfLeave"),
         )
 
         created = await self.leave_repo.create(leave)

@@ -13,6 +13,9 @@ class LeaveCreate(BaseModel):
     days: int = Field(..., gt=0)
     reason: Optional[str] = None
     status: Optional[str] = "Pending"
+    dayType: Optional[str] = "Full Day"
+    approvedBy: Optional[str] = None
+    proofOfLeave: Optional[str] = None
 
 
 class LeaveUpdate(BaseModel):
@@ -22,3 +25,6 @@ class LeaveUpdate(BaseModel):
     startDate: Optional[datetime.date] = None
     endDate: Optional[datetime.date] = None
     days: Optional[int] = None
+    dayType: Optional[str] = None
+    approvedBy: Optional[str] = None
+    proofOfLeave: Optional[str] = None
