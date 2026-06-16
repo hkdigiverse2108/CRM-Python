@@ -17,6 +17,8 @@ export default function Documents() {
     updateLetterRequestStatus,
     uploadDocument,
     user,
+    hrmsEmployeeId,
+    hrmsRole,
     addToast
   } = useApp();
 
@@ -26,9 +28,15 @@ export default function Documents() {
   // Search and filter states
   const [searchQuery, setSearchQuery] = useState('');
   
+  const currentEmployee = useMemo(() => {
+    return employees.find(emp => emp.employee_id === hrmsEmployeeId || emp.id === hrmsEmployeeId) || 
+           employees.find(emp => emp.email === user?.email) || 
+           null;
+  }, [employees, hrmsEmployeeId, user]);
+
   // Request Modal state
   const [newRequest, setNewRequest] = useState({
-    employeeId: user?.employee_id || employees[0]?.id || '',
+    employeeId: '',
     letterType: 'Offer Letter',
     reason: ''
   });
@@ -48,25 +56,37 @@ export default function Documents() {
     'Bond Complete Letter'
   ];
 
+  const displayedSubmissions = useMemo(() => {
+    if (hrmsRole === 'Admin') return flatDocs;
+    if (!currentEmployee) return [];
+    return flatDocs.filter(d => d.employeeId === currentEmployee.employee_id || d.employeeId === currentEmployee.id);
+  }, [flatDocs, currentEmployee, hrmsRole]);
+
+  const displayedRequests = useMemo(() => {
+    if (hrmsRole === 'Admin') return letterRequests;
+    if (!currentEmployee) return [];
+    return letterRequests.filter(r => r.employeeId === currentEmployee.employee_id || r.employeeId === currentEmployee.id);
+  }, [letterRequests, currentEmployee, hrmsRole]);
+
   // Submitted documents list
   const filteredSubmissions = useMemo(() => {
-    return flatDocs.filter(d => {
+    return displayedSubmissions.filter(d => {
       const matchSearch = (d.employeeName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                           (d.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                           (d.type || '').toLowerCase().includes(searchQuery.toLowerCase());
       return matchSearch;
     });
-  }, [flatDocs, searchQuery]);
+  }, [displayedSubmissions, searchQuery]);
 
   // Letter requests list
   const filteredRequests = useMemo(() => {
-    return letterRequests.filter(r => {
+    return displayedRequests.filter(r => {
       const matchSearch = (r.employeeName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                           (r.letterType || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                           (r.reason || '').toLowerCase().includes(searchQuery.toLowerCase());
       return matchSearch;
     });
-  }, [letterRequests, searchQuery]);
+  }, [displayedRequests, searchQuery]);
 
   const handleCreateRequest = async (e) => {
     e.preventDefault();
@@ -116,8 +136,15 @@ export default function Documents() {
         />
         {activeTab === 'requests' && (
           <button 
-            onClick={() => setShowRequestModal(true)}
-            className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer"
+            onClick={() => {
+              setNewRequest({
+                employeeId: currentEmployee?.id || currentEmployee?.employee_id || '',
+                letterType: 'Offer Letter',
+                reason: ''
+              });
+              setShowRequestModal(true);
+            }}
+            className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-750 text-white rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer"
           >
             <Plus size={15} /> Request New Letter
           </button>
@@ -226,22 +253,28 @@ export default function Documents() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       {req.status === 'PENDING' ? (
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => handleAction(req.id, 'ACCEPTED', 'Accepted by Admin')}
-                            className="w-7 h-7 rounded bg-success/15 text-success flex items-center justify-center hover:bg-success/25 transition-colors cursor-pointer"
-                            title="Accept Request"
-                          >
-                            <Check size={14} />
-                          </button>
-                          <button
-                            onClick={() => handleAction(req.id, 'REJECTED', 'Rejected by Admin')}
-                            className="w-7 h-7 rounded bg-danger/15 text-danger flex items-center justify-center hover:bg-danger/25 transition-colors cursor-pointer"
-                            title="Reject Request"
-                          >
-                            <X size={14} />
-                          </button>
-                        </div>
+                        hrmsRole === 'Admin' ? (
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => handleAction(req.id, 'ACCEPTED', 'Accepted by Admin')}
+                              className="w-7 h-7 rounded bg-success/15 text-success flex items-center justify-center hover:bg-success/25 transition-colors cursor-pointer"
+                              title="Accept Request"
+                            >
+                              <Check size={14} />
+                            </button>
+                            <button
+                              onClick={() => handleAction(req.id, 'REJECTED', 'Rejected by Admin')}
+                              className="w-7 h-7 rounded bg-danger/15 text-danger flex items-center justify-center hover:bg-danger/25 transition-colors cursor-pointer"
+                              title="Reject Request"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-amber-500 font-bold uppercase tracking-wider">
+                            Pending Approval
+                          </span>
+                        )
                       ) : (
                         <span className="text-[10px] text-muted-foreground font-bold tracking-wider uppercase italic">
                           {req.actionsTaken}
@@ -283,8 +316,9 @@ export default function Documents() {
                 <select
                   value={newRequest.employeeId}
                   onChange={e => setNewRequest(prev => ({ ...prev, employeeId: e.target.value }))}
-                  className="bg-card border border-border w-full p-2.5 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  className="bg-card border border-border w-full p-2.5 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-75 disabled:cursor-not-allowed"
                   required
+                  disabled={hrmsRole !== 'Admin'}
                 >
                   {employees.map(emp => (
                     <option key={emp.id} value={emp.id}>{emp.name} ({emp.role})</option>

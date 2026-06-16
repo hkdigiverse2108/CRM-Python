@@ -18,6 +18,9 @@ export default function Payroll() {
     payrollAdjustments,
     addPayrollAdjustment,
     deletePayrollAdjustment,
+    hrmsRole,
+    hrmsEmployeeId,
+    user,
     addToast 
   } = useApp();
 
@@ -28,6 +31,14 @@ export default function Payroll() {
       ? 'bonuses'
       : 'processing';
 
+  const activeView = hrmsRole === 'Employee' ? 'payslips' : view;
+
+  const currentEmployee = useMemo(() => {
+    return employees.find(emp => emp.id === hrmsEmployeeId || emp.employee_id === hrmsEmployeeId) ||
+           employees.find(emp => emp.email === user?.email) ||
+           null;
+  }, [employees, hrmsEmployeeId, user]);
+
   // State for selectors
   const [selectedMonthName, setSelectedMonthName] = useState('June');
   const [selectedYear, setSelectedYear] = useState('2026');
@@ -36,7 +47,14 @@ export default function Payroll() {
   const [inspectedRecord, setInspectedRecord] = useState(null);
 
   // Payslip filters
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState(employees[0]?.id || '');
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  const activeEmployeeId = useMemo(() => {
+    if (hrmsRole === 'Employee') {
+      return currentEmployee?.id || '';
+    }
+    return selectedEmployeeId || currentEmployee?.id || employees[0]?.id || '';
+  }, [hrmsRole, currentEmployee, selectedEmployeeId, employees]);
+
   const [payslipMonth, setPayslipMonth] = useState('June');
   const [payslipYear, setPayslipYear] = useState('2026');
 
@@ -201,15 +219,15 @@ export default function Payroll() {
 
   // Payslips view logic
   const selectedEmpPayslips = useMemo(() => {
-    if (!selectedEmployeeId) return [];
+    if (!activeEmployeeId) return [];
     
     // Returns simulated pay periods for the selected employee
-    const targetEmp = employees.find(e => e.id === selectedEmployeeId);
+    const targetEmp = employees.find(e => e.id === activeEmployeeId);
     if (!targetEmp) return [];
 
     const periods = ['May 2026', 'April 2026', 'June 2026', 'July 2026'];
     return periods.map(period => {
-      const slip = payroll.find(p => p.employeeId === selectedEmployeeId && p.month === period);
+      const slip = payroll.find(p => p.employeeId === activeEmployeeId && p.month === period);
       return {
         period,
         netSalary: slip ? slip.netPay : 0,
@@ -228,7 +246,7 @@ export default function Payroll() {
         totalDeductions: parseFloat(targetEmp.salaryStructure?.pf || 1800) + parseFloat(targetEmp.salaryStructure?.tds || 2500)
       };
     });
-  }, [selectedEmployeeId, payroll, employees]);
+  }, [activeEmployeeId, payroll, employees]);
 
   // Adjustments view logic
   const filteredAdjustments = useMemo(() => {
@@ -279,18 +297,18 @@ export default function Payroll() {
     <div className="space-y-6 text-slate-800 dark:text-slate-200">
       
       {/* Dynamic Header */}
-      {view === 'processing' && (
+      {activeView === 'processing' && (
         <PageHeader title="Payroll Processing" subtitle="Calculate and manage monthly salaries." />
       )}
-      {view === 'payslips' && (
+      {activeView === 'payslips' && (
         <PageHeader title="Employee Payslip" subtitle="Detailed monthly salary breakdown and payment proof." />
       )}
-      {view === 'bonuses' && (
+      {activeView === 'bonuses' && (
         <PageHeader title="Bonuses & Deductions" subtitle="Add ad-hoc salary adjustments for specific months." />
       )}
 
       {/* RENDER VIEW: PAYROLL PROCESSING */}
-      {view === 'processing' && (
+      {activeView === 'processing' && (
         <>
           {/* Filters Bar */}
           <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between bg-card border border-border p-4 rounded-2xl shadow-xs">
@@ -465,15 +483,16 @@ export default function Payroll() {
       )}
 
       {/* RENDER VIEW: PAYSLIPS */}
-      {view === 'payslips' && (
+      {activeView === 'payslips' && (
         <div className="space-y-6">
           {/* Selector Bar */}
           <div className="flex flex-wrap md:flex-nowrap gap-4 items-center bg-card border border-border p-4 rounded-2xl shadow-xs">
             <div className="flex-1 min-w-[200px]">
               <select 
-                value={selectedEmployeeId} 
+                value={activeEmployeeId} 
                 onChange={e => setSelectedEmployeeId(e.target.value)}
-                className="w-full bg-muted border border-border rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                className="w-full bg-muted border border-border rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
+                disabled={hrmsRole === 'Employee'}
               >
                 {employees.map(emp => (
                   <option key={emp.id} value={emp.id}>{emp.name}</option>
@@ -507,7 +526,7 @@ export default function Payroll() {
 
             <button 
               onClick={() => {
-                const emp = employees.find(e => e.id === selectedEmployeeId);
+                const emp = employees.find(e => e.id === activeEmployeeId);
                 if (emp) {
                   handleDownloadPayslip({
                     employeeId: emp.id,
@@ -593,7 +612,7 @@ export default function Payroll() {
       )}
 
       {/* RENDER VIEW: BONUSES & DEDUCTIONS */}
-      {view === 'bonuses' && (
+      {activeView === 'bonuses' && (
         <div className="space-y-6">
           {/* Header Action & Search Bar */}
           <div className="flex flex-col sm:flex-row gap-3 justify-between items-stretch sm:items-center">

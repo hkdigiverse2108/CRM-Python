@@ -11,6 +11,7 @@ export default function Attendance() {
     clockInOut,
     user,
     hrmsEmployeeId,
+    hrmsRole,
     addToast 
   } = useApp();
 
@@ -196,15 +197,17 @@ export default function Attendance() {
     return days;
   }, [myAttendance, todayStr]);
 
-  // Filter and search on personal logs
+  // Filter and search logs based on role
   const filteredLogs = useMemo(() => {
-    return myAttendance.filter(a => {
+    const logs = hrmsRole === 'Admin' ? attendance : myAttendance;
+    return logs.filter(a => {
       const matchesSearch = searchQuery === '' || 
                             a.date.includes(searchQuery) ||
+                            (a.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                             (a.currentStatus || '').toLowerCase().includes(searchQuery.toLowerCase());
       return matchesSearch;
     });
-  }, [myAttendance, searchQuery]);
+  }, [attendance, myAttendance, searchQuery, hrmsRole]);
 
   const handleAction = (actType) => {
     if (!currentEmployee) {
@@ -428,6 +431,7 @@ export default function Attendance() {
                 <tr className="bg-slate-50/70 dark:bg-slate-950/20 text-slate-400 font-bold border-b border-slate-100 dark:border-slate-800/80">
                   <th className="px-5 py-3.5">SR. NO.</th>
                   <th className="px-5 py-3.5">DATE</th>
+                  {hrmsRole === 'Admin' && <th className="px-5 py-3.5">EMPLOYEE</th>}
                   <th className="px-5 py-3.5">DAY</th>
                   <th className="px-5 py-3.5">CURRENT STATUS</th>
                   <th className="px-5 py-3.5">STATUS</th>
@@ -466,6 +470,9 @@ export default function Attendance() {
                     <tr key={log.id || log.attendance_id || idx} className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors ${log.active ? 'bg-indigo-50/5' : ''}`}>
                       <td className="px-5 py-3.5 text-slate-450">{idx + 1}</td>
                       <td className="px-5 py-3.5 font-bold text-slate-900 dark:text-white">{log.date}</td>
+                      {hrmsRole === 'Admin' && (
+                        <td className="px-5 py-3.5 font-bold text-slate-900 dark:text-white">{log.name || 'Staff'}</td>
+                      )}
                       <td className="px-5 py-3.5 text-slate-450">{getDayName(log.date)}</td>
                       <td className="px-5 py-3.5">
                         <span className={`text-[10px] font-bold ${
@@ -534,8 +541,9 @@ export default function Attendance() {
                 <select
                   value={correctionFields.employeeId}
                   onChange={e => setCorrectionFields(prev => ({ ...prev, employeeId: e.target.value }))}
-                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full p-2 rounded-xl focus:outline-none"
+                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full p-2 rounded-xl focus:outline-none disabled:opacity-75 disabled:cursor-not-allowed"
                   required
+                  disabled={hrmsRole !== 'Admin'}
                 >
                   <option value="">Choose Employee...</option>
                   {employees.map(emp => (
