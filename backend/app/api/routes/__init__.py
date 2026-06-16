@@ -36,6 +36,7 @@ from backend.app.api.routes.search import router as search_router
 from backend.app.api.routes.workspace_admin import router as workspace_admin_router
 from backend.app.api.routes.whatsapp_integration import router as whatsapp_integration_router
 from backend.app.api.webhooks.whatsapp import router as whatsapp_webhook_router
+from backend.app.api.routes.documents import router as documents_router
 
 api_router = APIRouter()
 
@@ -62,6 +63,7 @@ api_router.include_router(employees_router, prefix="/employees", tags=["HRMS Emp
 api_router.include_router(attendance_router, prefix="/attendance", tags=["HRMS Attendance"])
 api_router.include_router(leaves_router, prefix="/leaves", tags=["HRMS Leaves"])
 api_router.include_router(payroll_router, prefix="/payroll", tags=["HRMS Payroll"])
+api_router.include_router(documents_router, prefix="/documents", tags=["HRMS Documents"])
 api_router.include_router(tasks_router, prefix="/tasks", tags=["CRM Tasks"])
 api_router.include_router(reminders_router, prefix="/reminders", tags=["CRM Reminders"])
 api_router.include_router(roles_router, prefix="/roles", tags=["CRM Roles"])

@@ -130,6 +130,7 @@ const sidebarGroups = [
       { label: 'Attendance', path: '/hrms/attendance', module: 'hrms', pageKey: 'hrms_attendance' },
       { label: 'Leaves', path: '/hrms/leaves', module: 'hrms', pageKey: 'hrms_leaves' },
       { label: 'Payroll', path: '/hrms/payroll', module: 'hrms', pageKey: 'hrms_payroll' },
+      { label: 'Documents', path: '/hrms/documents', module: 'hrms', pageKey: 'hrms_documents' },
     ]
   },
   {

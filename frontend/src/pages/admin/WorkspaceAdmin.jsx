@@ -147,7 +147,8 @@ const HIERARCHICAL_PAGES = [
       { key: 'hrms_directory', label: 'Directory' },
       { key: 'hrms_attendance', label: 'Attendance' },
       { key: 'hrms_leaves', label: 'Leaves' },
-      { key: 'hrms_payroll', label: 'Payroll' }
+      { key: 'hrms_payroll', label: 'Payroll' },
+      { key: 'hrms_documents', label: 'Documents' }
     ]
   },
   {

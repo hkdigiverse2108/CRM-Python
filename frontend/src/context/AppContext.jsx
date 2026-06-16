@@ -465,6 +465,8 @@ export function AppProvider({ children }) {
   const [leaves, setLeaves] = useState([]);
   const [payroll, setPayroll] = useState([]);
   const [attendance, setAttendance] = useState([]);
+  const [letterRequests, setLetterRequests] = useState([]);
+  const [flatDocs, setFlatDocs] = useState([]);
 
   const [recruitmentJobs, setRecruitmentJobs] = useState(() => {
     const saved = localStorage.getItem('hrms-recruitment');
@@ -1660,6 +1662,44 @@ export function AppProvider({ children }) {
     }
   }, [token, tenantId, logout]);
 
+  const fetchLetters = useCallback(async () => {
+    if (!token) return;
+    try {
+      const resp = await fetch(`${API_BASE}/documents/letters`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+        }
+      });
+      const data = await resp.json();
+      if (data.success && data.data) {
+        setLetterRequests(data.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch letter requests:', err);
+    }
+  }, [token, tenantId]);
+
+  const fetchSubmissions = useCallback(async () => {
+    if (!token) return;
+    try {
+      const resp = await fetch(`${API_BASE}/documents/submissions`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+        }
+      });
+      const data = await resp.json();
+      if (data.success && data.data) {
+        setFlatDocs(data.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch submissions:', err);
+    }
+  }, [token, tenantId]);
+
   useEffect(() => {
     if (token) {
       fetchInvoices();
@@ -1678,8 +1718,10 @@ export function AppProvider({ children }) {
       fetchAuditLogs();
       fetchContacts();
       fetchClients();
+      fetchLetters();
+      fetchSubmissions();
     }
-  }, [token, fetchInvoices, fetchQuotes, fetchPayments, fetchLedger, fetchExpenses, fetchGstRecords, fetchEmployees, fetchLeaves, fetchPayroll, fetchAttendance, fetchTasks, fetchReminders, fetchRoles, fetchAuditLogs, fetchContacts, fetchClients]);
+  }, [token, fetchInvoices, fetchQuotes, fetchPayments, fetchLedger, fetchExpenses, fetchGstRecords, fetchEmployees, fetchLeaves, fetchPayroll, fetchAttendance, fetchTasks, fetchReminders, fetchRoles, fetchAuditLogs, fetchContacts, fetchClients, fetchLetters, fetchSubmissions]);
 
   useEffect(() => {
     localStorage.setItem('marketing-campaigns', JSON.stringify(campaigns));
@@ -2783,24 +2825,89 @@ export function AppProvider({ children }) {
     addToast('Asset returned.', 'success');
   }, [addToast]);
 
-  const uploadDocument = useCallback((empId, docData) => {
-    setEmployees(prev => prev.map(e => {
-      if (e.id === empId) {
-        const newDoc = {
-          uploadDate: new Date().toISOString().split('T')[0],
-          ...docData
-        };
-        const nextDocs = [...(e.documents || []), newDoc];
-        const nextHistory = [
-          ...(e.history || []),
-          { date: new Date().toISOString().split('T')[0], event: `Uploaded Document: ${docData.name}` }
-        ];
-        return { ...e, documents: nextDocs, history: nextHistory };
+  const createLetterRequest = useCallback(async (reqPayload) => {
+    if (!token) return null;
+    try {
+      const resp = await fetch(`${API_BASE}/documents/letters`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+        },
+        body: JSON.stringify(reqPayload)
+      });
+      const data = await resp.json();
+      if (data.success && data.data) {
+        setLetterRequests(prev => [data.data, ...prev]);
+        addToast('Letter request submitted successfully.', 'success');
+        return data.data;
+      } else {
+        throw new Error(data.message || 'Failed to submit request');
       }
-      return e;
-    }));
-    addToast(`Document uploaded.`, 'success');
-  }, [addToast]);
+    } catch (err) {
+      console.error(err);
+      addToast(err.message, 'error');
+      return null;
+    }
+  }, [token, tenantId, addToast]);
+
+  const updateLetterRequestStatus = useCallback(async (requestId, status, actionsTaken) => {
+    if (!token) return null;
+    try {
+      const resp = await fetch(`${API_BASE}/documents/letters/${requestId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+        },
+        body: JSON.stringify({ status, actionsTaken })
+      });
+      const data = await resp.json();
+      if (data.success && data.data) {
+        setLetterRequests(prev => prev.map(item => item.id === requestId ? data.data : item));
+        addToast(`Request status updated to: ${status}`, 'success');
+        return data.data;
+      } else {
+        throw new Error(data.message || 'Failed to update request');
+      }
+    } catch (err) {
+      console.error(err);
+      addToast(err.message, 'error');
+      return null;
+    }
+  }, [token, tenantId, addToast]);
+
+  const uploadDocument = useCallback(async (empId, docData) => {
+    if (!token) return;
+    try {
+      const resp = await fetch(`${API_BASE}/documents/submissions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+        },
+        body: JSON.stringify({
+          employeeId: empId,
+          name: docData.name,
+          type: docData.type
+        })
+      });
+      const data = await resp.json();
+      if (data.success && data.data) {
+        fetchSubmissions();
+        fetchEmployees();
+        addToast(`Document uploaded successfully.`, 'success');
+      } else {
+        throw new Error(data.message || 'Failed to upload document');
+      }
+    } catch (err) {
+      console.error(err);
+      addToast(err.message, 'error');
+    }
+  }, [token, tenantId, fetchSubmissions, fetchEmployees, addToast]);
 
   // Dark mode initialization
   const [darkMode, setDarkMode] = useState(() => {
@@ -3311,6 +3418,12 @@ export function AppProvider({ children }) {
       assignAsset,
       returnAsset,
       uploadDocument,
+      letterRequests,
+      setLetterRequests,
+      flatDocs,
+      setFlatDocs,
+      createLetterRequest,
+      updateLetterRequestStatus,
       hrmsRole,
       setHrmsRole,
       hrmsEmployeeId,

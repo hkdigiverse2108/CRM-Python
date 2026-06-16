@@ -44,6 +44,7 @@ import Directory from '@/pages/hrms/Directory';
 import Leaves from '@/pages/hrms/Leaves';
 import Payroll from '@/pages/hrms/Payroll';
 import Attendance from '@/pages/hrms/Attendance';
+import Documents from '@/pages/hrms/Documents';
 
 // Projects
 import ProjectsDashboard from '@/pages/projects/ProjectsDashboard';
@@ -201,6 +202,7 @@ export default function App() {
             <Route path="/hrms/attendance" element={<PermissionGuard module="hrms"><Attendance /></PermissionGuard>} />
             <Route path="/hrms/leaves" element={<PermissionGuard module="hrms"><Leaves /></PermissionGuard>} />
             <Route path="/hrms/payroll" element={<PermissionGuard module="hrms"><Payroll /></PermissionGuard>} />
+            <Route path="/hrms/documents" element={<PermissionGuard module="hrms"><Documents /></PermissionGuard>} />
 
             {/* Projects */}
             <Route path="/projects" element={<Navigate to="/projects/dashboard" replace />} />
