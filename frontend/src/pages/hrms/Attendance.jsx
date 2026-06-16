@@ -288,38 +288,26 @@ export default function Attendance() {
 
           {/* Action buttons */}
           <div className="flex flex-wrap gap-3 mt-6">
-            {(!todayLog || todayLog.currentStatus === 'punch-out') ? (
-              <button
-                onClick={() => handleAction('punch-in')}
-                className="flex items-center gap-1.5 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-200 dark:shadow-none cursor-pointer"
-              >
-                Punch In
-              </button>
-            ) : (
-              <>
+            {todayLog && todayLog.currentStatus !== 'punch-out' ? (
+              todayLog.currentStatus !== 'break-in' ? (
                 <button
-                  onClick={() => handleAction('punch-out')}
-                  className="flex items-center gap-1.5 px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-rose-200 dark:shadow-none cursor-pointer"
+                  onClick={() => handleAction('break-in')}
+                  className="flex items-center gap-1.5 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-amber-200 dark:shadow-none cursor-pointer"
                 >
-                  Punch Out
+                  Break In
                 </button>
-
-                {todayLog.currentStatus !== 'break-in' ? (
-                  <button
-                    onClick={() => handleAction('break-in')}
-                    className="flex items-center gap-1.5 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-amber-200 dark:shadow-none cursor-pointer"
-                  >
-                    Break In
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => handleAction('break-out')}
-                    className="flex items-center gap-1.5 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-200 dark:shadow-none cursor-pointer"
-                  >
-                    Break Out
-                  </button>
-                )}
-              </>
+              ) : (
+                <button
+                  onClick={() => handleAction('break-out')}
+                  className="flex items-center gap-1.5 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-200 dark:shadow-none cursor-pointer"
+                >
+                  Break Out
+                </button>
+              )
+            ) : (
+              <span className="text-[10px] font-bold text-slate-400 bg-slate-50 dark:bg-slate-850/40 px-3 py-2 border border-dashed border-slate-200 dark:border-slate-850 rounded-xl">
+                Please Clock In from the HRMS Dashboard to start your day and manage breaks.
+              </span>
             )}
           </div>
         </div>
