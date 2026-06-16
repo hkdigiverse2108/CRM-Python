@@ -34,6 +34,7 @@ export default function HRMSDashboard() {
     assignAsset,
     returnAsset,
     uploadDocument,
+    user,
     addToast
   } = useApp();
 
@@ -45,10 +46,40 @@ export default function HRMSDashboard() {
     setHrmsEmployeeId(selectedEmployeeId);
   }, [selectedEmployeeId, setHrmsEmployeeId]);
 
+  // Sync default employee ID to logged-in user's employee record
+  useEffect(() => {
+    if (user?.email && employees.length > 0) {
+      const loggedInEmp = employees.find(e => e.email === user.email);
+      if (loggedInEmp) {
+        if (hrmsEmployeeId === 'EMP-001' && loggedInEmp.id !== 'EMP-001') {
+          setSelectedEmployeeId(loggedInEmp.id);
+        }
+      }
+    }
+  }, [user, employees, hrmsEmployeeId]);
+
   // Selected employee context for self-service
   const currentEmployee = useMemo(() => {
-    return employees.find(e => e.id === hrmsEmployeeId) || employees[0];
-  }, [employees, hrmsEmployeeId]);
+    const found = employees.find(e => e.id === hrmsEmployeeId || e.employee_id === hrmsEmployeeId) ||
+                  employees.find(e => e.email === user?.email);
+    if (found) return found;
+
+    if (user) {
+      return {
+        id: user.id || 'EMP-ADMIN',
+        name: user.full_name || 'Admin',
+        role: user.role_name || user.role || 'Admin',
+        department: 'Management',
+        email: user.email,
+        phone: user.phone || '-',
+        status: 'Active',
+        joinDate: '2026-06-01',
+        bankDetails: { holderName: user.full_name, bankName: '-', accountNumber: '-', ifscCode: '-' },
+        familyDetails: { parentName: '-', parentPhone: '-', relationship: '-' }
+      };
+    }
+    return employees[0];
+  }, [employees, hrmsEmployeeId, user]);
 
   // Digital clock
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -80,6 +111,79 @@ export default function HRMSDashboard() {
   const [leaveForm, setLeaveForm] = useState({ type: 'Casual Leave', start: '', end: '', days: 1, reason: '' });
   const [docFile, setDocFile] = useState({ name: '', type: 'Aadhaar Card' });
   const [profileSubTab, setProfileSubTab] = useState('personal');
+
+  // Profile Edit Mode States
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    firstName: '', middleName: '', lastName: '', email: '', phone: '', dob: '', gender: 'Male',
+    aadhaarNumber: '', panNumber: '', department: '', role: '', joinDate: '',
+    bankName: '', accountNumber: '', ifscCode: '', upiId: '',
+    parentName: '', parentPhone: '', relationship: 'Father'
+  });
+
+  const handleStartEdit = () => {
+    setProfileForm({
+      firstName: currentEmployee?.name?.split(' ')?.[0] || '',
+      middleName: currentEmployee?.name?.split(' ')?.[1] || '',
+      lastName: currentEmployee?.name?.split(' ')?.[2] || '',
+      email: currentEmployee?.email || '',
+      phone: currentEmployee?.phone || '',
+      dob: currentEmployee?.dob || '',
+      gender: currentEmployee?.gender || 'Male',
+      aadhaarNumber: currentEmployee?.aadhaarNumber || '',
+      panNumber: currentEmployee?.panNumber || '',
+      department: currentEmployee?.department || '',
+      role: currentEmployee?.role || '',
+      joinDate: currentEmployee?.joinDate || '',
+      bankName: currentEmployee?.bankDetails?.bankName || '',
+      accountNumber: currentEmployee?.bankDetails?.accountNumber || '',
+      ifscCode: currentEmployee?.bankDetails?.ifscCode || '',
+      upiId: currentEmployee?.bankDetails?.upiId || '',
+      parentName: currentEmployee?.familyDetails?.parentName || '',
+      parentPhone: currentEmployee?.familyDetails?.parentPhone || '',
+      relationship: currentEmployee?.familyDetails?.relationship || 'Father',
+    });
+    setIsEditingProfile(true);
+  };
+
+  const handleSaveProfile = async () => {
+    const fullName = [profileForm.firstName, profileForm.middleName, profileForm.lastName].filter(Boolean).join(' ');
+    const updatedData = {
+      name: fullName,
+      email: profileForm.email,
+      phone: profileForm.phone,
+      dob: profileForm.dob,
+      gender: profileForm.gender,
+      aadhaarNumber: profileForm.aadhaarNumber,
+      panNumber: profileForm.panNumber,
+      department: profileForm.department,
+      role: profileForm.role,
+      joinDate: profileForm.joinDate,
+      bankDetails: {
+        holderName: fullName,
+        bankName: profileForm.bankName,
+        accountNumber: profileForm.accountNumber,
+        ifscCode: profileForm.ifscCode,
+        upiId: profileForm.upiId
+      },
+      familyDetails: {
+        parentName: profileForm.parentName,
+        parentPhone: profileForm.parentPhone,
+        relationship: profileForm.relationship
+      }
+    };
+
+    const empId = currentEmployee.id;
+    if (empId === 'EMP-ADMIN') {
+      await addEmployee({
+        id: 'EMP-001',
+        ...updatedData
+      });
+    } else {
+      await editEmployee(empId, updatedData);
+    }
+    setIsEditingProfile(false);
+  };
 
   // ATS active job selection
   const [selectedJobId, setSelectedJobId] = useState(recruitmentJobs[0]?.id || '');
@@ -497,17 +601,17 @@ export default function HRMSDashboard() {
                           />
                         ) : (
                           <div className="w-14 h-14 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-600 font-bold text-xl uppercase border-2 border-primary/20">
-                            {currentEmployee?.name?.split(' ').map(w => w[0]).join('').slice(0, 2)}
+                            {currentEmployee?.name?.split(' ').map(w => w[0]).join('').slice(0, 2) || 'EM'}
                           </div>
                         )}
                         <span className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 bg-emerald-500 border-2 border-card rounded-full animate-pulse"></span>
                       </div>
                       <div>
                         <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-50/70 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold">
-                          <span>☀️</span> Good morning, {currentEmployee?.name?.split(' ')?.[0] || 'Parth'}
+                          <span>☀️</span> Good morning, {user?.full_name?.split(' ')?.[0] || 'Employee'}
                         </div>
-                        <h3 className="text-base font-extrabold text-slate-900 dark:text-white mt-1.5">{currentEmployee?.name || 'Parth Ashvinbhai Devani'}</h3>
-                        <p className="text-xs text-muted-foreground mt-0.5 font-semibold">{currentEmployee?.role || 'Python Developer'}</p>
+                        <h3 className="text-base font-extrabold text-slate-900 dark:text-white mt-1.5">{currentEmployee?.name || '-'}</h3>
+                        <p className="text-xs text-muted-foreground mt-0.5 font-semibold">{currentEmployee?.role || '-'}</p>
                       </div>
                     </div>
 
@@ -832,11 +936,38 @@ export default function HRMSDashboard() {
             {activeTab === 'ess-profile' && (
               <div className="space-y-6">
                 {/* Header Title */}
-                <div className="space-y-1">
-                  <h2 className="text-lg font-extrabold text-slate-900 dark:text-white">My Profile</h2>
-                  <p className="text-xs text-muted-foreground">
-                    Manage your personal details and bank info. Sensitive administrative, identity, and salary parameters are locked for standard employees.
-                  </p>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <h2 className="text-lg font-extrabold text-slate-900 dark:text-white">My Profile</h2>
+                    <p className="text-xs text-muted-foreground">
+                      Manage your personal details and bank info. Sensitive administrative, identity, and salary parameters are locked for standard employees.
+                    </p>
+                  </div>
+                  <div>
+                    {!isEditingProfile ? (
+                      <button 
+                        onClick={handleStartEdit} 
+                        className="bg-primary text-white font-bold flex items-center gap-1.5 px-4 py-2 text-xs rounded-xl hover:bg-primary/95 transition-all"
+                      >
+                        <Edit3 size={14} /> Edit Profile
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={handleSaveProfile} 
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1 px-4 py-2 text-xs rounded-xl transition-all"
+                        >
+                          <Check size={14} /> Save Changes
+                        </button>
+                        <button 
+                          onClick={() => setIsEditingProfile(false)} 
+                          className="bg-muted text-foreground font-bold flex items-center gap-1 px-4 py-2 text-xs rounded-xl border border-border hover:bg-muted/80 transition-all"
+                        >
+                          <X size={14} /> Cancel
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -912,57 +1043,141 @@ export default function HRMSDashboard() {
                             <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
                               <User size={10} /> First Name
                             </span>
-                            <p className="text-xs font-bold text-foreground">{currentEmployee?.name?.split(' ')?.[0] || 'Parth'}</p>
+                            {isEditingProfile ? (
+                              <input 
+                                type="text"
+                                value={profileForm.firstName}
+                                onChange={e => setProfileForm({ ...profileForm, firstName: e.target.value })}
+                                className="w-full bg-card border border-border/85 focus:border-primary/85 focus:ring-1 focus:ring-primary/85 rounded-lg px-2 py-0.5 text-xs font-semibold text-foreground focus:outline-none transition-all mt-1"
+                              />
+                            ) : (
+                              <p className="text-xs font-bold text-foreground">{currentEmployee?.name?.split(' ')?.[0] || 'Parth'}</p>
+                            )}
                           </div>
                           <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
                             <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
                               <User size={10} /> Middle Name
                             </span>
-                            <p className="text-xs font-bold text-foreground">{currentEmployee?.name?.split(' ')?.[1] || 'Ashvinbhai'}</p>
+                            {isEditingProfile ? (
+                              <input 
+                                type="text"
+                                value={profileForm.middleName}
+                                onChange={e => setProfileForm({ ...profileForm, middleName: e.target.value })}
+                                className="w-full bg-card border border-border/85 focus:border-primary/85 focus:ring-1 focus:ring-primary/85 rounded-lg px-2 py-0.5 text-xs font-semibold text-foreground focus:outline-none transition-all mt-1"
+                              />
+                            ) : (
+                              <p className="text-xs font-bold text-foreground">{currentEmployee?.name?.split(' ')?.[1] || 'Ashvinbhai'}</p>
+                            )}
                           </div>
                           <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
                             <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
                               <User size={10} /> Last Name
                             </span>
-                            <p className="text-xs font-bold text-foreground">{currentEmployee?.name?.split(' ')?.[2] || 'Devani'}</p>
+                            {isEditingProfile ? (
+                              <input 
+                                type="text"
+                                value={profileForm.lastName}
+                                onChange={e => setProfileForm({ ...profileForm, lastName: e.target.value })}
+                                className="w-full bg-card border border-border/85 focus:border-primary/85 focus:ring-1 focus:ring-primary/85 rounded-lg px-2 py-0.5 text-xs font-semibold text-foreground focus:outline-none transition-all mt-1"
+                              />
+                            ) : (
+                              <p className="text-xs font-bold text-foreground">{currentEmployee?.name?.split(' ')?.[2] || '-'}</p>
+                            )}
                           </div>
                           <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
                             <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
                               <LogIn size={10} /> Email Address
                             </span>
-                            <p className="text-xs font-bold text-foreground">{currentEmployee?.email || 'devaniparth27@gmail.com'}</p>
+                            {isEditingProfile ? (
+                              <input 
+                                type="email"
+                                value={profileForm.email}
+                                onChange={e => setProfileForm({ ...profileForm, email: e.target.value })}
+                                className="w-full bg-card border border-border/85 focus:border-primary/85 focus:ring-1 focus:ring-primary/85 rounded-lg px-2 py-0.5 text-xs font-semibold text-foreground focus:outline-none transition-all mt-1"
+                              />
+                            ) : (
+                              <p className="text-xs font-bold text-foreground">{currentEmployee?.email || '-'}</p>
+                            )}
                           </div>
                           <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
                             <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
                               <Activity size={10} /> Phone Number
                             </span>
-                            <p className="text-xs font-bold text-foreground">{currentEmployee?.phone || '6355809873'}</p>
+                            {isEditingProfile ? (
+                              <input 
+                                type="text"
+                                value={profileForm.phone}
+                                onChange={e => setProfileForm({ ...profileForm, phone: e.target.value })}
+                                className="w-full bg-card border border-border/85 focus:border-primary/85 focus:ring-1 focus:ring-primary/85 rounded-lg px-2 py-0.5 text-xs font-semibold text-foreground focus:outline-none transition-all mt-1"
+                              />
+                            ) : (
+                              <p className="text-xs font-bold text-foreground">{currentEmployee?.phone || '-'}</p>
+                            )}
                           </div>
                           <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
                             <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
                               <Calendar size={10} /> Date of Birth
                             </span>
-                            <p className="text-xs font-bold text-foreground font-mono">{currentEmployee?.dob || '2005-09-06'}</p>
+                            {isEditingProfile ? (
+                              <input 
+                                type="date"
+                                value={profileForm.dob}
+                                onChange={e => setProfileForm({ ...profileForm, dob: e.target.value })}
+                                className="w-full bg-card border border-border/85 focus:border-primary/85 focus:ring-1 focus:ring-primary/85 rounded-lg px-2 py-0.5 text-xs font-semibold text-foreground focus:outline-none transition-all mt-1"
+                              />
+                            ) : (
+                              <p className="text-xs font-bold text-foreground font-mono">{currentEmployee?.dob || '-'}</p>
+                            )}
                           </div>
                           <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
                             <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
                               <User size={10} /> Gender
                             </span>
-                            <p className="text-xs font-bold text-foreground">{currentEmployee?.gender || 'Male'}</p>
+                            {isEditingProfile ? (
+                              <select 
+                                value={profileForm.gender}
+                                onChange={e => setProfileForm({ ...profileForm, gender: e.target.value })}
+                                className="w-full bg-card border border-border/85 focus:border-primary/85 focus:ring-1 focus:ring-primary/85 rounded-lg px-2 py-0.5 text-xs font-semibold text-foreground focus:outline-none transition-all mt-1"
+                              >
+                                <option value="Male">Male</option>
+                                <option value="Female">Female</option>
+                                <option value="Other">Other</option>
+                              </select>
+                            ) : (
+                              <p className="text-xs font-bold text-foreground">{currentEmployee?.gender || '-'}</p>
+                            )}
                           </div>
                           <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
                             <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center justify-between">
                               <span className="flex items-center gap-1"><FileText size={10} /> Aadhaar Card Number</span>
                               <ShieldAlert size={10} className="text-muted-foreground" />
                             </span>
-                            <p className="text-xs font-bold text-foreground font-mono">{currentEmployee?.aadhaarNumber || '5753 4762 1886'}</p>
+                            {isEditingProfile ? (
+                              <input 
+                                type="text"
+                                value={profileForm.aadhaarNumber}
+                                onChange={e => setProfileForm({ ...profileForm, aadhaarNumber: e.target.value })}
+                                className="w-full bg-card border border-border/85 focus:border-primary/85 focus:ring-1 focus:ring-primary/85 rounded-lg px-2 py-0.5 text-xs font-semibold text-foreground focus:outline-none transition-all mt-1"
+                              />
+                            ) : (
+                              <p className="text-xs font-bold text-foreground font-mono">{currentEmployee?.aadhaarNumber || '-'}</p>
+                            )}
                           </div>
                           <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
                             <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center justify-between">
                               <span className="flex items-center gap-1"><FileText size={10} /> PAN Card Number</span>
                               <ShieldAlert size={10} className="text-muted-foreground" />
                             </span>
-                            <p className="text-xs font-bold text-foreground font-mono">{currentEmployee?.panNumber || 'JEPPD0579P'}</p>
+                            {isEditingProfile ? (
+                              <input 
+                                type="text"
+                                value={profileForm.panNumber}
+                                onChange={e => setProfileForm({ ...profileForm, panNumber: e.target.value })}
+                                className="w-full bg-card border border-border/85 focus:border-primary/85 focus:ring-1 focus:ring-primary/85 rounded-lg px-2 py-0.5 text-xs font-semibold text-foreground focus:outline-none transition-all mt-1"
+                              />
+                            ) : (
+                              <p className="text-xs font-bold text-foreground font-mono">{currentEmployee?.panNumber || '-'}</p>
+                            )}
                           </div>
                         </div>
                       )}
@@ -974,14 +1189,32 @@ export default function HRMSDashboard() {
                               <span className="flex items-center gap-1"><Building2 size={10} /> Department</span>
                               <ShieldAlert size={10} className="text-muted-foreground" />
                             </span>
-                            <p className="text-xs font-bold text-foreground">{currentEmployee?.department || 'Development'}</p>
+                            {isEditingProfile ? (
+                              <input 
+                                type="text"
+                                value={profileForm.department}
+                                onChange={e => setProfileForm({ ...profileForm, department: e.target.value })}
+                                className="w-full bg-card border border-border/85 focus:border-primary/85 focus:ring-1 focus:ring-primary/85 rounded-lg px-2 py-0.5 text-xs font-semibold text-foreground focus:outline-none transition-all mt-1"
+                              />
+                            ) : (
+                              <p className="text-xs font-bold text-foreground">{currentEmployee?.department || '-'}</p>
+                            )}
                           </div>
                           <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
                             <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center justify-between">
                               <span className="flex items-center gap-1"><Briefcase size={10} /> Designation</span>
                               <ShieldAlert size={10} className="text-muted-foreground" />
                             </span>
-                            <p className="text-xs font-bold text-foreground">{currentEmployee?.role || 'Python Developer'}</p>
+                            {isEditingProfile ? (
+                              <input 
+                                type="text"
+                                value={profileForm.role}
+                                onChange={e => setProfileForm({ ...profileForm, role: e.target.value })}
+                                className="w-full bg-card border border-border/85 focus:border-primary/85 focus:ring-1 focus:ring-primary/85 rounded-lg px-2 py-0.5 text-xs font-semibold text-foreground focus:outline-none transition-all mt-1"
+                              />
+                            ) : (
+                              <p className="text-xs font-bold text-foreground">{currentEmployee?.role || '-'}</p>
+                            )}
                           </div>
                           <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
                             <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center justify-between">
@@ -995,7 +1228,16 @@ export default function HRMSDashboard() {
                               <span className="flex items-center gap-1"><Calendar size={10} /> Joining Date</span>
                               <ShieldAlert size={10} className="text-muted-foreground" />
                             </span>
-                            <p className="text-xs font-bold text-foreground font-mono">{currentEmployee?.joinDate || '2026-05-20'}</p>
+                            {isEditingProfile ? (
+                              <input 
+                                type="date"
+                                value={profileForm.joinDate}
+                                onChange={e => setProfileForm({ ...profileForm, joinDate: e.target.value })}
+                                className="w-full bg-card border border-border/85 focus:border-primary/85 focus:ring-1 focus:ring-primary/85 rounded-lg px-2 py-0.5 text-xs font-semibold text-foreground focus:outline-none transition-all mt-1"
+                              />
+                            ) : (
+                              <p className="text-xs font-bold text-foreground font-mono">{currentEmployee?.joinDate || '-'}</p>
+                            )}
                           </div>
                           <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
                             <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center justify-between">
@@ -1032,31 +1274,67 @@ export default function HRMSDashboard() {
                                 <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
                                   <User size={10} /> Account Holder Name
                                 </span>
-                                <p className="text-xs font-bold text-foreground">{currentEmployee?.bankDetails?.holderName || 'Devani Parth Ashvinbhai'}</p>
+                                <p className="text-xs font-bold text-foreground">{isEditingProfile ? [profileForm.firstName, profileForm.middleName, profileForm.lastName].filter(Boolean).join(' ') : (currentEmployee?.bankDetails?.holderName || '-')}</p>
                               </div>
                               <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
                                 <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
                                   <Building2 size={10} /> Bank Name
                                 </span>
-                                <p className="text-xs font-bold text-foreground">{currentEmployee?.bankDetails?.bankName || 'The Varacha Co-op'}</p>
+                                {isEditingProfile ? (
+                                  <input 
+                                    type="text"
+                                    value={profileForm.bankName}
+                                    onChange={e => setProfileForm({ ...profileForm, bankName: e.target.value })}
+                                    className="w-full bg-card border border-border/85 focus:border-primary/85 focus:ring-1 focus:ring-primary/85 rounded-lg px-2 py-0.5 text-xs font-semibold text-foreground focus:outline-none transition-all mt-1"
+                                  />
+                                ) : (
+                                  <p className="text-xs font-bold text-foreground">{currentEmployee?.bankDetails?.bankName || '-'}</p>
+                                )}
                               </div>
                               <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
                                 <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
                                   <FileText size={10} /> Account Number
                                 </span>
-                                <p className="text-xs font-bold text-foreground font-mono">{currentEmployee?.bankDetails?.accountNumber || '100160136007'}</p>
+                                {isEditingProfile ? (
+                                  <input 
+                                    type="text"
+                                    value={profileForm.accountNumber}
+                                    onChange={e => setProfileForm({ ...profileForm, accountNumber: e.target.value })}
+                                    className="w-full bg-card border border-border/85 focus:border-primary/85 focus:ring-1 focus:ring-primary/85 rounded-lg px-2 py-0.5 text-xs font-semibold text-foreground focus:outline-none transition-all mt-1"
+                                  />
+                                ) : (
+                                  <p className="text-xs font-bold text-foreground font-mono">{currentEmployee?.bankDetails?.accountNumber || '-'}</p>
+                                )}
                               </div>
                               <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
                                 <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
                                   <FileText size={10} /> IFSC Code
                                 </span>
-                                <p className="text-xs font-bold text-foreground font-mono">{currentEmployee?.bankDetails?.ifscCode || 'VARA0289016'}</p>
+                                {isEditingProfile ? (
+                                  <input 
+                                    type="text"
+                                    value={profileForm.ifscCode}
+                                    onChange={e => setProfileForm({ ...profileForm, ifscCode: e.target.value })}
+                                    className="w-full bg-card border border-border/85 focus:border-primary/85 focus:ring-1 focus:ring-primary/85 rounded-lg px-2 py-0.5 text-xs font-semibold text-foreground focus:outline-none transition-all mt-1"
+                                  />
+                                ) : (
+                                  <p className="text-xs font-bold text-foreground font-mono">{currentEmployee?.bankDetails?.ifscCode || '-'}</p>
+                                )}
                               </div>
                               <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
                                 <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
                                   <LogIn size={10} /> UPI ID
                                 </span>
-                                <p className="text-xs font-bold text-foreground">{currentEmployee?.bankDetails?.upiId || 'devaniparth27-1@okicici'}</p>
+                                {isEditingProfile ? (
+                                  <input 
+                                    type="text"
+                                    value={profileForm.upiId}
+                                    onChange={e => setProfileForm({ ...profileForm, upiId: e.target.value })}
+                                    className="w-full bg-card border border-border/85 focus:border-primary/85 focus:ring-1 focus:ring-primary/85 rounded-lg px-2 py-0.5 text-xs font-semibold text-foreground focus:outline-none transition-all mt-1"
+                                  />
+                                ) : (
+                                  <p className="text-xs font-bold text-foreground">{currentEmployee?.bankDetails?.upiId || '-'}</p>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -1070,19 +1348,51 @@ export default function HRMSDashboard() {
                                 <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
                                   <User size={10} /> Parent Name
                                 </span>
-                                <p className="text-xs font-bold text-foreground">{currentEmployee?.familyDetails?.parentName || 'Ashvinbhai Devani'}</p>
+                                {isEditingProfile ? (
+                                  <input 
+                                    type="text"
+                                    value={profileForm.parentName}
+                                    onChange={e => setProfileForm({ ...profileForm, parentName: e.target.value })}
+                                    className="w-full bg-card border border-border/85 focus:border-primary/85 focus:ring-1 focus:ring-primary/85 rounded-lg px-2 py-0.5 text-xs font-semibold text-foreground focus:outline-none transition-all mt-1"
+                                  />
+                                ) : (
+                                  <p className="text-xs font-bold text-foreground">{currentEmployee?.familyDetails?.parentName || '-'}</p>
+                                )}
                               </div>
                               <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
                                 <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
                                   <Activity size={10} /> Parent Phone Number
                                 </span>
-                                <p className="text-xs font-bold text-foreground font-mono">{currentEmployee?.familyDetails?.parentPhone || '9913465573'}</p>
+                                {isEditingProfile ? (
+                                  <input 
+                                    type="text"
+                                    value={profileForm.parentPhone}
+                                    onChange={e => setProfileForm({ ...profileForm, parentPhone: e.target.value })}
+                                    className="w-full bg-card border border-border/85 focus:border-primary/85 focus:ring-1 focus:ring-primary/85 rounded-lg px-2 py-0.5 text-xs font-semibold text-foreground focus:outline-none transition-all mt-1"
+                                  />
+                                ) : (
+                                  <p className="text-xs font-bold text-foreground font-mono">{currentEmployee?.familyDetails?.parentPhone || '-'}</p>
+                                )}
                               </div>
                               <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
                                 <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
                                   <User size={10} /> Relationship
                                 </span>
-                                <p className="text-xs font-bold text-foreground">{currentEmployee?.familyDetails?.relationship || 'Father'}</p>
+                                {isEditingProfile ? (
+                                  <select 
+                                    value={profileForm.relationship}
+                                    onChange={e => setProfileForm({ ...profileForm, relationship: e.target.value })}
+                                    className="w-full bg-card border border-border/85 focus:border-primary/85 focus:ring-1 focus:ring-primary/85 rounded-lg px-2 py-0.5 text-xs font-semibold text-foreground focus:outline-none transition-all mt-1"
+                                  >
+                                    <option value="Father">Father</option>
+                                    <option value="Mother">Mother</option>
+                                    <option value="Spouse">Spouse</option>
+                                    <option value="Guardian">Guardian</option>
+                                    <option value="Other">Other</option>
+                                  </select>
+                                ) : (
+                                  <p className="text-xs font-bold text-foreground">{currentEmployee?.familyDetails?.relationship || '-'}</p>
+                                )}
                               </div>
                             </div>
                           </div>

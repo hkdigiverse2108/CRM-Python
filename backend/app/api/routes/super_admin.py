@@ -364,8 +364,26 @@ def create_organization(
                 "max_campaigns": plan_details["max_campaigns"]
             })
 
-            # 2. Seed default roles and permissions based on plan allowed modules
+            # 1b. Seed workspace_modules
             allowed_modules = plan_details["modules"]
+            all_known_modules = [
+                "dashboard", "crm", "sales", "whatsapp", "marketing", "automation",
+                "finance", "hrms", "support", "projects", "reports", "settings",
+                "users", "audit_logs", "integrations", "ecommerce", "inventory", "ai_assistant"
+            ]
+            for m in all_known_modules:
+                val = 1 if m in allowed_modules or m in ["dashboard", "settings", "users", "audit_logs"] else 0
+                db.execute(text("""
+                    INSERT INTO workspace_modules (workspace_id, module, is_enabled, updated_by)
+                    VALUES (:ws_id, :module, :val, :uid)
+                """), {
+                    "ws_id": data.workspace_id,
+                    "module": m,
+                    "val": val,
+                    "uid": current_user.get("id", "system")
+                })
+
+            # 2. Seed default roles and permissions based on plan allowed modules
             for r_info in ROLES_BLUEPRINT:
                 role_id = f"role_{r_info['role_suffix']}_{data.workspace_id}"
                 db.execute(text("""

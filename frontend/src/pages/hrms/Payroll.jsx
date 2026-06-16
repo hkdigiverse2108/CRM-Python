@@ -21,6 +21,7 @@ export default function Payroll() {
     hrmsRole,
     hrmsEmployeeId,
     user,
+    activeOrg,
     addToast 
   } = useApp();
 
@@ -197,29 +198,28 @@ export default function Payroll() {
   const selectedEmpPayslips = useMemo(() => {
     if (!activeEmployeeId) return [];
     
-    // Returns simulated pay periods for the selected employee
-    const targetEmp = employees.find(e => e.id === activeEmployeeId);
+    const targetEmp = employees.find(e => e.id === activeEmployeeId || e.employee_id === activeEmployeeId);
     if (!targetEmp) return [];
 
-    const periods = ['May 2026', 'April 2026', 'June 2026', 'July 2026'];
-    return periods.map(period => {
-      const slip = payroll.find(p => p.employeeId === activeEmployeeId && p.month === period);
+    const processedSlips = payroll.filter(p => p.employeeId === activeEmployeeId || p.employee_id === activeEmployeeId);
+    
+    return processedSlips.map(slip => {
       return {
-        period,
-        netSalary: slip ? slip.netPay : 0,
-        status: slip ? slip.status : 'DRAFT',
+        period: slip.month,
+        netSalary: slip.netPay,
+        status: slip.status,
         employeeName: targetEmp.name,
         employeeId: targetEmp.id,
         department: targetEmp.department || 'General',
         designation: targetEmp.role || 'Staff',
-        basic: parseFloat(targetEmp.salaryStructure?.basic || 45000),
-        hra: parseFloat(targetEmp.salaryStructure?.hra || 18000),
-        allowances: parseFloat(targetEmp.salaryStructure?.allowances || 7000),
-        pf: parseFloat(targetEmp.salaryStructure?.pf || 1800),
-        esi: parseFloat(targetEmp.salaryStructure?.esi || 0),
-        tds: parseFloat(targetEmp.salaryStructure?.tds || 2500),
-        bonus: 0,
-        totalDeductions: parseFloat(targetEmp.salaryStructure?.pf || 1800) + parseFloat(targetEmp.salaryStructure?.tds || 2500)
+        basic: parseFloat(slip.basic || 0),
+        hra: parseFloat(slip.hra || 0),
+        allowances: parseFloat(slip.allowances || 0),
+        pf: parseFloat(slip.pf || 0),
+        esi: parseFloat(slip.esi || 0),
+        tds: parseFloat(slip.tds || 0),
+        bonus: parseFloat(slip.bonus || 0) + parseFloat(slip.incentives || 0),
+        totalDeductions: parseFloat(slip.totalDeductions || 0)
       };
     });
   }, [activeEmployeeId, payroll, employees]);
@@ -271,6 +271,7 @@ export default function Payroll() {
 
   return (
     <div className="space-y-6 text-slate-800 dark:text-slate-200">
+      <div className="print:hidden space-y-6">
       
       {/* Dynamic Header */}
       {activeView === 'processing' && (
@@ -697,6 +698,7 @@ export default function Payroll() {
           </div>
         </div>
       )}
+      </div>
 
       {/* INSPECTED DETAILS MODAL */}
       {inspectedRecord && (() => {
@@ -709,15 +711,15 @@ export default function Payroll() {
         const companyAddress = isHk ? 'SURAT, GUJARAT, INDIA' : 'BANGALORE, KARNATAKA, INDIA';
         const companyGstin = isHk ? '24APQPN3916P1Z4' : '29AAFCR1234A1Z1';
         const companyLoc = isHk ? 'SURAT' : 'BANGALORE';
-        const bankName = emp?.bankDetails?.bankName || (isHk ? 'THE VARACHA CO-OP' : 'HDFC BANK');
-        const accNo = emp?.bankDetails?.accountNumber || '100160136007';
-        const ifsc = emp?.bankDetails?.ifscCode || (isHk ? 'VARA0289016' : 'HDFC0000123');
-        const pan = emp?.panNumber || 'JEPPD0579P';
-        const joinDateVal = emp?.joinDate ? new Date(emp.joinDate).toLocaleDateString('en-GB') : '20/05/2026';
+        const bankName = emp?.bankDetails?.bankName || '-';
+        const accNo = emp?.bankDetails?.accountNumber || '-';
+        const ifsc = emp?.bankDetails?.ifscCode || '-';
+        const pan = emp?.panNumber || '-';
+        const joinDateVal = emp?.joinDate ? new Date(emp.joinDate).toLocaleDateString('en-GB') : '-';
         
         const basicAmt = Math.round(inspectedRecord.basic);
-        const hraAmt = Math.round(inspectedRecord.basic > 0 ? parseFloat(sal.hra || 18000) : 0);
-        const allowancesAmt = Math.round(inspectedRecord.basic > 0 ? parseFloat(sal.allowances || 7000) : 0);
+        const hraAmt = Math.round(inspectedRecord.basic > 0 ? parseFloat(sal.hra || 0) : 0);
+        const allowancesAmt = Math.round(inspectedRecord.basic > 0 ? parseFloat(sal.allowances || 0) : 0);
         const bonusAmt = Math.round(inspectedRecord.bonus);
         const totalEarnings = basicAmt + hraAmt + allowancesAmt + bonusAmt;
 
@@ -928,20 +930,25 @@ export default function Payroll() {
               {/* Print stylesheet */}
               <style dangerouslySetInnerHTML={{__html: `
                 @media print {
+                  html, body {
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    background: #ffffff !important;
+                  }
                   body * {
-                    visibility: hidden;
+                    visibility: hidden !important;
                   }
                   #payslip-print-area, #payslip-print-area * {
-                    visibility: visible;
+                    visibility: visible !important;
                   }
                   #payslip-print-area {
-                    position: absolute;
-                    left: 0;
-                    top: 0;
-                    width: 100%;
+                    position: absolute !important;
+                    left: 10px !important;
+                    top: 10px !important;
+                    width: calc(100% - 20px) !important;
                     border: 2px solid black !important;
                     padding: 16px !important;
-                    background-color: white !important;
+                    background: white !important;
                     color: black !important;
                   }
                 }

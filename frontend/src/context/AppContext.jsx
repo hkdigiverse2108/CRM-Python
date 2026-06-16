@@ -289,9 +289,9 @@ export function AppProvider({ children }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeOrg, setActiveOrg] = useState(() => {
     const savedTenant = localStorage.getItem('auth-tenant-id');
-    const orgNames = {
-      rapidmodel_corp: 'RapidModel Corp'
-    };
+    if (savedTenant && savedTenant !== 'rapidmodel_corp') {
+      return 'HK Digiverse LLP';
+    }
     return 'RapidModel Corp';
   });
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
