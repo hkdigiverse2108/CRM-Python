@@ -48,6 +48,8 @@ def start_servers():
     print("-" * 60)
 
     backend_cmd = [
+        sys.executable,
+        "-m",
         "uvicorn",
         "backend.app.main:app",
         "--host", app_host,
