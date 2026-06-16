@@ -456,107 +456,135 @@ export default function HRMSDashboard() {
             </div>
           </div>
 
-          {/* Punch In / Out Console for Admin & Manager */}
-          <div className="bg-gradient-to-br from-card via-card to-indigo-500/5 border border-border rounded-2xl shadow-sm p-5">
-            <div className="flex flex-col lg:flex-row items-center gap-6">
-              {/* Clock & Status */}
-              <div className="flex items-center gap-4 flex-shrink-0">
-                <div className="w-20 h-20 rounded-full border-[3px] border-indigo-500/25 flex flex-col items-center justify-center bg-muted/40 shadow-inner">
-                  <p className="text-base font-extrabold tracking-wider font-mono text-indigo-600 dark:text-indigo-400">
-                    {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                  </p>
-                  <p className="text-[7px] text-muted-foreground uppercase font-bold tracking-wider mt-0.5">Live Clock</p>
-                </div>
-
-                <div className="space-y-1 text-center">
-                  <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-widest">Worked Duration</p>
-                  <p className="text-xl font-mono font-extrabold text-foreground">{elapsedWorkingTime}</p>
-                  <div>
-                    {!currentEmployeeAttendance?.checkIn || currentEmployeeAttendance.checkIn === '-' ? (
-                      <span className="text-[9px] text-slate-500 font-extrabold uppercase px-2 py-0.5 rounded-full bg-slate-500/10">Not Checked-In</span>
-                    ) : currentEmployeeAttendance.checkOut && currentEmployeeAttendance.checkOut !== '-' ? (
-                      <span className="text-[9px] text-slate-400 font-extrabold uppercase px-2 py-0.5 rounded-full bg-slate-400/10">Clocked Out</span>
-                    ) : currentEmployeeAttendance.breaks?.some(b => b.end === null) ? (
-                      <span className="text-[9px] text-amber-500 font-extrabold uppercase animate-pulse px-2 py-0.5 rounded-full bg-amber-500/10">On Break</span>
-                    ) : (
-                      <span className="text-[9px] text-success font-extrabold uppercase animate-pulse px-2 py-0.5 rounded-full bg-success/10">Active Working</span>
-                    )}
+          {/* Punch In / Out Console for Admin & Manager (Redesigned) */}
+          <div className="bg-card border border-border rounded-3xl p-6 shadow-xs space-y-6 relative overflow-hidden">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-center">
+              
+              {/* Profile Greeting Section */}
+              <div className="flex items-center gap-3.5">
+                <div className="relative shrink-0">
+                  <div className="w-14 h-14 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-600 font-bold text-xl uppercase border-2 border-primary/20">
+                    {currentEmployee?.name?.split(' ').map(w => w[0]).join('').slice(0, 2)}
                   </div>
+                  <span className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 bg-emerald-500 border-2 border-card rounded-full animate-pulse"></span>
+                </div>
+                <div>
+                  <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-50/70 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold">
+                    <span>☀️</span> Good morning, {currentEmployee?.name?.split(' ')?.[0] || 'Parth'}
+                  </div>
+                  <h3 className="text-base font-extrabold text-slate-900 dark:text-white mt-1.5">{currentEmployee?.name || 'Parth Ashvinbhai Devani'}</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5 font-semibold">{currentEmployee?.role || 'Python Developer'}</p>
                 </div>
               </div>
 
-              {/* 4-Button Punch Console */}
-              <div className="flex-1 w-full">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest flex items-center gap-1.5">
-                    <Clock size={12} className="text-primary" /> Attendance Console — {currentEmployee?.name}
-                  </p>
-                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                    <span>In: <strong className="text-foreground">{currentEmployeeAttendance?.checkIn || '-'}</strong></span>
-                    <span>Out: <strong className="text-foreground">{currentEmployeeAttendance?.checkOut || '-'}</strong></span>
-                  </div>
+              {/* Live Clock Card */}
+              <div className="bg-emerald-500/[0.03] dark:bg-emerald-500/[0.01] border border-emerald-500/10 rounded-2xl p-4 flex flex-col items-center justify-center text-center space-y-1">
+                <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+                  Live Working Time <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[8px] font-black bg-emerald-500 text-white animate-pulse">LIVE</span>
+                </span>
+                <h2 className="text-2xl font-mono font-black tracking-tight text-slate-900 dark:text-white">
+                  {elapsedWorkingTime}
+                </h2>
+                {currentEmployeeAttendance?.checkIn && currentEmployeeAttendance.checkIn !== '-' && (!currentEmployeeAttendance.checkOut || currentEmployeeAttendance.checkOut === '-') ? (
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></span> Live Tracking Active
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-muted-foreground font-bold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 bg-slate-400 rounded-full"></span> Live Tracking Inactive
+                  </span>
+                )}
+              </div>
+
+              {/* Time displays and Punch Stamp */}
+              <div className="space-y-3.5">
+                {/* Punch Status Banner */}
+                <div className={`w-full py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 text-xs font-bold ${
+                  currentEmployeeAttendance?.checkIn && currentEmployeeAttendance.checkIn !== '-' && (!currentEmployeeAttendance.checkOut || currentEmployeeAttendance.checkOut === '-')
+                    ? 'bg-emerald-500/10 text-emerald-700 dark:bg-emerald-500/5 dark:text-emerald-400 border border-emerald-500/20'
+                    : 'bg-muted text-muted-foreground border border-border/40'
+                }`}>
+                  {currentEmployeeAttendance?.checkIn && currentEmployeeAttendance.checkIn !== '-' ? (
+                    <>
+                      <span className="w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center text-[10px] text-emerald-600 font-bold">✓</span>
+                      Punched in at {currentEmployeeAttendance.checkIn}
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-4 h-4 rounded-full bg-muted-foreground/20 flex items-center justify-center text-[10px] text-muted-foreground">!</span>
+                      Not Checked In Today
+                    </>
+                  )}
                 </div>
-                <div className="grid grid-cols-4 gap-2.5">
-                  <button
-                    onClick={handlePunchIn}
-                    disabled={currentEmployeeAttendance && currentEmployeeAttendance.checkIn && currentEmployeeAttendance.checkIn !== '-'}
-                    className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm ${
-                      !(currentEmployeeAttendance && currentEmployeeAttendance.checkIn && currentEmployeeAttendance.checkIn !== '-')
-                        ? 'bg-green-600 hover:bg-green-700 text-white shadow-green-600/20'
-                        : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500 border border-border/40 cursor-not-allowed'
-                    }`}
-                  >
-                    <LogIn size={14} /> Punch In
-                  </button>
 
-                  <button
-                    onClick={handleBreakIn}
-                    disabled={
-                      !currentEmployeeAttendance || 
-                      !currentEmployeeAttendance.active || 
-                      currentEmployeeAttendance.breaks?.some(b => b.end === null)
-                    }
-                    className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm ${
-                      currentEmployeeAttendance && 
-                      currentEmployeeAttendance.active && 
-                      !currentEmployeeAttendance.breaks?.some(b => b.end === null)
-                        ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/20'
-                        : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500 border border-border/40 cursor-not-allowed'
-                    }`}
-                  >
-                    <Clock size={14} /> Break In
-                  </button>
+                {/* Actions Console */}
+                <div>
+                  {!currentEmployeeAttendance?.checkIn || currentEmployeeAttendance.checkIn === '-' ? (
+                    <button
+                      onClick={handlePunchIn}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-2.5 px-4 rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99] text-xs"
+                    >
+                      <LogIn size={15} /> Punch In & Start Working
+                    </button>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        onClick={currentEmployeeAttendance.breaks?.some(b => b.end === null) ? handleBreakOut : handleBreakIn}
+                        className={`py-2.5 px-3 border border-border hover:bg-muted/50 rounded-xl font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all ${
+                          currentEmployeeAttendance.breaks?.some(b => b.end === null)
+                            ? 'bg-amber-500 text-white hover:bg-amber-600 border-transparent shadow-xs'
+                            : 'text-foreground'
+                        }`}
+                      >
+                        <Coffee size={12} /> 
+                        {currentEmployeeAttendance.breaks?.some(b => b.end === null) ? 'Resume' : 'Break'}
+                      </button>
 
-                  <button
-                    onClick={handleBreakOut}
-                    disabled={
-                      !currentEmployeeAttendance || 
-                      !currentEmployeeAttendance.active || 
-                      !currentEmployeeAttendance.breaks?.some(b => b.end === null)
-                    }
-                    className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm ${
-                      currentEmployeeAttendance && 
-                      currentEmployeeAttendance.active && 
-                      currentEmployeeAttendance.breaks?.some(b => b.end === null)
-                        ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/20'
-                        : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500 border border-border/40 cursor-not-allowed'
-                    }`}
-                  >
-                    <Clock size={14} /> Break Out
-                  </button>
+                      <button
+                        onClick={() => addToast('Meeting status updated.', 'info')}
+                        className="py-2.5 px-3 border border-border hover:bg-muted/50 text-foreground rounded-xl font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all"
+                      >
+                        <Calendar size={12} /> Meeting
+                      </button>
 
-                  <button
-                    onClick={handlePunchOut}
-                    disabled={!currentEmployeeAttendance || !currentEmployeeAttendance.active}
-                    className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm ${
-                      currentEmployeeAttendance && currentEmployeeAttendance.active
-                        ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/20'
-                        : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500 border border-border/40 cursor-not-allowed'
-                    }`}
-                  >
-                    <LogOut size={14} /> Punch Out
-                  </button>
+                      <button
+                        onClick={handlePunchOut}
+                        className="py-2.5 px-3 border border-rose-500/20 hover:bg-rose-500/5 text-rose-600 dark:text-rose-400 rounded-xl font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all"
+                      >
+                        <LogOut size={12} /> Punch Out
+                      </button>
+                    </div>
+                  )}
                 </div>
+              </div>
+
+            </div>
+
+            {/* Bottom Metrics Grid */}
+            <div className="border border-border/60 rounded-2xl overflow-hidden divide-x divide-border/60 grid grid-cols-2 sm:grid-cols-4 bg-muted/20">
+              <div className="p-3 text-center space-y-0.5">
+                <p className="text-[9px] uppercase font-extrabold text-muted-foreground tracking-wider">First In</p>
+                <p className="text-xs font-bold text-slate-800 dark:text-slate-250">{currentEmployeeAttendance?.checkIn || '--'}</p>
+              </div>
+              <div className="p-3 text-center space-y-0.5">
+                <p className="text-[9px] uppercase font-extrabold text-muted-foreground tracking-wider">Last Out</p>
+                <p className="text-xs font-bold text-slate-800 dark:text-slate-250 font-semibold">
+                  {currentEmployeeAttendance?.checkOut || (currentEmployeeAttendance?.checkIn ? 'Active' : '--')}
+                </p>
+              </div>
+              <div className="p-3 text-center space-y-0.5">
+                <p className="text-[9px] uppercase font-extrabold text-muted-foreground tracking-wider">Break In Time</p>
+                <p className="text-xs font-bold text-slate-800 dark:text-slate-250">
+                  {currentEmployeeAttendance?.breakDuration || '0.5 hrs'}
+                </p>
+              </div>
+              <div className="p-3 text-center space-y-0.5">
+                <p className="text-[9px] uppercase font-extrabold text-muted-foreground tracking-wider">Worked Time</p>
+                <p className="text-xs font-bold text-slate-800 dark:text-slate-250 font-mono">
+                  {currentEmployeeAttendance?.checkOut 
+                    ? `${currentEmployeeAttendance.workingHours || 0} hrs` 
+                    : currentEmployeeAttendance?.checkIn ? 'Active' : '--'}
+                </p>
               </div>
             </div>
           </div>
