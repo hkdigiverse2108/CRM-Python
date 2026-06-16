@@ -43,30 +43,57 @@ def start_servers():
         sys.exit(1)
 
     # 2. Start Backend API Server
+    print(f"[*] Launching FastAPI backend at http://{app_host}:{app_port}...")
+    print(f"[*] Swagger UI available at http://localhost:{app_port}/docs")
+    print("-" * 60)
+
+    backend_cmd = [
+        "uvicorn",
+        "backend.app.main:app",
+        "--host", app_host,
+        "--port", str(app_port),
+        "--reload"
+    ]
+
     try:
-        print(f"[*] Launching FastAPI backend at http://{app_host}:{app_port}...")
-        print(f"[*] Swagger UI available at http://localhost:{app_port}/docs")
-        print("-" * 60)
-        
-        # Start uvicorn synchronously (blocks main thread until interrupt)
-        uvicorn.run(
-            "backend.app.main:app",
-            host=app_host,
-            port=app_port,
-            reload=True,
-            log_level="info",
+        backend_process = subprocess.Popen(
+            backend_cmd,
+            shell=is_windows,
+            cwd=os.path.abspath(os.path.dirname(__file__)),
         )
+    except Exception as e:
+        print(f"[!] Failed to initiate backend dev server: {e}")
+        frontend_process.terminate()
+        sys.exit(1)
+
+    # 3. Monitor both servers concurrently
+    try:
+        import time
+        while True:
+            if frontend_process.poll() is not None:
+                print("[!] Frontend process terminated unexpectedly.")
+                break
+            if backend_process.poll() is not None:
+                print("[!] Backend process terminated unexpectedly.")
+                break
+            time.sleep(1)
     except KeyboardInterrupt:
         print("\n[!] Shutdown signal received.")
     finally:
-        # 3. Gracefully clean up subprocesses on exit
-        print("[*] Shutting down frontend development server...")
+        # 4. Gracefully clean up subprocesses on exit
+        print("[*] Shutting down development servers...")
         frontend_process.terminate()
+        backend_process.terminate()
         try:
             frontend_process.wait(timeout=5)
         except subprocess.TimeoutExpired:
             print("[!] Frontend did not shut down in time. Forcing termination...")
             frontend_process.kill()
+        try:
+            backend_process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            print("[!] Backend did not shut down in time. Forcing termination...")
+            backend_process.kill()
         print("[*] All processes terminated. Clean exit.")
 
 
