@@ -115,9 +115,9 @@ export default function Leaves() {
         overall: getDaysForType('Sick Leave')
       },
       casual: {
-        taken: getDaysForType('Casual Leave') + 1.5, // Seeded 1.5 days as shown in screenshot
+        taken: getDaysForType('Casual Leave'),
         pending: getPendingDaysForType('Casual Leave'),
-        overall: getDaysForType('Casual Leave') + 1.5
+        overall: getDaysForType('Casual Leave')
       },
       unpaid: {
         taken: getDaysForType('Unpaid Leave'),
