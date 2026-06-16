@@ -320,23 +320,7 @@ export default function Attendance() {
                 </div>
 
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pt-2">
-                  {todayLog.currentStatus !== 'break-in' ? (
-                    <button
-                      onClick={() => handleAction('break-in')}
-                      className="flex items-center gap-1.5 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-amber-200 dark:shadow-none cursor-pointer"
-                    >
-                      Break In
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handleAction('break-out')}
-                      className="flex items-center gap-1.5 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-200 dark:shadow-none cursor-pointer"
-                    >
-                      Break Out
-                    </button>
-                  )}
-
-                  {todayBreaks.length > 0 && (
+                  {todayBreaks.length > 0 ? (
                     <div className="flex flex-wrap gap-2 items-center">
                       <span className="text-[10px] font-bold text-slate-450 uppercase tracking-wider mr-1">Today's Breaks:</span>
                       {todayBreaks.map((b, idx) => (
@@ -345,6 +329,8 @@ export default function Attendance() {
                         </span>
                       ))}
                     </div>
+                  ) : (
+                    <span className="text-[10px] font-bold text-slate-400">No breaks taken today.</span>
                   )}
                 </div>
               </>
