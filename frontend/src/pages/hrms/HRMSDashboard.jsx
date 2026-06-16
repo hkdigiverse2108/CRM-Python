@@ -1,0 +1,1716 @@
+import { useState, useEffect, useMemo } from 'react';
+import { useApp } from '@/context/AppContext';
+import { formatCurrency } from '@/lib/utils';
+import {
+  Users, UserCheck, UserX, Clock, Calendar, Gift, Briefcase, 
+  CircleDollarSign, AlertCircle, Plus, Search, Building2, 
+  Download, Send, Check, X, Laptop, FileText, Upload, 
+  ShieldAlert, Edit3, User, MapPin, Activity, FileSpreadsheet,
+  TrendingUp, BarChart3, Star, AlertTriangle, ArrowRight, Award, Trash2,
+  LogIn, LogOut
+} from 'lucide-react';
+
+export default function HRMSDashboard() {
+  const {
+    employees,
+    leaves,
+    payroll,
+    attendance,
+    recruitmentJobs,
+    announcements,
+    hrmsRole,
+    setHrmsRole,
+    hrmsEmployeeId,
+    setHrmsEmployeeId,
+    addEmployee,
+    editEmployee,
+    deleteEmployee,
+    updateEmployeeStatus,
+    addLeaveRequest,
+    updateLeaveStatus,
+    processPayrollMonth,
+    clockInOut,
+    addAnnouncement,
+    assignAsset,
+    returnAsset,
+    uploadDocument,
+    addToast
+  } = useApp();
+
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState(hrmsEmployeeId);
+
+  // Sync selected employee ID to app context
+  useEffect(() => {
+    setHrmsEmployeeId(selectedEmployeeId);
+  }, [selectedEmployeeId, setHrmsEmployeeId]);
+
+  // Selected employee context for self-service
+  const currentEmployee = useMemo(() => {
+    return employees.find(e => e.id === hrmsEmployeeId) || employees[0];
+  }, [employees, hrmsEmployeeId]);
+
+  // Digital clock
+  const [currentTime, setCurrentTime] = useState(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Simulator Toggles for clocking
+  const [simGps, setSimGps] = useState(true);
+  const [simGeofencing, setSimGeofencing] = useState(true);
+  const [simSelfie, setSimSelfie] = useState(false);
+  const [simIpCheck, setSimIpCheck] = useState(true);
+  const [simDevice, setSimDevice] = useState(true);
+
+  // UI state variables
+  const [showAddJobModal, setShowAddJobModal] = useState(false);
+  const [showAddEmpModal, setShowAddEmpModal] = useState(false);
+  const [showPublishNoticeModal, setShowPublishNoticeModal] = useState(false);
+  const [showAssignAssetModal, setShowAssignAssetModal] = useState(false);
+  
+  // Dynamic form states
+  const [newJob, setNewJob] = useState({ title: '', department: '', location: '', type: 'Full-Time' });
+  const [newEmp, setNewEmp] = useState({ name: '', role: '', department: '', email: '', phone: '', joinDate: '', workLocation: '', employmentType: 'Full-Time' });
+  const [newNotice, setNewNotice] = useState({ title: '', content: '' });
+  const [newAssetInput, setNewAssetInput] = useState({ empId: '', name: '', type: 'Laptop' });
+
+  // Self-Service Form States
+  const [leaveForm, setLeaveForm] = useState({ type: 'Casual Leave', start: '', end: '', days: 1, reason: '' });
+  const [docFile, setDocFile] = useState({ name: '', type: 'Aadhaar Card' });
+
+  // ATS active job selection
+  const [selectedJobId, setSelectedJobId] = useState(recruitmentJobs[0]?.id || '');
+
+  // Appraisal Rating states
+  const [appraisalId, setAppraisalId] = useState('');
+  const [appraisalRating, setAppraisalRating] = useState(5);
+  const [appraisalComment, setAppraisalComment] = useState('');
+
+  // Date constants & computed metrics
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  
+  const todayAttendance = useMemo(() => {
+    return attendance.filter(a => a.date === todayStr);
+  }, [attendance, todayStr]);
+
+  const stats = useMemo(() => {
+    const total = employees.length;
+    const present = todayAttendance.filter(a => a.status === 'On Time' || a.status === 'Present' || a.status === 'Late' || a.status === 'Half Day').length;
+    const absent = todayAttendance.filter(a => a.status === 'Absent').length;
+    const late = todayAttendance.filter(a => a.status === 'Late').length;
+    const onLeave = leaves.filter(l => l.status === 'Approved' && l.start <= todayStr && l.end >= todayStr).length;
+    const pendingLeaves = leaves.filter(l => l.status === 'Pending').length;
+    
+    // Anniversaries and birthdays count (Current Month = June)
+    const birthdays = employees.filter(e => e.dob?.includes('-06-')).length;
+    const anniversaries = employees.filter(e => e.joinDate?.includes('-06-')).length;
+    
+    return {
+      total,
+      present,
+      absent,
+      late,
+      onLeave,
+      pendingLeaves,
+      birthdays,
+      anniversaries
+    };
+  }, [employees, todayAttendance, leaves, todayStr]);
+
+  const currentEmployeeAttendance = useMemo(() => {
+    return attendance.find(a => a.employeeId === hrmsEmployeeId && a.date === todayStr);
+  }, [attendance, hrmsEmployeeId, todayStr]);
+
+  const elapsedWorkingTime = useMemo(() => {
+    if (!currentEmployeeAttendance || !currentEmployeeAttendance.checkIn || currentEmployeeAttendance.checkIn === '-') {
+      return '00:00:00';
+    }
+    
+    if (currentEmployeeAttendance.checkOut && currentEmployeeAttendance.checkOut !== '-') {
+      const hours = currentEmployeeAttendance.workingHours || 0;
+      const h = Math.floor(hours);
+      const m = Math.round((hours - h) * 60);
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
+    }
+    
+    try {
+      const checkInStr = currentEmployeeAttendance.checkIn;
+      const today = new Date();
+      
+      const timeParts = checkInStr.split(' ');
+      const [hPart, mPart] = timeParts[0].split(':');
+      let hr = parseInt(hPart, 10);
+      const min = parseInt(mPart, 10);
+      const modifier = timeParts[1];
+      
+      if (modifier === 'PM' && hr < 12) hr += 12;
+      if (modifier === 'AM' && hr === 12) hr = 0;
+      
+      const checkInDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hr, min, 0);
+      
+      const breakMs = (currentEmployeeAttendance.breaks || []).reduce((sum, b) => {
+        if (b.start) {
+          const parseTime = (tStr) => {
+            const parts = tStr.split(' ');
+            const [hp, mp] = parts[0].split(':');
+            let h = parseInt(hp, 10);
+            let m = parseInt(mp, 10);
+            const mod = parts[1];
+            if (mod === 'PM' && h < 12) h += 12;
+            if (mod === 'AM' && h === 12) h = 0;
+            return new Date(today.getFullYear(), today.getMonth(), today.getDate(), h, m, 0).getTime();
+          };
+          const startMs = parseTime(b.start);
+          const endMs = b.end ? parseTime(b.end) : currentTime.getTime();
+          return sum + (endMs - startMs);
+        }
+        return sum;
+      }, 0);
+      
+      const elapsedMs = Math.max(0, currentTime.getTime() - checkInDate.getTime() - breakMs);
+      const diffHrs = Math.floor(elapsedMs / (1000 * 60 * 60));
+      const diffMins = Math.floor((elapsedMs % (1000 * 60 * 60)) / (1000 * 60));
+      const diffSecs = Math.floor((elapsedMs % (1000 * 60)) / 1000);
+      
+      return `${String(diffHrs).padStart(2, '0')}:${String(diffMins).padStart(2, '0')}:${String(diffSecs).padStart(2, '0')}`;
+    } catch (err) {
+      console.log("Error calculating elapsed time", err);
+      return `${String(currentEmployeeAttendance.workingHours || 0).padStart(2, '0')}:00:00`;
+    }
+  }, [currentEmployeeAttendance, currentTime]);
+
+  const handlePunchIn = () => {
+    if (simSelfie && !docFile.name) {
+      addToast('Selfie verification required! Please capture/upload photo.', 'error');
+      return;
+    }
+    const details = {
+      method: simIpCheck ? 'Authorized IP (192.168.1.100)' : 'Web Client',
+      lat: simGeofencing ? '12.9716' : '0.0000',
+      lng: simGeofencing ? '77.5946' : '0.0000',
+      ip: '192.168.1.100',
+      selfie: simSelfie ? 'Captured_Selfie.jpg' : null
+    };
+    clockInOut(hrmsEmployeeId, 'in', details);
+  };
+
+  const handlePunchOut = () => {
+    clockInOut(hrmsEmployeeId, 'out');
+  };
+
+  const handleBreakIn = () => {
+    clockInOut(hrmsEmployeeId, 'break_in');
+  };
+
+  const handleBreakOut = () => {
+    clockInOut(hrmsEmployeeId, 'break_out');
+  };
+
+  const handleAddJob = (e) => {
+    e.preventDefault();
+    if (!newJob.title || !newJob.department) return;
+    const id = `JOB-${String(recruitmentJobs.length + 1).padStart(3, '0')}`;
+    const newJobObj = {
+      ...newJob,
+      id,
+      status: 'Active',
+      applicants: []
+    };
+    recruitmentJobs.push(newJobObj); // Directly push into reactive state ref
+    setShowAddJobModal(false);
+    setNewJob({ title: '', department: '', location: '', type: 'Full-Time' });
+    setSelectedJobId(id);
+    addToast('Job opening listed successfully.', 'success');
+  };
+
+  const handleCreateEmployee = (e) => {
+    e.preventDefault();
+    if (!newEmp.name || !newEmp.role || !newEmp.department) return;
+    addEmployee(newEmp);
+    setShowAddEmpModal(false);
+    setNewEmp({ name: '', role: '', department: '', email: '', phone: '', joinDate: '', workLocation: '', employmentType: 'Full-Time' });
+  };
+
+  const handlePublishNotice = (e) => {
+    e.preventDefault();
+    if (!newNotice.title || !newNotice.content) return;
+    addAnnouncement(newNotice);
+    setShowPublishNoticeModal(false);
+    setNewNotice({ title: '', content: '' });
+  };
+
+  const handleAssignAsset = (e) => {
+    e.preventDefault();
+    if (!newAssetInput.empId || !newAssetInput.name) return;
+    assignAsset(newAssetInput.empId, { name: newAssetInput.name, type: newAssetInput.type });
+    setShowAssignAssetModal(false);
+    setNewAssetInput({ empId: '', name: '', type: 'Laptop' });
+  };
+
+  const handleApplyLeave = (e) => {
+    e.preventDefault();
+    if (!leaveForm.start || !leaveForm.end) return;
+    addLeaveRequest({
+      employeeId: currentEmployee.id,
+      employeeName: currentEmployee.name,
+      department: currentEmployee.department,
+      type: leaveForm.type,
+      start: leaveForm.start,
+      end: leaveForm.end,
+      days: Number(leaveForm.days),
+      reason: leaveForm.reason
+    });
+    setLeaveForm({ type: 'Casual Leave', start: '', end: '', days: 1, reason: '' });
+  };
+
+  const handleUploadDoc = (e) => {
+    e.preventDefault();
+    if (!docFile.name) return;
+    uploadDocument(currentEmployee.id, { name: docFile.name, type: docFile.type });
+    setDocFile({ name: '', type: 'Aadhaar Card' });
+  };
+
+  const updateCandidateStage = (applicantId, targetStage) => {
+    const updated = recruitmentJobs.map(job => {
+      const applicants = job.applicants.map(app => {
+        if (app.id === applicantId) {
+          // If moving to Joined, offer profile conversion
+          if (targetStage === 'Joined') {
+            addToast(`Candidate joined! Enrolling into employee database.`, 'success');
+            // Auto add to employee database
+            addEmployee({
+              name: app.name,
+              role: job.title,
+              department: job.department,
+              email: app.email,
+              phone: app.phone,
+              joinDate: new Date().toISOString().split('T')[0],
+              workLocation: 'HQ Office',
+              employmentType: 'Full-Time'
+            });
+          }
+          return { ...app, stage: targetStage };
+        }
+        return app;
+      });
+      return { ...job, applicants };
+    });
+    // Mutate state directly
+    recruitmentJobs.splice(0, recruitmentJobs.length, ...updated);
+    addToast(`Candidate status updated to: ${targetStage}`, 'success');
+  };
+
+  const scheduleInterview = (applicantId, dateTime) => {
+    const updated = recruitmentJobs.map(job => {
+      const applicants = job.applicants.map(app => {
+        if (app.id === applicantId) {
+          return { ...app, stage: 'Interview Scheduled', interviewDate: dateTime };
+        }
+        return app;
+      });
+      return { ...job, applicants };
+    });
+    recruitmentJobs.splice(0, recruitmentJobs.length, ...updated);
+    addToast(`Interview scheduled at ${dateTime}`, 'success');
+  };
+
+  const submitAppraisalReview = (e) => {
+    e.preventDefault();
+    if (!appraisalId) return;
+    editEmployee(appraisalId, {
+      performanceReview: {
+        rating: appraisalRating,
+        comment: appraisalComment,
+        reviewedBy: 'HR Admin',
+        reviewDate: new Date().toISOString().split('T')[0]
+      }
+    });
+    addToast(`KPI Appraisal score of ${appraisalRating} submitted.`, 'success');
+    setAppraisalId('');
+    setAppraisalComment('');
+  };
+
+  const selectedJob = recruitmentJobs.find(j => j.id === selectedJobId) || recruitmentJobs[0];
+
+  // CSV Exporter
+  const exportCSV = (data, filename) => {
+    const csvRows = [];
+    const headers = Object.keys(data[0] || {});
+    csvRows.push(headers.join(','));
+    for (const row of data) {
+      const values = headers.map(header => {
+        const escaped = ('' + (row[header] || '')).replace(/"/g, '\\"');
+        return `"${escaped}"`;
+      });
+      csvRows.push(values.join(','));
+    }
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.setAttribute('href', url);
+    a.setAttribute('download', filename);
+    a.click();
+    addToast('CSV Report downloaded.', 'success');
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header controls & Switcher */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-950 p-6 rounded-2xl border border-border/20 shadow-xl text-white">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-indigo-200 to-indigo-100">
+            {hrmsRole === 'Employee' ? 'HRMS Self-Service Terminal' : 'HRMS Enterprise Command Center'}
+          </h1>
+          <p className="text-xs text-indigo-300 mt-1">
+            {hrmsRole === 'Employee' 
+              ? `Logged in as: ${currentEmployee?.name} (${currentEmployee?.id})` 
+              : 'Standalone Department & Resource Administration Panel'}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Active Sim Role Switcher */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-indigo-300 font-semibold uppercase tracking-wider">Simulate Role:</span>
+            <select
+              value={hrmsRole}
+              onChange={e => {
+                setHrmsRole(e.target.value);
+                setActiveTab(e.target.value === 'Employee' ? 'ess-punch' : 'dashboard');
+              }}
+              className="bg-indigo-900/40 border border-indigo-500/30 text-white text-xs font-semibold rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="Super Admin" className="text-slate-950">Super Admin</option>
+              <option value="HR Manager" className="text-slate-950">HR Manager</option>
+              <option value="Employee" className="text-slate-950">Employee Self-Service</option>
+            </select>
+          </div>
+
+          {/* Employee context selector for all roles */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-indigo-300 font-semibold uppercase tracking-wider">{hrmsRole === 'Employee' ? 'Select Person:' : 'Punch As:'}</span>
+            <select
+              value={selectedEmployeeId}
+              onChange={e => setSelectedEmployeeId(e.target.value)}
+              className="bg-indigo-900/40 border border-indigo-500/30 text-white text-xs font-semibold rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              {employees.map(emp => (
+                <option key={emp.id} value={emp.id} className="text-slate-950">
+                  {emp.name} ({emp.id})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* ADMIN & MANAGER WORKSPACE */}
+      {hrmsRole !== 'Employee' && (
+        <div className="space-y-6">
+          {/* Quick Metrics */}
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="kpi-card bg-card border border-border p-4 rounded-xl flex items-center justify-between shadow-sm">
+              <div>
+                <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Total Staff</p>
+                <p className="text-2xl font-bold text-primary mt-1">{stats.total}</p>
+              </div>
+              <Users size={24} className="text-primary/60" />
+            </div>
+
+            <div className="kpi-card bg-card border border-border p-4 rounded-xl flex items-center justify-between shadow-sm">
+              <div>
+                <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Present Today</p>
+                <p className="text-2xl font-bold text-success mt-1">
+                  {stats.present} <span className="text-xs font-medium text-muted-foreground">({Math.round((stats.present / (stats.total || 1)) * 100)}%)</span>
+                </p>
+              </div>
+              <UserCheck size={24} className="text-success/60" />
+            </div>
+
+            <div className="kpi-card bg-card border border-border p-4 rounded-xl flex items-center justify-between shadow-sm">
+              <div>
+                <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Absent / Late</p>
+                <p className="text-2xl font-bold text-danger mt-1">
+                  {stats.absent} <span className="text-xs text-amber-500 font-semibold">/ {stats.late} L</span>
+                </p>
+              </div>
+              <UserX size={24} className="text-danger/60" />
+            </div>
+
+            <div className="kpi-card bg-card border border-border p-4 rounded-xl flex items-center justify-between shadow-sm">
+              <div>
+                <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Leave Active</p>
+                <p className="text-2xl font-bold text-indigo-500 mt-1">{stats.onLeave}</p>
+              </div>
+              <Calendar size={24} className="text-indigo-500/60" />
+            </div>
+
+            <div className="kpi-card bg-card border border-border p-4 rounded-xl flex items-center justify-between shadow-sm col-span-2 lg:col-span-1">
+              <div>
+                <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Pending Leaves</p>
+                <p className="text-2xl font-bold text-amber-500 mt-1">{stats.pendingLeaves}</p>
+              </div>
+              <AlertCircle size={24} className="text-amber-500/60" />
+            </div>
+          </div>
+
+          {/* Punch In / Out Console for Admin & Manager */}
+          <div className="bg-gradient-to-br from-card via-card to-indigo-500/5 border border-border rounded-2xl shadow-sm p-5">
+            <div className="flex flex-col lg:flex-row items-center gap-6">
+              {/* Clock & Status */}
+              <div className="flex items-center gap-4 flex-shrink-0">
+                <div className="w-20 h-20 rounded-full border-[3px] border-indigo-500/25 flex flex-col items-center justify-center bg-muted/40 shadow-inner">
+                  <p className="text-base font-extrabold tracking-wider font-mono text-indigo-600 dark:text-indigo-400">
+                    {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </p>
+                  <p className="text-[7px] text-muted-foreground uppercase font-bold tracking-wider mt-0.5">Live Clock</p>
+                </div>
+
+                <div className="space-y-1 text-center">
+                  <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-widest">Worked Duration</p>
+                  <p className="text-xl font-mono font-extrabold text-foreground">{elapsedWorkingTime}</p>
+                  <div>
+                    {!currentEmployeeAttendance?.checkIn || currentEmployeeAttendance.checkIn === '-' ? (
+                      <span className="text-[9px] text-slate-500 font-extrabold uppercase px-2 py-0.5 rounded-full bg-slate-500/10">Not Checked-In</span>
+                    ) : currentEmployeeAttendance.checkOut && currentEmployeeAttendance.checkOut !== '-' ? (
+                      <span className="text-[9px] text-slate-400 font-extrabold uppercase px-2 py-0.5 rounded-full bg-slate-400/10">Clocked Out</span>
+                    ) : currentEmployeeAttendance.breaks?.some(b => b.end === null) ? (
+                      <span className="text-[9px] text-amber-500 font-extrabold uppercase animate-pulse px-2 py-0.5 rounded-full bg-amber-500/10">On Break</span>
+                    ) : (
+                      <span className="text-[9px] text-success font-extrabold uppercase animate-pulse px-2 py-0.5 rounded-full bg-success/10">Active Working</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* 4-Button Punch Console */}
+              <div className="flex-1 w-full">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest flex items-center gap-1.5">
+                    <Clock size={12} className="text-primary" /> Attendance Console — {currentEmployee?.name}
+                  </p>
+                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                    <span>In: <strong className="text-foreground">{currentEmployeeAttendance?.checkIn || '-'}</strong></span>
+                    <span>Out: <strong className="text-foreground">{currentEmployeeAttendance?.checkOut || '-'}</strong></span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-4 gap-2.5">
+                  <button
+                    onClick={handlePunchIn}
+                    disabled={currentEmployeeAttendance && currentEmployeeAttendance.checkIn && currentEmployeeAttendance.checkIn !== '-'}
+                    className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm ${
+                      !(currentEmployeeAttendance && currentEmployeeAttendance.checkIn && currentEmployeeAttendance.checkIn !== '-')
+                        ? 'bg-green-600 hover:bg-green-700 text-white shadow-green-600/20'
+                        : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500 border border-border/40 cursor-not-allowed'
+                    }`}
+                  >
+                    <LogIn size={14} /> Punch In
+                  </button>
+
+                  <button
+                    onClick={handleBreakIn}
+                    disabled={
+                      !currentEmployeeAttendance || 
+                      !currentEmployeeAttendance.active || 
+                      currentEmployeeAttendance.breaks?.some(b => b.end === null)
+                    }
+                    className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm ${
+                      currentEmployeeAttendance && 
+                      currentEmployeeAttendance.active && 
+                      !currentEmployeeAttendance.breaks?.some(b => b.end === null)
+                        ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/20'
+                        : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500 border border-border/40 cursor-not-allowed'
+                    }`}
+                  >
+                    <Clock size={14} /> Break In
+                  </button>
+
+                  <button
+                    onClick={handleBreakOut}
+                    disabled={
+                      !currentEmployeeAttendance || 
+                      !currentEmployeeAttendance.active || 
+                      !currentEmployeeAttendance.breaks?.some(b => b.end === null)
+                    }
+                    className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm ${
+                      currentEmployeeAttendance && 
+                      currentEmployeeAttendance.active && 
+                      currentEmployeeAttendance.breaks?.some(b => b.end === null)
+                        ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/20'
+                        : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500 border border-border/40 cursor-not-allowed'
+                    }`}
+                  >
+                    <Clock size={14} /> Break Out
+                  </button>
+
+                  <button
+                    onClick={handlePunchOut}
+                    disabled={!currentEmployeeAttendance || !currentEmployeeAttendance.active}
+                    className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm ${
+                      currentEmployeeAttendance && currentEmployeeAttendance.active
+                        ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/20'
+                        : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500 border border-border/40 cursor-not-allowed'
+                    }`}
+                  >
+                    <LogOut size={14} /> Punch Out
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Admin Tabs */}
+          <div className="flex border-b border-border/80 overflow-x-auto gap-2">
+            {[
+              { id: 'dashboard', label: 'Stats & Feed', icon: Activity },
+              { id: 'recruitment', label: 'ATS Recruitment Pipeline', icon: Briefcase },
+              { id: 'assets', label: 'Company Assets Cabinet', icon: Laptop },
+              { id: 'appraisals', label: 'Performance Appraisals', icon: Award },
+            ].map(tab => {
+              const TabIcon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-2 py-3 px-5 text-sm font-semibold border-b-2 whitespace-nowrap transition-all ${
+                    activeTab === tab.id 
+                      ? 'border-primary text-primary font-bold' 
+                      : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <TabIcon size={16} />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Admin Tab Contents */}
+          {activeTab === 'dashboard' && (
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+              {/* Department Statistics Chart & Birthday alerts */}
+              <div className="xl:col-span-2 space-y-6">
+                <div className="bg-card border border-border p-5 rounded-2xl shadow-sm space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-base font-bold">Department Allocations & Distribution</h2>
+                      <p className="text-xs text-muted-foreground">Ratio analysis of staff counts across divisions.</p>
+                    </div>
+                    <button
+                      onClick={() => exportCSV(employees, 'HRMS_Employee_Roster.csv')}
+                      className="flex items-center gap-1.5 btn-outline text-xs px-2.5 py-1.5"
+                    >
+                      <Download size={13} /> Export CSV
+                    </button>
+                  </div>
+
+                  <div className="space-y-3.5 pt-2">
+                    {['Engineering', 'Sales', 'HR', 'Marketing', 'Customer Support'].map(dept => {
+                      const deptCount = employees.filter(e => e.department === dept).length;
+                      const pct = Math.round((deptCount / (employees.length || 1)) * 100);
+                      return (
+                        <div key={dept} className="space-y-1">
+                          <div className="flex items-center justify-between text-xs font-semibold">
+                            <span className="text-foreground">{dept}</span>
+                            <span className="text-muted-foreground">{deptCount} Employees ({pct}%)</span>
+                          </div>
+                          <div className="w-full bg-muted rounded-full h-2">
+                            <div
+                              className="h-2 rounded-full bg-gradient-to-r from-primary to-indigo-500 transition-all duration-500"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Live Attendance Analytics SVG Chart */}
+                <div className="bg-card border border-border p-5 rounded-2xl shadow-sm space-y-4">
+                  <div>
+                    <h2 className="text-base font-bold">Weekly Attendance Analytics</h2>
+                    <p className="text-xs text-muted-foreground">Present ratio percentages for the past 5 operational days.</p>
+                  </div>
+                  
+                  <div className="h-48 pt-4 flex items-end">
+                    <svg className="w-full h-full" viewBox="0 0 500 150">
+                      {/* Grid lines */}
+                      <line x1="0" y1="20" x2="500" y2="20" stroke="rgba(0,0,0,0.05)" strokeWidth="1" />
+                      <line x1="0" y1="70" x2="500" y2="70" stroke="rgba(0,0,0,0.05)" strokeWidth="1" />
+                      <line x1="0" y1="120" x2="500" y2="120" stroke="rgba(0,0,0,0.05)" strokeWidth="1" />
+                      
+                      {/* Trend path */}
+                      <path
+                        d="M 50 110 L 150 40 L 250 50 L 350 30 L 450 45"
+                        fill="none"
+                        stroke="var(--primary)"
+                        strokeWidth="3.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      {/* Points */}
+                      <circle cx="50" cy="110" r="5" fill="var(--primary)" />
+                      <circle cx="150" cy="40" r="5" fill="var(--primary)" />
+                      <circle cx="250" cy="50" r="5" fill="var(--primary)" />
+                      <circle cx="350" cy="30" r="5" fill="var(--primary)" />
+                      <circle cx="450" cy="45" r="5" fill="var(--primary)" />
+                      
+                      {/* Labels */}
+                      <text x="50" y="140" textAnchor="middle" fontSize="10" fill="var(--muted-foreground)">Mon (88%)</text>
+                      <text x="150" y="140" textAnchor="middle" fontSize="10" fill="var(--muted-foreground)">Tue (96%)</text>
+                      <text x="250" y="140" textAnchor="middle" fontSize="10" fill="var(--muted-foreground)">Wed (94%)</text>
+                      <text x="350" y="140" textAnchor="middle" fontSize="10" fill="var(--muted-foreground)">Thu (98%)</text>
+                      <text x="450" y="140" textAnchor="middle" fontSize="10" fill="var(--muted-foreground)">Fri (95%)</text>
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sidebar items: birth/anniversaries alerts & notices */}
+              <div className="space-y-6">
+                {/* Celebrations alerts */}
+                <div className="bg-card border border-border p-5 rounded-2xl shadow-sm space-y-4">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <Gift size={14} className="text-amber-500" /> Celebrations Alert (June)
+                  </h3>
+                  
+                  <div className="space-y-3">
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center text-white text-xs font-bold">🎂</div>
+                      <div className="text-xs">
+                        <p className="font-semibold text-slate-900 dark:text-white">Upcoming Birthdays</p>
+                        <p className="text-muted-foreground mt-0.5">{stats.birthdays} employee birthdays this month.</p>
+                      </div>
+                    </div>
+                    
+                    <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold">🏆</div>
+                      <div className="text-xs">
+                        <p className="font-semibold text-slate-900 dark:text-white">Work Anniversaries</p>
+                        <p className="text-muted-foreground mt-0.5">{stats.anniversaries} personnel reach career milestones.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Publish Announcements bulletin */}
+                <div className="bg-card border border-border p-5 rounded-2xl shadow-sm space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold flex items-center gap-1.5">📢 HR Updates Bulletin</h3>
+                    <button
+                      onClick={() => setShowPublishNoticeModal(true)}
+                      className="text-xs font-semibold text-primary hover:underline flex items-center gap-0.5"
+                    >
+                      <Plus size={12} /> Post New
+                    </button>
+                  </div>
+
+                  <div className="space-y-3.5 max-h-72 overflow-y-auto">
+                    {announcements.map(ann => (
+                      <div key={ann.id} className="p-3 bg-muted border border-border/40 rounded-xl space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{ann.title}</span>
+                          <span className="text-[10px] text-muted-foreground">{ann.date}</span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground leading-relaxed">{ann.content}</p>
+                        <p className="text-[9px] text-primary/70 font-semibold text-right">- {ann.author}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ATS RECRUITMENT PIPELINE */}
+          {activeTab === 'recruitment' && (
+            <div className="space-y-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold">Active Job Posting:</span>
+                  <select
+                    value={selectedJobId}
+                    onChange={e => setSelectedJobId(e.target.value)}
+                    className="bg-card border border-border text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary"
+                  >
+                    {recruitmentJobs.map(job => (
+                      <option key={job.id} value={job.id}>{job.title} ({job.department})</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => setShowAddJobModal(true)}
+                    className="flex items-center gap-1 btn-primary text-xs px-2.5 py-1.5 ml-2"
+                  >
+                    <Plus size={13} /> List Job
+                  </button>
+                </div>
+              </div>
+
+              {selectedJob ? (
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                  {['Applied', 'Screening', 'Interview Scheduled', 'Selected', 'Rejected', 'Joined'].map(stage => {
+                    const candidates = selectedJob.applicants.filter(app => app.stage === stage);
+                    return (
+                      <div key={stage} className="bg-muted/50 border border-border/40 rounded-xl p-3 flex flex-col min-h-96">
+                        <div className="flex items-center justify-between mb-3.5">
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 truncate">{stage}</h4>
+                          <span className="text-[10px] px-1.5 py-0.5 bg-card border border-border/40 rounded-md font-semibold text-muted-foreground">{candidates.length}</span>
+                        </div>
+
+                        <div className="flex-1 space-y-2.5 overflow-y-auto">
+                          {candidates.map(candidate => (
+                            <div key={candidate.id} className="bg-card border border-border p-3 rounded-lg shadow-xs space-y-2 flex flex-col">
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold truncate">{candidate.name}</p>
+                                <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{candidate.email}</p>
+                              </div>
+
+                              {candidate.interviewDate && (
+                                <p className="text-[9px] bg-indigo-500/10 text-indigo-600 font-semibold px-1.5 py-1 rounded">
+                                  📅 {candidate.interviewDate}
+                                </p>
+                              )}
+
+                              {candidate.rating && (
+                                <div className="flex items-center gap-0.5">
+                                  {Array.from({ length: 5 }).map((_, i) => (
+                                    <Star
+                                      key={i}
+                                      size={9}
+                                      className={i < Math.floor(candidate.rating) ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}
+                                    />
+                                  ))}
+                                  <span className="text-[9px] font-semibold text-muted-foreground ml-1">({candidate.rating})</span>
+                                </div>
+                              )}
+
+                              <div className="flex items-center gap-1.5 pt-1 mt-auto">
+                                <select
+                                  onChange={e => updateCandidateStage(candidate.id, e.target.value)}
+                                  value={stage}
+                                  className="text-[10px] bg-muted border border-border/40 rounded px-1.5 py-1 font-semibold focus:outline-none flex-1"
+                                >
+                                  <option value="Applied">Applied</option>
+                                  <option value="Screening">Screening</option>
+                                  <option value="Interview Scheduled">Interview</option>
+                                  <option value="Selected">Select</option>
+                                  <option value="Rejected">Reject</option>
+                                  <option value="Joined">Enrolled</option>
+                                </select>
+                                
+                                {stage === 'Screening' && (
+                                  <button
+                                    onClick={() => {
+                                      const d = prompt("Enter interview date/time (e.g. June 15, 11:00 AM):");
+                                      if (d) scheduleInterview(candidate.id, d);
+                                    }}
+                                    title="Schedule Interview"
+                                    className="p-1 rounded hover:bg-muted text-primary"
+                                  >
+                                    <Clock size={12} />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-10 bg-card border border-border rounded-xl">
+                  <p className="text-sm text-muted-foreground">No jobs currently listed. Create one to begin tracking.</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ASSET TRACKER */}
+          {activeTab === 'assets' && (
+            <div className="bg-card border border-border rounded-2xl shadow-sm p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-bold">Enterprise Assets & Inventory</h2>
+                  <p className="text-xs text-muted-foreground">Inventory ledger tracking assignments of company devices.</p>
+                </div>
+                <button
+                  onClick={() => setShowAssignAssetModal(true)}
+                  className="flex items-center gap-1 btn-primary text-xs px-2.5 py-1.5"
+                >
+                  <Plus size={13} /> Assign Asset
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-muted text-muted-foreground font-bold">
+                      <th className="p-3 rounded-l-lg">Employee</th>
+                      <th className="p-3">Asset Name</th>
+                      <th className="p-3">Asset Type</th>
+                      <th className="p-3">Assigned Date</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3 rounded-r-lg text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {employees.flatMap(emp => 
+                      (emp.assets || []).map(asset => ({ empName: emp.name, empId: emp.id, ...asset }))
+                    ).map(item => (
+                      <tr key={item.id} className="border-b border-border/40 hover:bg-muted/40 transition-colors">
+                        <td className="p-3 font-semibold">{item.empName} ({item.empId})</td>
+                        <td className="p-3">{item.name}</td>
+                        <td className="p-3 font-mono">{item.type}</td>
+                        <td className="p-3">{item.assignedDate}</td>
+                        <td className="p-3">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            item.status === 'Assigned' ? 'bg-success/15 text-success' : 'bg-slate-350/20 text-muted-foreground'
+                          }`}>
+                            {item.status}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right">
+                          {item.status === 'Assigned' && (
+                            <button
+                              onClick={() => returnAsset(item.empId, item.id)}
+                              className="text-xs font-bold text-danger hover:underline"
+                            >
+                              Return Asset
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* APPRAISALS WORKSPACE */}
+          {activeTab === 'appraisals' && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Form to submit review */}
+              <div className="bg-card border border-border p-5 rounded-2xl shadow-sm space-y-4">
+                <h3 className="text-sm font-bold flex items-center gap-1.5"><Award size={16} className="text-primary" /> Review Performance KPI</h3>
+                <form onSubmit={submitAppraisalReview} className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold">Employee Selection</label>
+                    <select
+                      value={appraisalId}
+                      onChange={e => setAppraisalId(e.target.value)}
+                      className="bg-card border border-border text-xs rounded-lg px-2.5 py-2 w-full focus:outline-none focus:ring-1 focus:ring-primary"
+                      required
+                    >
+                      <option value="">Choose Employee...</option>
+                      {employees.map(emp => (
+                        <option key={emp.id} value={emp.id}>{emp.name} ({emp.role})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold">KPI Score Rating (1 to 5 Stars)</label>
+                    <div className="flex items-center gap-1 pt-1">
+                      {[1, 2, 3, 4, 5].map(star => (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => setAppraisalRating(star)}
+                          className="p-1 focus:outline-none"
+                        >
+                          <Star
+                            size={18}
+                            className={star <= appraisalRating ? 'fill-amber-400 text-amber-400' : 'text-slate-350'}
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold">Appraisal Commentary Feedback</label>
+                    <textarea
+                      placeholder="Comment on deliverables, targets achieved, etc."
+                      value={appraisalComment}
+                      onChange={e => setAppraisalComment(e.target.value)}
+                      className="input-field min-h-20"
+                      required
+                    />
+                  </div>
+
+                  <button type="submit" className="btn-primary w-full text-xs py-2 font-bold flex items-center justify-center gap-1.5">
+                    Submit Score & Appraisal
+                  </button>
+                </form>
+              </div>
+
+              {/* List of active appraisals */}
+              <div className="lg:col-span-2 bg-card border border-border p-5 rounded-2xl shadow-sm space-y-4">
+                <h3 className="text-sm font-bold">Appraisals Logs & Recommendations</h3>
+                
+                <div className="space-y-3">
+                  {employees.map(emp => {
+                    const review = emp.performanceReview;
+                    return (
+                      <div key={emp.id} className="p-4 border border-border/50 rounded-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                        <div className="space-y-1">
+                          <p className="text-xs font-bold text-foreground">{emp.name}</p>
+                          <p className="text-[10px] text-muted-foreground">{emp.role} • {emp.department}</p>
+                          {review ? (
+                            <div className="flex items-center gap-1 mt-1">
+                              {Array.from({ length: 5 }).map((_, i) => (
+                                <Star
+                                  key={i}
+                                  size={11}
+                                  className={i < review.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}
+                                />
+                              ))}
+                              <p className="text-[10px] font-semibold text-slate-700 dark:text-slate-300 ml-1.5">"{review.comment}"</p>
+                            </div>
+                          ) : (
+                            <p className="text-[10px] italic text-muted-foreground mt-1">No appraisals recorded for this cycle.</p>
+                          )}
+                        </div>
+
+                        {review && (
+                          <div className="text-right">
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold ${
+                              review.rating >= 4.5 ? 'bg-success/15 text-success' : review.rating >= 3.5 ? 'bg-indigo-500/10 text-indigo-500' : 'bg-amber-400/10 text-amber-500'
+                            }`}>
+                              {review.rating >= 4.5 ? 'Recommend Promotion' : review.rating >= 3.5 ? 'Recommend Increment' : 'Development Training'}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* EMPLOYEE SELF-SERVICE WORKSPACE */}
+      {hrmsRole === 'Employee' && (
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+          {/* Navigation & profile summary */}
+          <div className="xl:col-span-1 space-y-6">
+            <div className="bg-card border border-border p-5 rounded-2xl shadow-sm text-center space-y-4">
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary to-indigo-600 flex items-center justify-center text-white text-3xl font-extrabold mx-auto shadow-md">
+                {currentEmployee?.avatar || currentEmployee?.name?.[0]}
+              </div>
+
+              <div>
+                <h3 className="text-sm font-bold text-foreground">{currentEmployee?.name}</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">{currentEmployee?.role} • {currentEmployee?.department}</p>
+                <span className="badge badge-success text-[10px] mt-2 inline-block">Active Employee</span>
+              </div>
+
+              {/* ESS Tab selections */}
+              <div className="space-y-1 text-left pt-3 border-t border-border/60">
+                {[
+                  { id: 'ess-punch', label: 'Punch In / Out Clock', icon: Clock },
+                  { id: 'ess-leaves', label: 'My Leaves Balances', icon: Calendar },
+                  { id: 'ess-tasks', label: 'My Allocated Tasks', icon: FileText },
+                  { id: 'ess-docs', label: 'My Document Cabinet', icon: Upload },
+                  { id: 'ess-profile', label: 'My Profile & Details', icon: User },
+                ].map(tab => {
+                  const TabIcon = tab.icon;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${
+                        activeTab === tab.id 
+                          ? 'bg-primary text-primary-foreground font-bold shadow-sm' 
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                      }`}
+                    >
+                      <TabIcon size={14} />
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Current day live status */}
+            <div className="bg-card border border-border p-5 rounded-2xl shadow-sm space-y-3 text-xs">
+              <h4 className="font-bold flex items-center gap-1.5"><Activity size={14} className="text-success" /> Live Status Updates</h4>
+              <div className="space-y-2 font-medium">
+                <div className="flex justify-between border-b border-border/40 pb-1.5">
+                  <span className="text-muted-foreground">Clock In:</span>
+                  <span className="text-foreground font-semibold">{currentEmployeeAttendance?.checkIn || '-'}</span>
+                </div>
+                <div className="flex justify-between border-b border-border/40 pb-1.5">
+                  <span className="text-muted-foreground">Clock Out:</span>
+                  <span className="text-foreground font-semibold">{currentEmployeeAttendance?.checkOut || '-'}</span>
+                </div>
+                <div className="flex justify-between border-b border-border/40 pb-1.5">
+                  <span className="text-muted-foreground">Hours Worked:</span>
+                  <span className="text-foreground font-semibold font-mono">{currentEmployeeAttendance?.workingHours || 0} hrs</span>
+                </div>
+                <div className="flex justify-between border-b border-border/40 pb-1.5">
+                  <span className="text-muted-foreground">Status Today:</span>
+                  <span className={`font-semibold px-2 py-0.5 rounded-full text-[9px] ${
+                    currentEmployeeAttendance?.status === 'Absent' ? 'bg-danger/10 text-danger' : 'bg-success/15 text-success'
+                  }`}>{currentEmployeeAttendance?.status || 'Not Checked-In'}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ESS Tab panels */}
+          <div className="xl:col-span-3 space-y-6">
+            {/* PUNCH IN / OUT SYSTEM */}
+            {activeTab === 'ess-punch' && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Visual Live Clock Panel */}
+                <div className="lg:col-span-2 bg-card border border-border p-6 rounded-2xl shadow-sm flex flex-col items-center justify-center text-center space-y-5">
+                  <p className="text-xs uppercase font-bold text-muted-foreground tracking-widest">
+                    📅 {currentTime.toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                  </p>
+
+                  <div className="w-40 h-40 rounded-full border-4 border-indigo-500/20 flex flex-col items-center justify-center bg-muted/40 shadow-inner">
+                    <p className="text-2xl font-extrabold tracking-wider font-mono text-indigo-600 dark:text-indigo-400">
+                      {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </p>
+                    <p className="text-[9px] text-muted-foreground mt-1 uppercase font-semibold tracking-wider">Live Time Clock</p>
+                  </div>
+
+                  {/* Worked duration display */}
+                  <div className="bg-muted/65 border border-border/40 p-3.5 rounded-xl w-full max-w-sm flex items-center justify-between text-xs font-semibold">
+                    <div className="text-left">
+                      <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-widest">Worked Duration</p>
+                      <p className="text-xl font-mono font-extrabold text-foreground mt-0.5">{elapsedWorkingTime}</p>
+                    </div>
+                    
+                    <div className="text-right">
+                      <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-widest">Shift Status</p>
+                      <div className="mt-0.5">
+                        {!currentEmployeeAttendance?.checkIn || currentEmployeeAttendance.checkIn === '-' ? (
+                          <span className="text-[10px] text-slate-500 font-extrabold uppercase">Not Checked-In</span>
+                        ) : currentEmployeeAttendance.checkOut && currentEmployeeAttendance.checkOut !== '-' ? (
+                          <span className="text-[10px] text-slate-400 font-extrabold uppercase">Clocked Out</span>
+                        ) : currentEmployeeAttendance.breaks?.some(b => b.end === null) ? (
+                          <span className="text-[10px] text-amber-500 font-extrabold uppercase animate-pulse">On Break</span>
+                        ) : (
+                          <span className="text-[10px] text-success font-extrabold uppercase animate-pulse">Active Working</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Unified 4-button console */}
+                  <div className="grid grid-cols-2 gap-3 w-full max-w-sm pt-1">
+                    {/* 1. Punch In */}
+                    <button
+                      onClick={handlePunchIn}
+                      disabled={currentEmployeeAttendance && currentEmployeeAttendance.checkIn && currentEmployeeAttendance.checkIn !== '-'}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm ${
+                        !(currentEmployeeAttendance && currentEmployeeAttendance.checkIn && currentEmployeeAttendance.checkIn !== '-')
+                          ? 'bg-green-600 hover:bg-green-700 text-white shadow-green-600/10'
+                          : 'bg-slate-100 text-slate-450 dark:bg-slate-800 dark:text-slate-500 border border-border/40 cursor-not-allowed'
+                      }`}
+                    >
+                      <LogIn size={13} /> Punch In
+                    </button>
+
+                    {/* 2. Break In */}
+                    <button
+                      onClick={handleBreakIn}
+                      disabled={
+                        !currentEmployeeAttendance || 
+                        !currentEmployeeAttendance.active || 
+                        currentEmployeeAttendance.breaks?.some(b => b.end === null)
+                      }
+                      className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm ${
+                        currentEmployeeAttendance && 
+                        currentEmployeeAttendance.active && 
+                        !currentEmployeeAttendance.breaks?.some(b => b.end === null)
+                          ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/10'
+                          : 'bg-slate-100 text-slate-450 dark:bg-slate-800 dark:text-slate-500 border border-border/40 cursor-not-allowed'
+                      }`}
+                    >
+                      <Clock size={13} /> Break In
+                    </button>
+
+                    {/* 3. Break Out */}
+                    <button
+                      onClick={handleBreakOut}
+                      disabled={
+                        !currentEmployeeAttendance || 
+                        !currentEmployeeAttendance.active || 
+                        !currentEmployeeAttendance.breaks?.some(b => b.end === null)
+                      }
+                      className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm ${
+                        currentEmployeeAttendance && 
+                        currentEmployeeAttendance.active && 
+                        currentEmployeeAttendance.breaks?.some(b => b.end === null)
+                          ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/10'
+                          : 'bg-slate-100 text-slate-450 dark:bg-slate-800 dark:text-slate-500 border border-border/40 cursor-not-allowed'
+                      }`}
+                    >
+                      <Clock size={13} /> Break Out
+                    </button>
+
+                    {/* 4. Punch Out */}
+                    <button
+                      onClick={handlePunchOut}
+                      disabled={!currentEmployeeAttendance || !currentEmployeeAttendance.active}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm ${
+                        currentEmployeeAttendance && currentEmployeeAttendance.active
+                          ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/10'
+                          : 'bg-slate-100 text-slate-450 dark:bg-slate-800 dark:text-slate-500 border border-border/40 cursor-not-allowed'
+                      }`}
+                    >
+                      <LogOut size={13} /> Punch Out
+                    </button>
+                  </div>
+                </div>
+
+                {/* Verification Toggles */}
+                <div className="bg-card border border-border p-5 rounded-2xl shadow-sm space-y-4">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    ⚙ Verification Parameters
+                  </h3>
+
+                  <div className="space-y-4 text-xs font-medium">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-slate-800 dark:text-slate-100">GPS Tracker Verification</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">Mock longitude/latitude logger.</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={simGps}
+                        onChange={e => setSimGps(e.target.checked)}
+                        className="rounded border-gray-300 text-primary focus:ring-primary h-4 w-4"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-slate-800 dark:text-slate-100">Geofencing Authorization</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">Verify coordinates within HQ.</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={simGeofencing}
+                        onChange={e => setSimGeofencing(e.target.checked)}
+                        className="rounded border-gray-300 text-primary focus:ring-primary h-4 w-4"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-slate-800 dark:text-slate-100">Selfie Match Biometrics</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">Biometric facial matching check.</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={simSelfie}
+                        onChange={e => setSimSelfie(e.target.checked)}
+                        className="rounded border-gray-300 text-primary focus:ring-primary h-4 w-4"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-slate-800 dark:text-slate-100">IP Address Verification</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">Checks corporate subnet whitelist.</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={simIpCheck}
+                        onChange={e => setSimIpCheck(e.target.checked)}
+                        className="rounded border-gray-300 text-primary focus:ring-primary h-4 w-4"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-slate-800 dark:text-slate-100">Authorized Device Token</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">Verify hardware UUID credentials.</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={simDevice}
+                        onChange={e => setSimDevice(e.target.checked)}
+                        className="rounded border-gray-300 text-primary focus:ring-primary h-4 w-4"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* LEAVE CABINET & BALANCES */}
+            {activeTab === 'ess-leaves' && (
+              <div className="space-y-6">
+                {/* Leave Balances Grid */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-indigo-500/10 border border-indigo-500/20 p-4 rounded-xl text-center space-y-1">
+                    <span className="text-xl font-extrabold text-indigo-600 dark:text-indigo-400">
+                      {currentEmployee?.leaveBalances?.casual ?? 12}
+                    </span>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">Casual Leave</p>
+                  </div>
+                  
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl text-center space-y-1">
+                    <span className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400">
+                      {currentEmployee?.leaveBalances?.sick ?? 8}
+                    </span>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-650">Sick Leave</p>
+                  </div>
+                  
+                  <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-xl text-center space-y-1">
+                    <span className="text-xl font-extrabold text-amber-600 dark:text-amber-400">
+                      {currentEmployee?.leaveBalances?.earned ?? 18}
+                    </span>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-amber-650">Earned Leave</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Apply Leave Request Form */}
+                  <div className="bg-card border border-border p-5 rounded-2xl shadow-sm space-y-4">
+                    <h3 className="text-sm font-bold flex items-center gap-1.5"><Calendar size={15} /> Apply Leave</h3>
+                    <form onSubmit={handleApplyLeave} className="space-y-4 text-xs font-semibold">
+                      <div className="space-y-1">
+                        <label>Leave Type</label>
+                        <select
+                          value={leaveForm.type}
+                          onChange={e => setLeaveForm(prev => ({ ...prev, type: e.target.value }))}
+                          className="bg-card border border-border w-full p-2 rounded focus:outline-none"
+                        >
+                          <option value="Casual Leave">Casual Leave</option>
+                          <option value="Sick Leave">Sick Leave</option>
+                          <option value="Earned Leave">Earned Leave</option>
+                          <option value="Maternity Leave">Maternity Leave</option>
+                          <option value="Paternity Leave">Paternity Leave</option>
+                          <option value="Unpaid Leave">Unpaid Leave</option>
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label>Start Date</label>
+                          <input
+                            type="date"
+                            value={leaveForm.start}
+                            onChange={e => setLeaveForm(prev => ({ ...prev, start: e.target.value }))}
+                            className="bg-card border border-border w-full p-1.5 rounded"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label>End Date</label>
+                          <input
+                            type="date"
+                            value={leaveForm.end}
+                            onChange={e => setLeaveForm(prev => ({ ...prev, end: e.target.value }))}
+                            className="bg-card border border-border w-full p-1.5 rounded"
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label>Total Duration Days</label>
+                        <input
+                          type="number"
+                          value={leaveForm.days}
+                          onChange={e => setLeaveForm(prev => ({ ...prev, days: e.target.value }))}
+                          className="input-field"
+                          min="1"
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label>Reason / Remarks</label>
+                        <textarea
+                          placeholder="Reason for leave request..."
+                          value={leaveForm.reason}
+                          onChange={e => setLeaveForm(prev => ({ ...prev, reason: e.target.value }))}
+                          className="input-field min-h-16"
+                          required
+                        />
+                      </div>
+
+                      <button type="submit" className="btn-primary w-full py-2">
+                        Submit Leave Application
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Previous Requests Table */}
+                  <div className="lg:col-span-2 bg-card border border-border p-5 rounded-2xl shadow-sm space-y-4">
+                    <h3 className="text-sm font-bold">Leave Requests History</h3>
+
+                    <div className="space-y-3">
+                      {leaves.filter(l => l.employeeId === currentEmployee.id).map(l => (
+                        <div key={l.id} className="p-3 border border-border/40 rounded-xl flex items-center justify-between text-xs">
+                          <div>
+                            <p className="font-bold text-foreground">{l.type}</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">{l.start} to {l.end} ({l.days} days)</p>
+                            <p className="text-[10px] italic text-slate-500 mt-1">Reason: "{l.reason}"</p>
+                          </div>
+                          
+                          <div>
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                              l.status === 'Approved' ? 'bg-success/15 text-success' : l.status === 'Rejected' ? 'bg-danger/10 text-danger' : 'bg-amber-400/10 text-amber-500'
+                            }`}>
+                              {l.status}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* MY PAYSLIPS CABINET */}
+            {activeTab === 'ess-profile' && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Profile detail view */}
+                <div className="md:col-span-2 bg-card border border-border p-5 rounded-2xl shadow-sm space-y-4">
+                  <h3 className="text-sm font-bold">Personal Profile & Payroll Ledger</h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold">
+                    <div className="space-y-1">
+                      <p className="text-[10px] text-muted-foreground">Mobile Number</p>
+                      <input
+                        type="text"
+                        value={currentEmployee?.phone || ''}
+                        onChange={e => editEmployee(currentEmployee.id, { phone: e.target.value })}
+                        className="bg-card border border-border w-full p-2 rounded focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <p className="text-[10px] text-muted-foreground">Email Address</p>
+                      <p className="p-2 bg-muted border border-border/40 rounded text-muted-foreground">{currentEmployee?.email}</p>
+                    </div>
+
+                    <div className="space-y-1">
+                      <p className="text-[10px] text-muted-foreground">Permanent Address</p>
+                      <p className="p-2 bg-muted border border-border/40 rounded text-muted-foreground">{currentEmployee?.permanentAddress}</p>
+                    </div>
+
+                    <div className="space-y-1">
+                      <p className="text-[10px] text-muted-foreground">Date of Birth</p>
+                      <p className="p-2 bg-muted border border-border/40 rounded text-muted-foreground font-mono">{currentEmployee?.dob}</p>
+                    </div>
+
+                    <div className="space-y-1">
+                      <p className="text-[10px] text-muted-foreground">Reporting Manager</p>
+                      <p className="p-2 bg-muted border border-border/40 rounded text-muted-foreground">{currentEmployee?.reportingManager}</p>
+                    </div>
+
+                    <div className="space-y-1">
+                      <p className="text-[10px] text-muted-foreground">Permanent Account (PAN) / Aadhaar</p>
+                      <p className="p-2 bg-muted border border-border/40 rounded text-muted-foreground font-mono">
+                        {currentEmployee?.panNumber} / {currentEmployee?.aadhaarNumber}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Monthly Payslips Download list */}
+                <div className="bg-card border border-border p-5 rounded-2xl shadow-sm space-y-4">
+                  <h3 className="text-sm font-bold flex items-center gap-1.5"><CircleDollarSign size={15} /> Payroll Slips</h3>
+                  
+                  <div className="space-y-2.5">
+                    {payroll.filter(p => p.employeeId === currentEmployee.id).map(p => (
+                      <div key={p.month} className="p-3 border border-border/40 rounded-xl flex items-center justify-between text-xs">
+                        <div>
+                          <p className="font-bold text-foreground">{p.month}</p>
+                          <p className="text-[10px] text-success font-semibold mt-0.5">Net Pay: {formatCurrency(p.netPay)}</p>
+                          <p className="text-[9px] font-bold text-muted-foreground mt-0.5 uppercase">Status: {p.status}</p>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => {
+                              addToast(`Generating payslip PDF for ${p.month}...`, 'success');
+                              exportCSV([p], `Payslip_${currentEmployee.name}_${p.month.replace(' ', '_')}.csv`);
+                            }}
+                            title="Download CSV Payslip"
+                            className="p-1.5 rounded hover:bg-muted text-primary"
+                          >
+                            <Download size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* MY ALLOCATED TASKS */}
+            {activeTab === 'ess-tasks' && (
+              <div className="bg-card border border-border rounded-2xl shadow-sm p-5 space-y-4">
+                <h3 className="text-sm font-bold">My Active Task Allocations</h3>
+
+                <div className="space-y-3">
+                  {[
+                    { id: '1', name: 'Submit Q3 Goals Outline', priority: 'High', dueDate: '2026-06-12', assignedBy: 'Anjali Sharma (HR)', status: 'In Progress' },
+                    { id: '2', name: 'Verify CRM Pipeline Integrations', priority: 'Medium', dueDate: '2026-06-15', assignedBy: 'Ajay Kulkarni', status: 'Pending' },
+                    { id: '3', name: 'Audit E-Commerce Inventory Sync Logs', priority: 'Low', dueDate: '2026-06-20', assignedBy: 'Ajay Kulkarni', status: 'Completed' }
+                  ].map(task => (
+                    <div key={task.id} className="p-4 border border-border/50 rounded-xl flex items-center justify-between text-xs">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-foreground">{task.name}</span>
+                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${
+                            task.priority === 'High' ? 'bg-danger/10 text-danger' : task.priority === 'Medium' ? 'bg-amber-400/10 text-amber-500' : 'bg-primary/10 text-primary'
+                          }`}>{task.priority} Priority</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">Due: {task.dueDate} • Assigned By: {task.assignedBy}</p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                          task.status === 'Completed' ? 'bg-success/15 text-success' : task.status === 'In Progress' ? 'bg-indigo-500/10 text-indigo-500' : 'bg-slate-350/20 text-muted-foreground'
+                        }`}>{task.status}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* MY DOCUMENT CABINET */}
+            {activeTab === 'ess-docs' && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Upload Form */}
+                <div className="bg-card border border-border p-5 rounded-2xl shadow-sm space-y-4">
+                  <h3 className="text-sm font-bold flex items-center gap-1.5"><Upload size={15} /> Upload Documents</h3>
+                  <form onSubmit={handleUploadDoc} className="space-y-4 text-xs font-semibold">
+                    <div className="space-y-1">
+                      <label>Document Class / Type</label>
+                      <select
+                        value={docFile.type}
+                        onChange={e => setDocFile(prev => ({ ...prev, type: e.target.value }))}
+                        className="bg-card border border-border w-full p-2 rounded focus:outline-none"
+                      >
+                        <option value="Aadhaar Card">Aadhaar Card</option>
+                        <option value="PAN Card">PAN Card</option>
+                        <option value="Resume">Resume / CV</option>
+                        <option value="Offer Letter">Offer Letter</option>
+                        <option value="Experience Certificate">Experience Certificate</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label>File Description</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. pan_card_final.pdf"
+                        value={docFile.name}
+                        onChange={e => setDocFile(prev => ({ ...prev, name: e.target.value }))}
+                        className="input-field"
+                        required
+                      />
+                    </div>
+
+                    <button type="submit" className="btn-primary w-full py-2">
+                      Upload Document to Cabinet
+                    </button>
+                  </form>
+                </div>
+
+                {/* Locker Cabinet List */}
+                <div className="md:col-span-2 bg-card border border-border p-5 rounded-2xl shadow-sm space-y-4">
+                  <h3 className="text-sm font-bold">Document Storage Vault</h3>
+
+                  <div className="space-y-3">
+                    {(currentEmployee?.documents || []).map(doc => (
+                      <div key={doc.name} className="p-3 border border-border/40 rounded-xl flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2.5">
+                          <FileText size={20} className="text-primary/70" />
+                          <div>
+                            <p className="font-bold text-foreground">{doc.name}</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">Class: {doc.type} • Uploaded on {doc.uploadDate}</p>
+                          </div>
+                        </div>
+
+                        <div>
+                          <button
+                            onClick={() => addToast(`Downloading "${doc.name}"...`, 'success')}
+                            className="text-xs font-bold text-primary hover:underline flex items-center gap-0.5"
+                          >
+                            <Download size={12} /> Get File
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONSOLE INJECTIONS (ADMINS) */}
+      {/* 1. Add Job Opening */}
+      {showAddJobModal && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold">Add Job Opening</h3>
+              <button onClick={() => setShowAddJobModal(false)} className="text-muted-foreground"><X size={16} /></button>
+            </div>
+            <form onSubmit={handleAddJob} className="space-y-4 text-xs font-semibold">
+              <div className="space-y-1">
+                <label>Job Title</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Senior Frontend Developer"
+                  value={newJob.title}
+                  onChange={e => setNewJob(prev => ({ ...prev, title: e.target.value }))}
+                  className="input-field"
+                  required
+                />
+              </div>
+              <div className="space-y-1">
+                <label>Department</label>
+                <select
+                  value={newJob.department}
+                  onChange={e => setNewJob(prev => ({ ...prev, department: e.target.value }))}
+                  className="bg-card border border-border w-full p-2 rounded focus:outline-none"
+                  required
+                >
+                  <option value="">Choose Division...</option>
+                  <option value="Engineering">Engineering</option>
+                  <option value="Sales">Sales</option>
+                  <option value="Marketing">Marketing</option>
+                  <option value="HR">HR</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label>Work Location</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Bangalore Office"
+                  value={newJob.location}
+                  onChange={e => setNewJob(prev => ({ ...prev, location: e.target.value }))}
+                  className="input-field"
+                  required
+                />
+              </div>
+              <button type="submit" className="btn-primary w-full py-2">Create Job Listing</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Assign Company Asset */}
+      {showAssignAssetModal && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold">Assign Asset to Personnel</h3>
+              <button onClick={() => setShowAssignAssetModal(false)} className="text-muted-foreground"><X size={16} /></button>
+            </div>
+            <form onSubmit={handleAssignAsset} className="space-y-4 text-xs font-semibold">
+              <div className="space-y-1">
+                <label>Select Employee</label>
+                <select
+                  value={newAssetInput.empId}
+                  onChange={e => setNewAssetInput(prev => ({ ...prev, empId: e.target.value }))}
+                  className="bg-card border border-border w-full p-2 rounded focus:outline-none"
+                  required
+                >
+                  <option value="">Choose Employee...</option>
+                  {employees.map(emp => (
+                    <option key={emp.id} value={emp.id}>{emp.name} ({emp.role})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label>Asset Type</label>
+                <select
+                  value={newAssetInput.type}
+                  onChange={e => setNewAssetInput(prev => ({ ...prev, type: e.target.value }))}
+                  className="bg-card border border-border w-full p-2 rounded focus:outline-none"
+                >
+                  <option value="Laptop">Laptop</option>
+                  <option value="Desktop">Desktop</option>
+                  <option value="Mobile Phone">Mobile Phone</option>
+                  <option value="SIM Card">SIM Card</option>
+                  <option value="ID Card">ID Card</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label>Asset Description / Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Dell Latitude 7420, Serial: #10098"
+                  value={newAssetInput.name}
+                  onChange={e => setNewAssetInput(prev => ({ ...prev, name: e.target.value }))}
+                  className="input-field"
+                  required
+                />
+              </div>
+
+              <button type="submit" className="btn-primary w-full py-2">Assign & Record Asset</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Publish Notice */}
+      {showPublishNoticeModal && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold">Publish Notice / Announcement</h3>
+              <button onClick={() => setShowPublishNoticeModal(false)} className="text-muted-foreground"><X size={16} /></button>
+            </div>
+            <form onSubmit={handlePublishNotice} className="space-y-4 text-xs font-semibold">
+              <div className="space-y-1">
+                <label>Notice Title</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Q3 Appraisal Timeline"
+                  value={newNotice.title}
+                  onChange={e => setNewNotice(prev => ({ ...prev, title: e.target.value }))}
+                  className="input-field"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label>Announcement Content</label>
+                <textarea
+                  placeholder="Details of the circular notice..."
+                  value={newNotice.content}
+                  onChange={e => setNewNotice(prev => ({ ...prev, content: e.target.value }))}
+                  className="input-field min-h-24"
+                  required
+                />
+              </div>
+
+              <button type="submit" className="btn-primary w-full py-2">Publish Notice Bulletin</button>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
