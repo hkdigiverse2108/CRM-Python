@@ -513,7 +513,7 @@ export default function HRMSDashboard() {
 
                   {/* Unified Actions Console */}
                   <div className="pt-2">
-                    {!currentEmployeeAttendance?.checkIn || currentEmployeeAttendance.checkIn === '-' ? (
+                    {!currentEmployeeAttendance?.checkIn || currentEmployeeAttendance.checkIn === '-' || (currentEmployeeAttendance.checkOut && currentEmployeeAttendance.checkOut !== '-') ? (
                       /* Not Checked In: Big Green Punch In Button */
                       <button
                         onClick={handlePunchIn}

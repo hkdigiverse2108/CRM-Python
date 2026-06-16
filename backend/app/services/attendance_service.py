@@ -39,6 +39,8 @@ class AttendanceService:
 
         # Try to find existing record for today
         existing = await self.attendance_repo.get_by_employee_and_date(employee_id, current_date, tenant_id)
+        
+        is_check_in_req = data.get("active") is True or (data.get("checkIn") is not None and data.get("checkOut") is None)
 
         if not existing:
             # Clock In
@@ -67,6 +69,20 @@ class AttendanceService:
             # Update employee attendance status
             await emp_repo.update(employee_id, tenant_id, {"attendanceStatus": "Present"})
             return created.to_dict()
+        elif is_check_in_req:
+            # Clock In again (reset checkOut and workingHours, make active)
+            check_in_time = data.get("checkIn") or datetime.now().strftime("%I:%M %p")
+            update_data = {
+                "checkIn": check_in_time,
+                "checkOut": None,
+                "workingHours": 0.0,
+                "active": True,
+                "status": "Present",
+            }
+            updated = await self.attendance_repo.update(existing.attendance_id, tenant_id, update_data)
+            emp_repo = get_employee_repository()
+            await emp_repo.update(employee_id, tenant_id, {"attendanceStatus": "Present"})
+            return updated.to_dict()
         else:
             # Clock Out
             check_out_time = data.get("checkOut") or datetime.now().strftime("%I:%M %p")
