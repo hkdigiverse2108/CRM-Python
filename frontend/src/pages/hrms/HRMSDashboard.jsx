@@ -123,53 +123,96 @@ export default function HRMSDashboard() {
     return attendance.find(a => a.employeeId === hrmsEmployeeId && a.date === todayStr);
   }, [attendance, hrmsEmployeeId, todayStr]);
 
+  // Local state for breaks loaded/saved from localStorage
+  const [localBreaks, setLocalBreaks] = useState(() => {
+    const key = `hrms-breaks-${hrmsEmployeeId}-${todayStr}`;
+    const saved = localStorage.getItem(key);
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  useEffect(() => {
+    const key = `hrms-breaks-${hrmsEmployeeId}-${todayStr}`;
+    const saved = localStorage.getItem(key);
+    setLocalBreaks(saved ? JSON.parse(saved) : []);
+  }, [hrmsEmployeeId, todayStr]);
+
+  useEffect(() => {
+    const key = `hrms-breaks-${hrmsEmployeeId}-${todayStr}`;
+    localStorage.setItem(key, JSON.stringify(localBreaks));
+  }, [localBreaks, hrmsEmployeeId, todayStr]);
+
+  const isOnBreak = useMemo(() => {
+    return localBreaks.some(b => b.end === null);
+  }, [localBreaks]);
+
+  const formattedBreakTime = useMemo(() => {
+    const totalMs = localBreaks.reduce((sum, b) => {
+      if (b.start) {
+        const startMs = new Date(b.start).getTime();
+        const endMs = b.end ? new Date(b.end).getTime() : currentTime.getTime();
+        return sum + (endMs - startMs);
+      }
+      return sum;
+    }, 0);
+    
+    const h = Math.floor(totalMs / (1000 * 60 * 60));
+    const m = Math.floor((totalMs % (1000 * 60 * 60)) / (1000 * 60));
+    const s = Math.floor((totalMs % (1000 * 60)) / 1000);
+    
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    return `${m}m ${s}s`;
+  }, [localBreaks, currentTime]);
+
   const elapsedWorkingTime = useMemo(() => {
     if (!currentEmployeeAttendance || !currentEmployeeAttendance.checkIn || currentEmployeeAttendance.checkIn === '-') {
       return '00:00:00';
     }
     
+    const parseTimeStr = (tStr) => {
+      const today = new Date();
+      const parts = tStr.split(' ');
+      const [hp, mp] = parts[0].split(':');
+      let h = parseInt(hp, 10);
+      let m = parseInt(mp, 10);
+      const mod = parts[1];
+      if (mod === 'PM' && h < 12) h += 12;
+      if (mod === 'AM' && h === 12) h = 0;
+      return new Date(today.getFullYear(), today.getMonth(), today.getDate(), h, m, 0);
+    };
+
     if (currentEmployeeAttendance.checkOut && currentEmployeeAttendance.checkOut !== '-') {
-      const hours = currentEmployeeAttendance.workingHours || 0;
-      const h = Math.floor(hours);
-      const m = Math.round((hours - h) * 60);
-      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
+      try {
+        const inDate = parseTimeStr(currentEmployeeAttendance.checkIn);
+        const outDate = parseTimeStr(currentEmployeeAttendance.checkOut);
+        const breakMs = localBreaks.reduce((sum, b) => {
+          if (b.start && b.end) {
+            return sum + (new Date(b.end).getTime() - new Date(b.start).getTime());
+          }
+          return sum;
+        }, 0);
+        
+        const totalMs = Math.max(0, outDate.getTime() - inDate.getTime() - breakMs);
+        const h = Math.floor(totalMs / (1000 * 60 * 60));
+        const m = Math.floor((totalMs % (1000 * 60 * 60)) / (1000 * 60));
+        const s = Math.floor((totalMs % (1000 * 60)) / 1000);
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+      } catch (e) {
+        return '00:00:00';
+      }
     }
     
     try {
-      const checkInStr = currentEmployeeAttendance.checkIn;
-      const today = new Date();
-      
-      const timeParts = checkInStr.split(' ');
-      const [hPart, mPart] = timeParts[0].split(':');
-      let hr = parseInt(hPart, 10);
-      const min = parseInt(mPart, 10);
-      const modifier = timeParts[1];
-      
-      if (modifier === 'PM' && hr < 12) hr += 12;
-      if (modifier === 'AM' && hr === 12) hr = 0;
-      
-      const checkInDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hr, min, 0);
-      
-      const breakMs = (currentEmployeeAttendance.breaks || []).reduce((sum, b) => {
+      const inDate = parseTimeStr(currentEmployeeAttendance.checkIn);
+      const breakMs = localBreaks.reduce((sum, b) => {
         if (b.start) {
-          const parseTime = (tStr) => {
-            const parts = tStr.split(' ');
-            const [hp, mp] = parts[0].split(':');
-            let h = parseInt(hp, 10);
-            let m = parseInt(mp, 10);
-            const mod = parts[1];
-            if (mod === 'PM' && h < 12) h += 12;
-            if (mod === 'AM' && h === 12) h = 0;
-            return new Date(today.getFullYear(), today.getMonth(), today.getDate(), h, m, 0).getTime();
-          };
-          const startMs = parseTime(b.start);
-          const endMs = b.end ? parseTime(b.end) : currentTime.getTime();
+          const startMs = new Date(b.start).getTime();
+          const endMs = b.end ? new Date(b.end).getTime() : currentTime.getTime();
           return sum + (endMs - startMs);
         }
         return sum;
       }, 0);
       
-      const elapsedMs = Math.max(0, currentTime.getTime() - checkInDate.getTime() - breakMs);
+      const elapsedMs = Math.max(0, currentTime.getTime() - inDate.getTime() - breakMs);
       const diffHrs = Math.floor(elapsedMs / (1000 * 60 * 60));
       const diffMins = Math.floor((elapsedMs % (1000 * 60 * 60)) / (1000 * 60));
       const diffSecs = Math.floor((elapsedMs % (1000 * 60)) / 1000);
@@ -177,9 +220,9 @@ export default function HRMSDashboard() {
       return `${String(diffHrs).padStart(2, '0')}:${String(diffMins).padStart(2, '0')}:${String(diffSecs).padStart(2, '0')}`;
     } catch (err) {
       console.log("Error calculating elapsed time", err);
-      return `${String(currentEmployeeAttendance.workingHours || 0).padStart(2, '0')}:00:00`;
+      return '00:00:00';
     }
-  }, [currentEmployeeAttendance, currentTime]);
+  }, [currentEmployeeAttendance, currentTime, localBreaks]);
 
   const handlePunchIn = () => {
     if (simSelfie && !docFile.name) {
@@ -193,19 +236,24 @@ export default function HRMSDashboard() {
       ip: '192.168.1.100',
       selfie: simSelfie ? 'Captured_Selfie.jpg' : null
     };
+    setLocalBreaks([]); // Reset breaks for new punch in
     clockInOut(hrmsEmployeeId, 'in', details);
   };
 
   const handlePunchOut = () => {
+    // End any active break on punch out
+    setLocalBreaks(prev => prev.map(b => b.end === null ? { ...b, end: new Date().toISOString() } : b));
     clockInOut(hrmsEmployeeId, 'out');
   };
 
   const handleBreakIn = () => {
-    clockInOut(hrmsEmployeeId, 'break_in');
+    setLocalBreaks(prev => [...prev, { start: new Date().toISOString(), end: null }]);
+    addToast('Break started.', 'info');
   };
 
   const handleBreakOut = () => {
-    clockInOut(hrmsEmployeeId, 'break_out');
+    setLocalBreaks(prev => prev.map(b => b.end === null ? { ...b, end: new Date().toISOString() } : b));
+    addToast('Break ended. Resumed work.', 'success');
   };
 
   const handleAddJob = (e) => {
@@ -526,15 +574,15 @@ export default function HRMSDashboard() {
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         {/* Break Toggle Button */}
                         <button
-                          onClick={currentEmployeeAttendance.breaks?.some(b => b.end === null) ? handleBreakOut : handleBreakIn}
+                          onClick={isOnBreak ? handleBreakOut : handleBreakIn}
                           className={`py-3 px-4 border border-border hover:bg-muted/50 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
-                            currentEmployeeAttendance.breaks?.some(b => b.end === null)
+                            isOnBreak
                               ? 'bg-amber-500 text-white hover:bg-amber-600 border-transparent shadow-xs'
                               : 'text-foreground'
                           }`}
                         >
                           <Coffee size={14} /> 
-                          {currentEmployeeAttendance.breaks?.some(b => b.end === null) ? 'Resume Work' : 'Take Break'}
+                          {isOnBreak ? 'Resume Work' : 'Take Break'}
                         </button>
 
                         {/* Meeting Simulation Button */}
@@ -571,7 +619,7 @@ export default function HRMSDashboard() {
                     <div className="p-4 text-center space-y-1">
                       <p className="text-[9px] uppercase font-extrabold text-muted-foreground tracking-wider">Break In Time</p>
                       <p className="text-xs font-bold text-slate-800 dark:text-slate-250">
-                        {currentEmployeeAttendance?.breakDuration || '0.5 hrs'}
+                        {formattedBreakTime}
                       </p>
                     </div>
                     <div className="p-4 text-center space-y-1">
