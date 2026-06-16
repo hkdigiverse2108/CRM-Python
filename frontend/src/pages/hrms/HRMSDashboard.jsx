@@ -117,6 +117,7 @@ export default function HRMSDashboard() {
   const [profileForm, setProfileForm] = useState({
     firstName: '', middleName: '', lastName: '', email: '', phone: '', dob: '', gender: 'Male',
     aadhaarNumber: '', panNumber: '', department: '', role: '', joinDate: '',
+    reportingManager: '',
     bankName: '', accountNumber: '', ifscCode: '', upiId: '',
     parentName: '', parentPhone: '', relationship: 'Father'
   });
@@ -135,6 +136,7 @@ export default function HRMSDashboard() {
       department: currentEmployee?.department || '',
       role: currentEmployee?.role || '',
       joinDate: currentEmployee?.joinDate || '',
+      reportingManager: currentEmployee?.reportingManager || '',
       bankName: currentEmployee?.bankDetails?.bankName || '',
       accountNumber: currentEmployee?.bankDetails?.accountNumber || '',
       ifscCode: currentEmployee?.bankDetails?.ifscCode || '',
@@ -159,6 +161,7 @@ export default function HRMSDashboard() {
       department: profileForm.department,
       role: profileForm.role,
       joinDate: profileForm.joinDate,
+      reportingManager: profileForm.reportingManager,
       bankDetails: {
         holderName: fullName,
         bankName: profileForm.bankName,
@@ -1237,6 +1240,28 @@ export default function HRMSDashboard() {
                               />
                             ) : (
                               <p className="text-xs font-bold text-foreground font-mono">{currentEmployee?.joinDate || '-'}</p>
+                            )}
+                          </div>
+                          <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">
+                            <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex items-center justify-between">
+                              <span className="flex items-center gap-1"><User size={10} /> Reporting Manager</span>
+                              <ShieldAlert size={10} className="text-muted-foreground" />
+                            </span>
+                            {isEditingProfile ? (
+                              <select 
+                                value={profileForm.reportingManager}
+                                onChange={e => setProfileForm({ ...profileForm, reportingManager: e.target.value })}
+                                className="w-full bg-card border border-border/85 focus:border-primary/85 focus:ring-1 focus:ring-primary/85 rounded-lg px-2 py-0.5 text-xs font-semibold text-foreground focus:outline-none transition-all mt-1"
+                              >
+                                <option value="">No Manager (Admin)</option>
+                                {employees.filter(e => e.id !== currentEmployee.id).map(emp => (
+                                  <option key={emp.id} value={emp.id}>{emp.name} ({emp.role})</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <p className="text-xs font-bold text-foreground">
+                                {employees.find(e => e.id === currentEmployee?.reportingManager)?.name || currentEmployee?.reportingManager || 'Admin'}
+                              </p>
                             )}
                           </div>
                           <div className="bg-muted/10 border border-border/40 p-4 rounded-2xl space-y-1.5">

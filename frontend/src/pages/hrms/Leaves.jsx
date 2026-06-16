@@ -10,7 +10,8 @@ export default function Leaves() {
     updateLeaveStatus, 
     addLeaveRequest, 
     employees, 
-    addToast 
+    addToast,
+    user
   } = useApp();
 
   const [statusFilter, setStatusFilter] = useState('All');
@@ -27,25 +28,52 @@ export default function Leaves() {
     reason: ''
   });
 
+  const currentEmp = useMemo(() => {
+    return employees.find(e => e.email === user?.email);
+  }, [employees, user]);
+
+  const isUserAdmin = useMemo(() => {
+    return user?.role === 'super_admin' || 
+           user?.role_name === 'Organization Admin' || 
+           user?.role_name === 'Super Admin' ||
+           user?.role_name === 'Admin';
+  }, [user]);
+
+  // Leaves visible to the current logged-in user
+  const myLeaves = useMemo(() => {
+    return leaves.filter(l => {
+      // Find the employee who requested the leave
+      const emp = employees.find(e => e.id === l.employeeId);
+      
+      // If user is not admin, only show leaves where they are the reporting manager
+      if (!isUserAdmin) {
+        if (!emp || emp.reportingManager !== currentEmp?.id) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [leaves, employees, currentEmp, isUserAdmin]);
+
   // Calculate statistics
   const stats = useMemo(() => {
-    const total = leaves.length;
-    const pending = leaves.filter(l => l.status === 'Pending').length;
-    const approved = leaves.filter(l => l.status === 'Approved').length;
-    const rejected = leaves.filter(l => l.status === 'Rejected').length;
+    const total = myLeaves.length;
+    const pending = myLeaves.filter(l => l.status === 'Pending').length;
+    const approved = myLeaves.filter(l => l.status === 'Approved').length;
+    const rejected = myLeaves.filter(l => l.status === 'Rejected').length;
     return { total, pending, approved, rejected };
-  }, [leaves]);
+  }, [myLeaves]);
 
   // Filter requests
   const filteredLeaves = useMemo(() => {
-    return leaves.filter(l => {
+    return myLeaves.filter(l => {
       const name = l.employeeName || l.employee || '';
       const matchesSearch = name.toLowerCase().includes(search.toLowerCase()) ||
                             (l.department || '').toLowerCase().includes(search.toLowerCase());
       const matchesStatus = statusFilter === 'All' || l.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
-  }, [leaves, search, statusFilter]);
+  }, [myLeaves, search, statusFilter]);
 
   const handleApplyLeave = (e) => {
     e.preventDefault();
