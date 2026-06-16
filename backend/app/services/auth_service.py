@@ -76,6 +76,38 @@ class AuthService:
         )
         await self._user_repo.create(user)
 
+        # Sync to HRMS employees table
+        try:
+            from backend.app.repositories.employee_repo import get_employee_repository
+            from backend.app.models.employee import Employee
+            
+            emp_repo = get_employee_repository()
+            existing_employees = await emp_repo.get_all(tenant_id, {"email": email}, 0, 1)
+            if not existing_employees:
+                total_emp = await emp_repo.count(tenant_id)
+                next_id = f"EMP-{str(total_emp + 1).zfill(3)}"
+                
+                role_designation = "Sales Executive"
+                dept_name = "Sales"
+                if "super" in role.lower() or "admin" in role.lower():
+                    role_designation = "Python Developer"
+                    dept_name = "Engineering"
+                
+                employee = Employee(
+                    workspace_id=tenant_id,
+                    name=full_name,
+                    role=role_designation,
+                    department=dept_name,
+                    email=email,
+                    phone=phone,
+                    status="Active",
+                )
+                employee.employee_id = next_id
+                await emp_repo.create(employee)
+                print(f"[+] Synced register: Created employee {next_id} for user {email}")
+        except Exception as e:
+            print(f"[!] Syncing employee on register failed: {e}")
+
         return self._generate_tokens(user)
 
     async def refresh(self, refresh_token: str) -> dict:
