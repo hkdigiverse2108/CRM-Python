@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
+import { formatCurrency } from '@/lib/utils';
 import {
   Users, Shield, RefreshCw, Key, ToggleLeft, ToggleRight,
   Plus, Search, Check, X, Trash2, Sliders, ShieldCheck,
   Save, Info, Lock, CheckCircle, PlusCircle, Copy, Layers,
-  FileText, Settings as SettingsIcon, AlertCircle
+  FileText, Settings as SettingsIcon, AlertCircle, Edit3
 } from 'lucide-react';
 import PageHeader from '@/components/ui/PageHeader';
 
@@ -217,7 +218,7 @@ const BUTTONS_LIST = [
 const DEPARTMENTS = ['Sales', 'Marketing', 'HR', 'Finance', 'Support', 'Operations', 'Projects'];
 
 export default function WorkspaceAdmin() {
-  const { addToast, token, tenantId, roles = [], createRole, updateRole, deleteRole, duplicateRole } = useApp();
+  const { addToast, token, tenantId, roles = [], createRole, updateRole, deleteRole, duplicateRole, fetchEmployees } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') || 'users';
   const setActiveTab = (tab) => setSearchParams({ tab });
@@ -232,6 +233,7 @@ export default function WorkspaceAdmin() {
 
   // Modals
   const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [showEditUserModal, setShowEditUserModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showSaveConfirmModal, setShowSaveConfirmModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
@@ -277,8 +279,9 @@ export default function WorkspaceAdmin() {
   const [roleLocalPermissions, setRoleLocalPermissions] = useState([]);
 
   // Forms
-  const blankUser = { email: '', full_name: '', role_name: 'Regular Employee', password: '', phone: '', reporting_manager: '' };
+  const blankUser = { email: '', full_name: '', role_name: 'Regular Employee', password: '', phone: '', reporting_manager: '', salary: '' };
   const [newUserForm, setNewUserForm] = useState({ ...blankUser });
+  const [editUserForm, setEditUserForm] = useState({ user_id: '', email: '', full_name: '', role_name: 'Regular Employee', phone: '', department: 'Sales', reporting_manager: '', salary: '' });
   const [passwordForm, setPasswordForm] = useState({ password: '' });
 
   const selectedRole = roles.find(r => r.id === selectedRoleId) || roles[0] || null;
@@ -673,6 +676,7 @@ export default function WorkspaceAdmin() {
         setShowAddUserModal(false);
         setNewUserForm({ ...blankUser });
         fetchUsers();
+        if (typeof fetchEmployees === 'function') fetchEmployees();
         if (d.data && d.data.user_id && newUserForm.role_name !== 'Organization Admin') {
           handleEditUserPermissions(d.data);
         }
@@ -681,6 +685,36 @@ export default function WorkspaceAdmin() {
       }
     } catch (err) {
       addToast('Error creating user', 'error');
+    }
+  };
+
+  const handleEditUserSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch(`${API_BASE}/admin/users/${editUserForm.user_id}/details`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          full_name: editUserForm.full_name,
+          email: editUserForm.email,
+          phone: editUserForm.phone,
+          role_name: editUserForm.role_name,
+          department: editUserForm.department,
+          reporting_manager: editUserForm.reporting_manager,
+          salary: editUserForm.salary
+        })
+      });
+      const d = await res.json();
+      if (res.ok) {
+        addToast('Employee details updated successfully', 'success');
+        setShowEditUserModal(false);
+        fetchUsers();
+        if (typeof fetchEmployees === 'function') fetchEmployees();
+      } else {
+        addToast(d.detail || 'Failed to update employee details', 'error');
+      }
+    } catch (err) {
+      addToast('Error updating employee details', 'error');
     }
   };
 
@@ -889,6 +923,7 @@ export default function WorkspaceAdmin() {
                       <th className="p-4">Name</th>
                       <th className="p-4">Email</th>
                       <th className="p-4">Role Designation</th>
+                      <th className="p-4">Salary</th>
                       <th className="p-4">Status</th>
                       <th className="p-4 text-right">Actions</th>
                     </tr>
@@ -896,7 +931,7 @@ export default function WorkspaceAdmin() {
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs font-medium text-slate-600 dark:text-slate-350">
                     {users.length === 0 ? (
                       <tr>
-                        <td colSpan="5" className="p-6 text-center text-slate-400">No employees found in this workspace.</td>
+                        <td colSpan="6" className="p-6 text-center text-slate-400">No employees found in this workspace.</td>
                       </tr>
                     ) : (
                       users.map(u => (
@@ -904,12 +939,28 @@ export default function WorkspaceAdmin() {
                           <td className="p-4 font-bold text-slate-900 dark:text-white">{u.full_name}</td>
                           <td className="p-4">{u.email}</td>
                           <td className="p-4"><span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-[10px] font-bold uppercase tracking-wider">{u.role_name}</span></td>
+                          <td className="p-4 font-bold text-slate-900 dark:text-white">{formatCurrency(u.salary || 0)}</td>
                           <td className="p-4">
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${u.status === 'active' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30' : 'bg-red-50 text-red-600'}`}>
                               {u.status}
                             </span>
                           </td>
                           <td className="p-4 text-right flex justify-end gap-1.5">
+                            <ActionBtn title="Edit Details" onClick={() => {
+                              setEditUserForm({
+                                user_id: u.user_id,
+                                full_name: u.full_name || '',
+                                email: u.email || '',
+                                phone: u.phone || '',
+                                role_name: u.role_name || 'Regular Employee',
+                                department: u.department || 'Sales',
+                                reporting_manager: u.reporting_manager || '',
+                                salary: u.salary || 0
+                              });
+                              setShowEditUserModal(true);
+                            }} className="hover:bg-slate-100 dark:hover:bg-slate-800 text-indigo-500">
+                              <Edit3 size={14} />
+                            </ActionBtn>
                             {u.role_name !== 'Organization Admin' && u.role_name !== 'Super Admin' && (
                               <ActionBtn title="Edit Permissions" onClick={() => handleEditUserPermissions(u)} className="hover:bg-slate-100 dark:hover:bg-slate-800 text-indigo-500">
                                 <Shield size={14} />
@@ -1506,6 +1557,13 @@ export default function WorkspaceAdmin() {
               onChange={e => setNewUserForm(p => ({ ...p, phone: e.target.value }))} 
               placeholder="Optional"
             />
+            <InputField 
+              label="Salary (Basic)" 
+              type="number" 
+              value={newUserForm.salary || ''} 
+              onChange={e => setNewUserForm(p => ({ ...p, salary: e.target.value }))} 
+              placeholder="e.g. 50000"
+            />
             <SelectField 
               label="Assign Role Template" 
               value={newUserForm.role_name} 
@@ -1542,6 +1600,84 @@ export default function WorkspaceAdmin() {
             <div className="flex gap-2 pt-4 border-t border-slate-200 dark:border-slate-800">
               <button type="button" onClick={() => setShowAddUserModal(false)} className="flex-1 border border-slate-200 dark:border-slate-800 rounded-xl py-2 text-xs font-bold text-slate-600 dark:text-slate-400 cursor-pointer">Cancel</button>
               <button type="submit" className="flex-1 bg-indigo-600 text-white rounded-xl py-2 text-xs font-bold hover:bg-indigo-700 cursor-pointer">Create User</button>
+            </div>
+          </form>
+        </ModalShell>
+      )}
+
+      {/* EDIT USER MODAL */}
+      {showEditUserModal && (
+        <ModalShell title="Edit Employee Details" icon={<Edit3 className="text-indigo-600" size={18} />} onClose={() => setShowEditUserModal(false)}>
+          <form onSubmit={handleEditUserSubmit} className="space-y-4 text-xs font-bold">
+            <InputField 
+              label="Full Name" 
+              required 
+              type="text" 
+              value={editUserForm.full_name} 
+              onChange={e => setEditUserForm(p => ({ ...p, full_name: e.target.value }))} 
+              placeholder="e.g. John Doe"
+            />
+            <InputField 
+              label="Email Address" 
+              required 
+              type="email" 
+              value={editUserForm.email} 
+              onChange={e => setEditUserForm(p => ({ ...p, email: e.target.value }))} 
+              placeholder="e.g. john@company.com"
+            />
+            <InputField 
+              label="Phone Number" 
+              type="text" 
+              value={editUserForm.phone || ''} 
+              onChange={e => setEditUserForm(p => ({ ...p, phone: e.target.value }))} 
+              placeholder="Optional"
+            />
+            <InputField 
+              label="Salary (Basic)" 
+              type="number" 
+              value={editUserForm.salary || ''} 
+              onChange={e => setEditUserForm(p => ({ ...p, salary: e.target.value }))} 
+              placeholder="e.g. 50000"
+            />
+            <SelectField 
+              label="Assign Role Template" 
+              value={editUserForm.role_name} 
+              onChange={e => setEditUserForm(p => ({ ...p, role_name: e.target.value }))}
+            >
+              <option value="Regular Employee">Regular Employee (Empty Template)</option>
+              <option value="Organization Admin">Organization Admin</option>
+              {rolesSummary
+                .filter(r => r.role_name !== 'Organization Admin' && r.role_name !== 'Super Admin' && !r.role_id?.startsWith('role_custom_') && !r.role_name?.startsWith('Role for '))
+                .map(r => (
+                  <option key={r.role_id} value={r.role_name}>{r.role_name}</option>
+                ))}
+            </SelectField>
+            <SelectField 
+              label="Department" 
+              value={editUserForm.department || 'Sales'} 
+              onChange={e => setEditUserForm(p => ({ ...p, department: e.target.value }))}
+            >
+              {DEPARTMENTS.map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </SelectField>
+            <SelectField 
+              label="Reporting Manager" 
+              value={editUserForm.reporting_manager || ''} 
+              onChange={e => setEditUserForm(p => ({ ...p, reporting_manager: e.target.value }))}
+            >
+              <option value="">No Manager (Admin)</option>
+              {users
+                .filter(u => u.user_id !== editUserForm.user_id)
+                .map(u => (
+                  <option key={u.user_id} value={u.employee_id || u.full_name}>
+                    {u.full_name} ({u.role_name})
+                  </option>
+                ))}
+            </SelectField>
+            <div className="flex gap-2 pt-4 border-t border-slate-200 dark:border-slate-800">
+              <button type="button" onClick={() => setShowEditUserModal(false)} className="flex-1 border border-slate-200 dark:border-slate-800 rounded-xl py-2 text-xs font-bold text-slate-600 dark:text-slate-400 cursor-pointer">Cancel</button>
+              <button type="submit" className="flex-1 bg-indigo-600 text-white rounded-xl py-2 text-xs font-bold hover:bg-indigo-700 cursor-pointer">Save Changes</button>
             </div>
           </form>
         </ModalShell>

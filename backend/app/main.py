@@ -116,6 +116,12 @@ def create_app() -> FastAPI:
     app.include_router(meta_integration_router)
     app.include_router(api_router, prefix="/api")
 
+    # Serve static uploaded files
+    from fastapi.staticfiles import StaticFiles
+    import os
+    os.makedirs("uploads", exist_ok=True)
+    app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
     @app.get("/")
     async def root_status():
         return {"status": "success", "message": "AIO CRM Platform API is running successfully!"}

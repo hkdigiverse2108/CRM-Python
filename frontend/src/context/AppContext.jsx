@@ -285,6 +285,18 @@ const seedProjects = [];
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 
+
+export const getTenantId = () => {
+  const saved = localStorage.getItem('auth-tenant-id');
+  if (saved && saved !== 'rapidmodel_corp') return saved;
+  const host = window.location.hostname;
+  const parts = host.split('.');
+  if (parts.length > 2 && parts[0] !== 'www' && parts[0] !== 'localhost') {
+    return parts[0];
+  }
+  return import.meta.env.VITE_DEFAULT_TENANT_ID || '96722';
+};
+
 export function AppProvider({ children }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeOrg, setActiveOrg] = useState(() => {
@@ -292,13 +304,17 @@ export function AppProvider({ children }) {
     if (savedTenant && savedTenant !== 'rapidmodel_corp') {
       return 'HK Digiverse LLP';
     }
-    return 'RapidModel Corp';
+    return 'HK Digiverse LLP';
   });
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
 
+  const removeToast = useCallback((id) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
   const addToast = useCallback((message, type = 'success') => {
-    const id = Date.now();
+    const id = Math.random().toString(36).substring(2, 9) + '_' + Date.now();
     setToasts(prev => [...prev, { id, message, type }]);
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
@@ -311,7 +327,40 @@ export function AppProvider({ children }) {
     const saved = localStorage.getItem('auth-user');
     return saved ? JSON.parse(saved) : null;
   });
-  const [tenantId, setTenantId] = useState(() => localStorage.getItem('auth-tenant-id') || null);
+  const [tenantId, setTenantId] = useState(() => getTenantId());
+
+  const [workspaceSettings, setWorkspaceSettings] = useState(() => {
+    const saved = localStorage.getItem('crm-workspace-settings');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  const refreshWorkspaceSettings = useCallback(async () => {
+    const currentToken = localStorage.getItem('auth-token') || token;
+    const currentTenant = localStorage.getItem('auth-tenant-id') || tenantId || getTenantId();
+    if (!currentToken) return;
+    try {
+      const resp = await fetch(`${API_BASE}/admin/settings`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${currentToken}`,
+          'X-Tenant-ID': currentTenant,
+        }
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.success && data.data) {
+          setWorkspaceSettings(data.data);
+          localStorage.setItem('crm-workspace-settings', JSON.stringify(data.data));
+          if (data.data.company_name) {
+            setActiveOrg(data.data.company_name);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch workspace settings:', err);
+    }
+  }, [token, tenantId]);
+
 
   const hasModulePermission = useCallback((moduleKey) => {
     if (!user) return true;
@@ -352,7 +401,29 @@ export function AppProvider({ children }) {
       localStorage.setItem('auth-user', JSON.stringify(userInfo));
       localStorage.setItem('auth-tenant-id', resolvedTenantId);
 
-      setActiveOrg(resolvedTenantId === 'rapidmodel_corp' ? 'RapidModel Corp' : 'HK Digiverse LLP');
+      // fetch workspace settings immediately
+      try {
+        const respSettings = await fetch(`${API_BASE}/admin/settings`, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${access_token}`,
+            'X-Tenant-ID': resolvedTenantId,
+          }
+        });
+        if (respSettings.ok) {
+          const sData = await respSettings.json();
+          if (sData.success && sData.data) {
+            setWorkspaceSettings(sData.data);
+            localStorage.setItem('crm-workspace-settings', JSON.stringify(sData.data));
+            if (sData.data.company_name) {
+              setActiveOrg(sData.data.company_name);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load settings on login:', err);
+      }
+
       addToast(`Welcome back, ${userInfo.full_name}!`, 'success');
       return userInfo;
     } catch (error) {
@@ -368,6 +439,7 @@ export function AppProvider({ children }) {
     localStorage.removeItem('auth-token');
     localStorage.removeItem('auth-user');
     localStorage.removeItem('auth-tenant-id');
+    localStorage.removeItem('hrms-active-employee-id');
     addToast('Logged out successfully', 'info');
   }, []);
 
@@ -375,7 +447,7 @@ export function AppProvider({ children }) {
     if (!localStorage.getItem('auth-token')) return;
     try {
       const currentToken = localStorage.getItem('auth-token');
-      const currentTenant = localStorage.getItem('auth-tenant-id') || 'rapidmodel_corp';
+      const currentTenant = localStorage.getItem('auth-tenant-id') || getTenantId();
       const resp = await fetch(`${API_BASE}/auth/me`, {
         headers: {
           'Content-Type': 'application/json',
@@ -391,27 +463,34 @@ export function AppProvider({ children }) {
       if (data.success && data.data) {
         setUser(data.data);
         localStorage.setItem('auth-user', JSON.stringify(data.data));
+        refreshWorkspaceSettings();
       }
     } catch (err) {
       console.error('Failed to refresh user profile:', err);
     }
-  }, [logout]);
+  }, [logout, refreshWorkspaceSettings]);
 
   useEffect(() => {
     if (!token) return;
     refreshUserProfile();
-    const interval = setInterval(refreshUserProfile, 2000);
+    refreshWorkspaceSettings();
+    const interval = setInterval(() => {
+      refreshUserProfile();
+      refreshWorkspaceSettings();
+    }, 2000);
 
     const channel = new BroadcastChannel('crm-auth-channel');
     const handleMessage = (event) => {
       if (event.data && event.data.type === 'REFRESH_PROFILE') {
         refreshUserProfile();
+        refreshWorkspaceSettings();
       }
     };
     channel.addEventListener('message', handleMessage);
 
     const handleFocus = () => {
       refreshUserProfile();
+      refreshWorkspaceSettings();
     };
     window.addEventListener('focus', handleFocus);
 
@@ -421,7 +500,7 @@ export function AppProvider({ children }) {
       channel.close();
       window.removeEventListener('focus', handleFocus);
     };
-  }, [token, refreshUserProfile]);
+  }, [token, refreshUserProfile, refreshWorkspaceSettings]);
 
 
   
@@ -694,6 +773,30 @@ export function AppProvider({ children }) {
     localStorage.setItem('hrms-active-employee-id', hrmsEmployeeId);
   }, [hrmsEmployeeId]);
 
+  // Auto-sync tenantId to the logged-in user's tenant_id
+  // This prevents stale localStorage tenant IDs from loading other tenants' data
+  useEffect(() => {
+    if (user?.tenant_id && tenantId !== user.tenant_id) {
+      setTenantId(user.tenant_id);
+      localStorage.setItem('auth-tenant-id', user.tenant_id);
+    }
+  }, [user, tenantId]);
+
+  // Auto-sync hrmsEmployeeId to the logged-in user's employee record
+  // This prevents stale localStorage values from showing the wrong employee
+  useEffect(() => {
+    if (user?.email && employees.length > 0) {
+      const loggedInEmp = employees.find(e => e.email === user.email);
+      if (loggedInEmp && loggedInEmp.id !== hrmsEmployeeId) {
+        // Only auto-correct if current hrmsEmployeeId doesn't belong to logged-in user
+        const currentEmp = employees.find(e => e.id === hrmsEmployeeId);
+        if (!currentEmp || currentEmp.email !== user.email) {
+          setHrmsEmployeeId(loggedInEmp.id);
+        }
+      }
+    }
+  }, [user, employees]);
+
   useEffect(() => {
     localStorage.setItem('crm-projects', JSON.stringify(projects));
   }, [projects]);
@@ -705,7 +808,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         }
       });
       if (resp.status === 401) {
@@ -733,7 +836,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         }
       });
       if (resp.status === 401) {
@@ -761,7 +864,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(productData),
       });
@@ -786,7 +889,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(updateData),
       });
@@ -811,7 +914,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
       });
       const data = await resp.json();
@@ -836,7 +939,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         }
       });
       if (resp.status === 401) { logout(); return; }
@@ -866,7 +969,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(backendPayload),
       });
@@ -900,7 +1003,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(backendPayload),
       });
@@ -925,7 +1028,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
       });
       const data = await resp.json();
@@ -949,7 +1052,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         }
       });
       if (resp.status === 401) { logout(); return; }
@@ -979,7 +1082,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(backendPayload),
       });
@@ -1013,7 +1116,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(backendPayload),
       });
@@ -1038,7 +1141,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
       });
       const data = await resp.json();
@@ -1062,7 +1165,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         }
       });
       if (resp.status === 401) { logout(); return; }
@@ -1088,7 +1191,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(backendPayload),
       });
@@ -1118,7 +1221,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(backendPayload),
       });
@@ -1143,7 +1246,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         }
       });
       if (resp.status === 401) { logout(); return; }
@@ -1164,7 +1267,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(entryData),
       });
@@ -1189,7 +1292,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         }
       });
       if (resp.status === 401) { logout(); return; }
@@ -1210,7 +1313,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(expenseData),
       });
@@ -1235,7 +1338,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(updateData),
       });
@@ -1260,7 +1363,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         }
       });
       if (resp.status === 401) { logout(); return; }
@@ -1290,7 +1393,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(backendPayload),
       });
@@ -1324,7 +1427,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(backendPayload),
       });
@@ -1349,7 +1452,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         }
       });
       if (resp.status === 401) { logout(); return; }
@@ -1369,18 +1472,70 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         }
       });
       if (resp.status === 401) { logout(); return; }
       const data = await resp.json();
       if (data.success && data.data) {
-        setLeaves(data.data);
+        setLeaves(prev => {
+          if (prev && prev.length > 0) {
+            data.data.forEach(newLeave => {
+              const oldLeave = prev.find(l => l.id === newLeave.id);
+              if (!oldLeave) {
+                // New Leave Request
+                if (newLeave.status === 'Pending') {
+                  const emp = employees.find(e => e.id === newLeave.employeeId);
+                  const currentEmp = employees.find(e => e.email === user?.email);
+                  const isManager = emp && currentEmp && (
+                    emp.reportingManager === currentEmp.id ||
+                    emp.reportingManager === currentEmp.name ||
+                    emp.reportingManager === user?.full_name
+                  );
+                   const isAdmin = user?.role === 'super_admin' || user?.role_name === 'Organization Admin' || user?.role_name === 'Super Admin' || user?.role_name === 'Admin';
+                  const isHR = currentEmp?.department?.toUpperCase() === 'HR' || 
+                               currentEmp?.role?.toUpperCase() === 'HR' || 
+                               currentEmp?.role?.toUpperCase().includes('HR') ||
+                               user?.role_name?.toUpperCase().includes('HR');
+                  
+                  if (isManager || isAdmin || isHR) {
+                    const msg = `New leave request submitted by ${newLeave.employeeName || 'Employee'}`;
+                    addToast(msg, 'info');
+                    setNotifications(nPrev => {
+                      if (nPrev.some(n => n.text === msg)) return nPrev;
+                      return [
+                        { id: Date.now() + Math.random(), text: msg, time: 'Just now', read: false },
+                        ...nPrev
+                      ];
+                    });
+                  }
+                }
+              } else {
+                // Status Changed
+                if (oldLeave.status !== newLeave.status) {
+                  const currentEmp = employees.find(e => e.email === user?.email);
+                  if (currentEmp && newLeave.employeeId === currentEmp.id) {
+                    const msg = `Your leave request has been ${newLeave.status.toLowerCase()} by ${newLeave.approvedBy || 'Manager'}`;
+                    addToast(msg, newLeave.status === 'Approved' ? 'success' : 'warning');
+                    setNotifications(nPrev => {
+                      if (nPrev.some(n => n.text === msg)) return nPrev;
+                      return [
+                        { id: Date.now() + Math.random(), text: msg, time: 'Just now', read: false },
+                        ...nPrev
+                      ];
+                    });
+                  }
+                }
+              }
+            });
+          }
+          return data.data;
+        });
       }
     } catch (err) {
       console.error('Failed to fetch leaves:', err);
     }
-  }, [token, tenantId, logout]);
+  }, [token, tenantId, logout, employees, user, addToast]);
 
   const fetchPayroll = useCallback(async () => {
     if (!token) return;
@@ -1389,7 +1544,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         }
       });
       if (resp.status === 401) { logout(); return; }
@@ -1409,7 +1564,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         }
       });
       if (resp.status === 401) { logout(); return; }
@@ -1429,7 +1584,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         }
       });
       if (resp.status === 401) { logout(); return; }
@@ -1449,7 +1604,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         }
       });
       if (resp.status === 401) { logout(); return; }
@@ -1469,7 +1624,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         }
       });
       if (resp.status === 401) { logout(); return; }
@@ -1490,7 +1645,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(roleData),
       });
@@ -1517,7 +1672,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(roleData),
       });
@@ -1551,7 +1706,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         }
       });
       const data = await resp.json();
@@ -1584,7 +1739,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify({ name: newName })
       });
@@ -1610,7 +1765,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         }
       });
       if (resp.status === 401) { logout(); return; }
@@ -1630,7 +1785,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         }
       });
       if (resp.status === 401) { logout(); return; }
@@ -1650,7 +1805,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         }
       });
       if (resp.status === 401) { logout(); return; }
@@ -1670,7 +1825,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         }
       });
       const data = await resp.json();
@@ -1689,7 +1844,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         }
       });
       const data = await resp.json();
@@ -1708,7 +1863,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         }
       });
       const data = await resp.json();
@@ -1743,7 +1898,20 @@ export function AppProvider({ children }) {
       fetchPayrollAdjustments();
     }
   }, [token, fetchInvoices, fetchQuotes, fetchPayments, fetchLedger, fetchExpenses, fetchGstRecords, fetchEmployees, fetchLeaves, fetchPayroll, fetchAttendance, fetchTasks, fetchReminders, fetchRoles, fetchAuditLogs, fetchContacts, fetchClients, fetchLetters, fetchSubmissions, fetchPayrollAdjustments]);
+  useEffect(() => {
+    if (!token) return;
+    const leavesInterval = setInterval(fetchLeaves, 3000);
 
+    const handleFocus = () => {
+      fetchLeaves();
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(leavesInterval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [token, fetchLeaves]);
   useEffect(() => {
     localStorage.setItem('marketing-campaigns', JSON.stringify(campaigns));
   }, [campaigns]);
@@ -1799,7 +1967,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(payload),
       });
@@ -1826,7 +1994,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(contactData),
       });
@@ -1853,7 +2021,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(updatedData),
       });
@@ -1880,7 +2048,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
       });
       const data = await resp.json();
@@ -1906,7 +2074,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(updatedData),
       });
@@ -1933,7 +2101,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
       });
       const data = await resp.json();
@@ -2178,7 +2346,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(data)
       });
@@ -2207,7 +2375,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(data)
       });
@@ -2235,7 +2403,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         }
       });
       if (resp.status === 401) {
@@ -2352,7 +2520,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(sanitizedEmp),
       });
@@ -2381,7 +2549,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(sanitizedData),
       });
@@ -2406,7 +2574,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
       });
       const data = await resp.json();
@@ -2442,7 +2610,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(payload),
       });
@@ -2480,7 +2648,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(backendPayload),
       });
@@ -2509,7 +2677,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(body),
       });
@@ -2535,7 +2703,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
       });
       const data = await resp.json();
@@ -2550,6 +2718,81 @@ export function AppProvider({ children }) {
       addToast(err.message, 'error');
     }
   }, [token, tenantId, fetchPayroll, addToast]);
+
+  const updatePayrollStatus = useCallback(async (payrollId, status) => {
+    if (!token) return;
+    try {
+      const resp = await fetch(`${API_BASE}/payroll/${payrollId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || getTenantId(),
+        },
+        body: JSON.stringify({ status })
+      });
+      const data = await resp.json();
+      if (data.success) {
+        fetchPayroll();
+        addToast(`Payroll status updated to ${status}.`, 'success');
+        return true;
+      } else {
+        throw new Error(data.message || 'Failed to update payroll status');
+      }
+    } catch (err) {
+      console.error(err);
+      addToast(err.message, 'error');
+      return false;
+    }
+  }, [token, tenantId, fetchPayroll, addToast]);
+
+  const updateOrCreatePayrollStatus = useCallback(async (employeeId, month, status, extraFields = {}) => {
+    if (!token) return;
+    try {
+      const existing = payroll.find(p => p.employeeId === employeeId && p.month === month);
+      if (existing) {
+        return await updatePayrollStatus(existing.id, status);
+      } else {
+        const resp = await fetch(`${API_BASE}/payroll`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'X-Tenant-ID': tenantId || getTenantId(),
+          },
+          body: JSON.stringify({
+            employeeId,
+            employeeName: extraFields.employeeName || '',
+            department: extraFields.department || 'General',
+            designation: extraFields.designation || 'Staff',
+            month,
+            status,
+            basic: parseFloat(extraFields.basic || 0),
+            hra: parseFloat(extraFields.hra || 0),
+            allowances: parseFloat(extraFields.allowances || 0),
+            incentives: parseFloat(extraFields.incentives || 0),
+            bonus: parseFloat(extraFields.bonus || 0),
+            pf: parseFloat(extraFields.pf || 0),
+            esi: parseFloat(extraFields.esi || 0),
+            tds: parseFloat(extraFields.tds || 0),
+            loanDeductions: parseFloat(extraFields.loanDeductions || 0),
+          })
+        });
+        const data = await resp.json();
+        if (data.success) {
+          fetchPayroll();
+          addToast(`Payroll status updated to ${status}.`, 'success');
+          return true;
+        } else {
+          throw new Error(data.message || 'Failed to update payroll status');
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      addToast(err.message, 'error');
+      return false;
+    }
+  }, [token, tenantId, payroll, updatePayrollStatus, fetchPayroll, addToast]);
 
   const clockInOut = useCallback(async (empId, type, details = {}) => {
     if (!token) return;
@@ -2575,7 +2818,7 @@ export function AppProvider({ children }) {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
-            'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+            'X-Tenant-ID': tenantId || getTenantId(),
           },
           body: JSON.stringify(payload)
         });
@@ -2607,7 +2850,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(payload)
       });
@@ -2643,7 +2886,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(cleaned),
       });
@@ -2675,7 +2918,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(cleaned),
       });
@@ -2701,7 +2944,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
       });
       const data = await resp.json();
@@ -2727,7 +2970,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(reminderData),
       });
@@ -2754,7 +2997,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(updateData),
       });
@@ -2780,7 +3023,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
       });
       const data = await resp.json();
@@ -2860,7 +3103,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(reqPayload)
       });
@@ -2887,7 +3130,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify({ status, actionsTaken })
       });
@@ -2914,7 +3157,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify(payload)
       });
@@ -2941,7 +3184,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         }
       });
       const data = await resp.json();
@@ -2967,7 +3210,7 @@ export function AppProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+          'X-Tenant-ID': tenantId || getTenantId(),
         },
         body: JSON.stringify({
           employeeId: empId,
@@ -3051,11 +3294,11 @@ export function AppProvider({ children }) {
   useEffect(() => {
     const root = document.documentElement;
     const isDark = root.classList.contains('dark');
-    
-    // Core color tokens
-    root.style.setProperty('--primary-hover', themeConfig.primary); // derived fallback
-    
     const isSuperAdmin = user?.role === 'super_admin';
+    const wsPrimary = workspaceSettings?.brand_color;
+    const primaryColor = wsPrimary || themeConfig.primary || (isDark ? (isSuperAdmin ? '#2563eb' : '#6366f1') : (isSuperAdmin ? '#0052cc' : '#6366f1'));
+    root.style.setProperty('--primary', primaryColor);
+    root.style.setProperty('--primary-hover', primaryColor);
 
     if (isDark) {
       if (isSuperAdmin) {
@@ -3066,7 +3309,7 @@ export function AppProvider({ children }) {
         root.style.setProperty('--border', '#1e293b');
         root.style.setProperty('--hover', '#1e293b');
         root.style.setProperty('--table-header', '#1a2333');
-        root.style.setProperty('--primary', '#2563eb');
+        root.style.setProperty('--primary', primaryColor);
         root.style.setProperty('--accent', '#818cf8');
       } else {
         // Regular User / Admin - Dark Slate/White-compatible Theme
@@ -3076,7 +3319,7 @@ export function AppProvider({ children }) {
         root.style.setProperty('--border', '#334155');
         root.style.setProperty('--hover', '#1e293b');
         root.style.setProperty('--table-header', '#1e293b');
-        root.style.setProperty('--primary', '#6366f1');
+        root.style.setProperty('--primary', primaryColor);
         root.style.setProperty('--accent', '#a855f7');
       }
     } else {
@@ -3088,7 +3331,7 @@ export function AppProvider({ children }) {
         root.style.setProperty('--border', '#cbd5e1');
         root.style.setProperty('--hover', '#dbeafe');
         root.style.setProperty('--table-header', '#dbeafe');
-        root.style.setProperty('--primary', '#0052cc');
+        root.style.setProperty('--primary', primaryColor);
         root.style.setProperty('--accent', '#805ad5');
       } else {
         // Regular User / Admin - Clean White Theme
@@ -3098,7 +3341,7 @@ export function AppProvider({ children }) {
         root.style.setProperty('--border', '#e2e8f0');
         root.style.setProperty('--hover', '#f1f5f9');
         root.style.setProperty('--table-header', '#f8fafc');
-        root.style.setProperty('--primary', '#6366f1');
+        root.style.setProperty('--primary', primaryColor);
         root.style.setProperty('--accent', '#a855f7');
       }
     }
@@ -3423,6 +3666,7 @@ export function AppProvider({ children }) {
       markAllRead,
       toasts,
       addToast,
+      removeToast,
       darkMode,
       toggleDarkMode,
       activeOrg,
@@ -3487,6 +3731,8 @@ export function AppProvider({ children }) {
       payroll,
       setPayroll,
       processPayrollMonth,
+      updatePayrollStatus,
+      updateOrCreatePayrollStatus,
       attendance,
       setAttendance,
       clockInOut,
@@ -3585,7 +3831,11 @@ export function AppProvider({ children }) {
       updateExpense,
       fetchGstRecords,
       createGstRecord,
-      updateGstRecord
+      updateGstRecord,
+      fetchEmployees,
+      workspaceSettings,
+      refreshWorkspaceSettings,
+      setWorkspaceSettings
     }}>
       {children}
     </AppContext.Provider>

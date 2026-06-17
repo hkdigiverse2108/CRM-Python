@@ -12,6 +12,45 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
+  const [greeting, setGreeting] = useState('Enterprise multi-tenant customer relationship hub');
+  const [companyName, setCompanyName] = useState('AIO CRM Platform');
+  const [logoUrl, setLogoUrl] = useState('');
+  const [brandColor, setBrandColor] = useState('#4f46e5');
+
+  useEffect(() => {
+    const fetchGreeting = async () => {
+      try {
+        const getTenantFromSubdomain = () => {
+          const host = window.location.hostname;
+          const parts = host.split('.');
+          if (parts.length > 2 && parts[0] !== 'www' && parts[0] !== 'localhost') {
+            return parts[0];
+          }
+          return import.meta.env.VITE_DEFAULT_TENANT_ID || '96722';
+        };
+        const savedTenant = localStorage.getItem('auth-tenant-id') || getTenantFromSubdomain();
+        const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+        const resp = await fetch(`${API_BASE}/auth/workspace-greeting`, {
+          headers: {
+            'X-Tenant-ID': savedTenant
+          }
+        });
+        if (resp.ok) {
+          const res = await resp.json();
+          if (res.success && res.data) {
+            setGreeting(res.data.login_greeting || 'Enterprise multi-tenant customer relationship hub');
+            setCompanyName(res.data.company_name || 'AIO CRM Platform');
+            setLogoUrl(res.data.logo_url || '');
+            setBrandColor(res.data.brand_color || '#4f46e5');
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load greeting:', err);
+      }
+    };
+    fetchGreeting();
+  }, []);
+
   // Redirect if already logged in
   useEffect(() => {
     if (isAuthenticated) {
@@ -58,11 +97,15 @@ export default function Login() {
         
         {/* Header/Branding */}
         <div className="flex flex-col items-center text-center mb-8">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/25 mb-4 animate-[pulse_2s_infinite]">
-            <span className="text-white text-lg font-black tracking-tighter">A</span>
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg mb-4 animate-[pulse_2s_infinite]" style={{ background: `linear-gradient(135deg, ${brandColor}, #6366f1)` }}>
+            {logoUrl ? (
+              <img src={logoUrl.startsWith('/') ? `${import.meta.env.VITE_API_BASE_URL.replace('/api', '')}${logoUrl}` : logoUrl} alt="Logo" className="w-9 h-9 object-contain rounded-xl" />
+            ) : (
+              <span className="text-white text-lg font-black tracking-tighter">{companyName.charAt(0)}</span>
+            )}
           </div>
-          <h1 className="text-2xl font-extrabold text-white tracking-tight">AIO CRM Platform</h1>
-          <p className="text-slate-400 text-xs mt-2 font-medium">Enterprise multi-tenant customer relationship hub</p>
+          <h1 className="text-2xl font-extrabold text-white tracking-tight">{companyName}</h1>
+          <p className="text-slate-400 text-xs mt-2 font-medium">{greeting}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -124,7 +167,7 @@ export default function Login() {
 
         {/* Info Footnote */}
         <div className="mt-8 text-center text-[10px] text-slate-500 border-t border-slate-800/60 pt-4">
-          <p>Super Admin: <code className="text-slate-400">superadmin@rapidmodel.ai</code></p>
+          <p>Super Admin: <code className="text-slate-400">superadmin@enterprisehub.ai</code></p>
           <p className="mt-1">Workspace Admin: <code className="text-slate-400">hk@gmail.com</code> (workspace <code className="text-slate-400">71110</code>)</p>
         </div>
 

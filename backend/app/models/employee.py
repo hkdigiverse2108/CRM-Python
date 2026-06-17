@@ -46,6 +46,7 @@ class Employee:
     def to_dict(self) -> dict:
         return {
             "id": self.employee_id,
+            "employee_id": self.employee_id,
             "tenantId": self.workspace_id,
             "name": self.name,
             "role": self.role,

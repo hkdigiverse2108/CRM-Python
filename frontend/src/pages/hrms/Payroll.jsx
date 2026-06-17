@@ -12,6 +12,8 @@ export default function Payroll() {
   const { 
     payroll, 
     processPayrollMonth, 
+    updatePayrollStatus,
+    updateOrCreatePayrollStatus,
     employees, 
     attendance,
     leaves,
@@ -22,7 +24,9 @@ export default function Payroll() {
     hrmsEmployeeId,
     user,
     activeOrg,
-    addToast 
+    addToast,
+    workspaceSettings,
+    tasks
   } = useApp();
 
   const location = useLocation();
@@ -32,13 +36,71 @@ export default function Payroll() {
       ? 'bonuses'
       : 'processing';
 
-  const activeView = hrmsRole === 'Employee' ? 'payslips' : view;
+  const loggedInEmp = useMemo(() => {
+    return employees.find(e => e.email === user?.email);
+  }, [employees, user]);
+
+  const isAdmin = useMemo(() => {
+    return user?.role === 'super_admin' || user?.role_name === 'Super Admin' || 
+           user?.role === 'admin' || user?.role_name === 'Admin' || 
+           user?.role_name === 'Workspace Admin' || user?.role_name === 'Organization Admin' || 
+           user?.role?.includes('admin') || user?.role_name?.toLowerCase()?.includes('admin') ||
+           user?.role_name === 'HR Manager';
+  }, [user]);
+
+  const isManager = useMemo(() => {
+    if (isAdmin) return false;
+    return loggedInEmp && employees.some(e => e.reportingManager && 
+      (e.reportingManager === loggedInEmp.id ||
+       e.reportingManager === loggedInEmp.employee_id ||
+       e.reportingManager.toLowerCase().trim() === loggedInEmp.name?.toLowerCase().trim() ||
+       e.reportingManager.toLowerCase().trim() === user?.full_name?.toLowerCase()?.trim()));
+  }, [employees, loggedInEmp, isAdmin, user]);
+
+  const isStandardEmployee = useMemo(() => {
+    if (hrmsRole === 'Employee') return true;
+    return !isAdmin && !isManager;
+  }, [hrmsRole, isAdmin, isManager]);
+
+  const activeView = isStandardEmployee ? 'payslips' : view;
 
   const currentEmployee = useMemo(() => {
     return employees.find(emp => emp.id === hrmsEmployeeId || emp.employee_id === hrmsEmployeeId) ||
            employees.find(emp => emp.email === user?.email) ||
            null;
   }, [employees, hrmsEmployeeId, user]);
+
+  const visibleEmployees = useMemo(() => {
+    const nonAdminEmployees = employees.filter(e => {
+      const roleLower = (e.role || '').toLowerCase();
+      const nameLower = (e.name || '').toLowerCase();
+      const emailLower = (e.email || '').toLowerCase();
+      
+      const isSystemAdmin = roleLower.includes('admin') || 
+                            roleLower.includes('owner') || 
+                            roleLower.includes('super') ||
+                            emailLower.includes('admin') ||
+                            nameLower.includes('admin') ||
+                            user?.email === e.email && isAdmin;
+      
+      return !isSystemAdmin;
+    });
+
+    if (isStandardEmployee) {
+      const self = currentEmployee || loggedInEmp;
+      return self ? nonAdminEmployees.filter(e => e.id === self.id) : [];
+    }
+    if (isAdmin) return nonAdminEmployees;
+    return nonAdminEmployees.filter(e => {
+      const isSelf = loggedInEmp && e.id === loggedInEmp.id;
+      const isManagerOfThisEmp = loggedInEmp && e.reportingManager && 
+        (e.reportingManager === loggedInEmp.id ||
+         e.reportingManager === loggedInEmp.employee_id ||
+         e.reportingManager.toLowerCase().trim() === loggedInEmp.name?.toLowerCase().trim() ||
+         e.reportingManager.toLowerCase().trim() === user?.full_name?.toLowerCase()?.trim());
+      return isSelf || isManagerOfThisEmp;
+    });
+  }, [employees, isAdmin, isStandardEmployee, loggedInEmp, currentEmployee, user]);
 
   // State for selectors
   const [selectedMonthName, setSelectedMonthName] = useState('June');
@@ -50,11 +112,11 @@ export default function Payroll() {
   // Payslip filters
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const activeEmployeeId = useMemo(() => {
-    if (hrmsRole === 'Employee') {
+    if (isStandardEmployee) {
       return currentEmployee?.id || '';
     }
-    return selectedEmployeeId || currentEmployee?.id || employees[0]?.id || '';
-  }, [hrmsRole, currentEmployee, selectedEmployeeId, employees]);
+    return selectedEmployeeId || visibleEmployees[0]?.id || '';
+  }, [isStandardEmployee, currentEmployee, selectedEmployeeId, visibleEmployees]);
 
   const [payslipMonth, setPayslipMonth] = useState('June');
   const [payslipYear, setPayslipYear] = useState('2026');
@@ -64,6 +126,7 @@ export default function Payroll() {
   const [adjTypeFilter, setAdjTypeFilter] = useState('All');
   const [adjPeriodFilter, setAdjPeriodFilter] = useState('All Time');
   const [isAddAdjOpen, setIsAddAdjOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   // New adjustment form state
   const [newAdjEmpId, setNewAdjEmpId] = useState('');
@@ -78,9 +141,45 @@ export default function Payroll() {
 
   // Derived calculations for the Payroll Processing table
   const processedTableData = useMemo(() => {
-    return employees.map(emp => {
-      // 1. Calculate working days (e.g. 26)
-      const workingDays = 26;
+    return visibleEmployees.map(emp => {
+      // 1. Calculate working days dynamically based on the selected month/year and workspace settings
+      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      const monthIdx = monthNames.indexOf(selectedMonthName);
+      const yearNum = parseInt(selectedYear);
+      
+      let expectedWorkingDays = Number(workspaceSettings?.working_days) || 26;
+      if (monthIdx !== -1 && !isNaN(yearNum)) {
+        const totalDays = new Date(yearNum, monthIdx + 1, 0).getDate();
+        const monthPrefix = `${selectedYear}-${String(monthIdx + 1).padStart(2, '0')}`;
+        
+        // Find all calendar holiday dates for the processed month
+        const holidayDates = new Set();
+        if (tasks && Array.isArray(tasks)) {
+          tasks.forEach(t => {
+            if (t.type?.toLowerCase() === 'holiday') {
+              const hDate = t.dueDate || t.startDate;
+              if (hDate && hDate.startsWith(monthPrefix)) {
+                holidayDates.add(hDate);
+              }
+            }
+          });
+        }
+
+        let offDaysCount = 0;
+        for (let d = 1; d <= totalDays; d++) {
+          const dateStr = `${selectedYear}-${String(monthIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+          const dateObj = new Date(yearNum, monthIdx, d);
+          const dayOfWeek = dateObj.getDay(); // 0 = Sunday
+          
+          if (dayOfWeek === 0) {
+            offDaysCount++;
+          } else if (holidayDates.has(dateStr)) {
+            offDaysCount++;
+          }
+        }
+        expectedWorkingDays = totalDays - offDaysCount;
+      }
+      const workingDays = expectedWorkingDays;
 
       // 2. Count worked days from attendance records for the selected month/year
       // Format of date in attendance is YYYY-MM-DD
@@ -109,12 +208,12 @@ export default function Payroll() {
 
       // 5. Basic pay & adjustments
       const sal = emp.salaryStructure || {};
-      const baseSalary = parseFloat(sal.basic || 45000);
-      const hra = parseFloat(sal.hra || 18000);
-      const allowances = parseFloat(sal.allowances || 7000);
+      const baseSalary = parseFloat(sal.basic || 0);
+      const hra = parseFloat(sal.hra || 0);
+      const allowances = parseFloat(sal.allowances || 0);
       
-      // Calculate actual basic based on worked days
-      const earnedBasic = worked > 0 ? (baseSalary * (worked / workingDays)) : 0;
+      // Use the full base basic salary as defined by the admin
+      const earnedBasic = baseSalary;
 
       // Fetch adjustments for this employee in this month
       const empAdjustments = payrollAdjustments.filter(adj => 
@@ -135,7 +234,7 @@ export default function Payroll() {
       const absentDays = Math.max(0, workingDays - worked - totalLeaves);
       const unpaidAbsenceDeduction = worked > 0 ? (baseSalary / workingDays) * absentDays : baseSalary;
 
-      const totalDeductions = parseFloat(sal.pf || 1800) + parseFloat(sal.esi || 0) + parseFloat(sal.tds || 2500) + adhocDeductions + unpaidAbsenceDeduction;
+      const totalDeductions = parseFloat(sal.pf || 0) + parseFloat(sal.esi || 0) + parseFloat(sal.tds || 0) + adhocDeductions + unpaidAbsenceDeduction;
       const netPay = Math.max(0, earnedBasic + hra + allowances + bonus - totalDeductions);
 
       // Find matching payroll slip if processed
@@ -155,12 +254,12 @@ export default function Payroll() {
         deductions: totalDeductions,
         unpaidAbsence: unpaidAbsenceDeduction,
         absentDays,
-        netPay: slip ? slip.netPay : netPay,
+        netPay: netPay,
         status: slip ? slip.status : 'Pending',
         slipId: slip?.id
       };
     });
-  }, [employees, selectedMonthName, selectedYear, attendance, leaves, payrollAdjustments, payroll, selectedMonth]);
+  }, [visibleEmployees, selectedMonthName, selectedYear, attendance, leaves, payrollAdjustments, payroll, selectedMonth]);
 
   const filteredProcessedData = useMemo(() => {
     return processedTableData.filter(p => {
@@ -201,6 +300,10 @@ export default function Payroll() {
     const targetEmp = employees.find(e => e.id === activeEmployeeId || e.employee_id === activeEmployeeId);
     if (!targetEmp) return [];
 
+    // Ensure the employee is visible to current user (double check)
+    const isVisible = visibleEmployees.some(e => e.id === activeEmployeeId || e.employee_id === activeEmployeeId);
+    if (!isVisible) return [];
+
     const processedSlips = payroll.filter(p => p.employeeId === activeEmployeeId || p.employee_id === activeEmployeeId);
     
     return processedSlips.map(slip => {
@@ -219,7 +322,8 @@ export default function Payroll() {
         esi: parseFloat(slip.esi || 0),
         tds: parseFloat(slip.tds || 0),
         bonus: parseFloat(slip.bonus || 0) + parseFloat(slip.incentives || 0),
-        totalDeductions: parseFloat(slip.totalDeductions || 0)
+        totalDeductions: parseFloat(slip.totalDeductions || 0),
+        unpaidAbsence: parseFloat(slip.loanDeductions || 0)
       };
     });
   }, [activeEmployeeId, payroll, employees]);
@@ -227,6 +331,9 @@ export default function Payroll() {
   // Adjustments view logic
   const filteredAdjustments = useMemo(() => {
     return payrollAdjustments.filter(adj => {
+      const isVisible = visibleEmployees.some(emp => emp.id === adj.employeeId || emp.employee_id === adj.employeeId);
+      if (!isVisible) return false;
+
       const matchesSearch = adj.reason.toLowerCase().includes(adjSearchQuery.toLowerCase()) || 
                             adj.employeeName.toLowerCase().includes(adjSearchQuery.toLowerCase());
       const matchesType = adjTypeFilter === 'All' || adj.type === adjTypeFilter;
@@ -242,11 +349,13 @@ export default function Payroll() {
 
       return matchesSearch && matchesType && matchesPeriod;
     });
-  }, [payrollAdjustments, adjSearchQuery, adjTypeFilter, adjPeriodFilter]);
+  }, [payrollAdjustments, adjSearchQuery, adjTypeFilter, adjPeriodFilter, visibleEmployees]);
 
   const handleAddAdjustmentSubmit = async (e) => {
     e.preventDefault();
-    const emp = employees.find(e => e.id === newAdjEmpId);
+    if (isSubmitting) return;
+    
+    const emp = visibleEmployees.find(e => e.id === newAdjEmpId);
     if (!emp) {
       addToast('Please select a valid employee.', 'error');
       return;
@@ -261,11 +370,16 @@ export default function Payroll() {
       reason: newAdjReason
     };
 
-    const res = await addPayrollAdjustment(payload);
-    if (res) {
-      setIsAddAdjOpen(false);
-      setNewAdjAmount('');
-      setNewAdjReason('');
+    setIsSubmitting(true);
+    try {
+      const res = await addPayrollAdjustment(payload);
+      if (res) {
+        setIsAddAdjOpen(false);
+        setNewAdjAmount('');
+        setNewAdjReason('');
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -337,7 +451,7 @@ export default function Payroll() {
             <div className="bg-card border border-border rounded-2xl p-5 flex items-center justify-between shadow-xs">
               <div>
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Total Employees</span>
-                <h4 className="text-xl font-extrabold mt-1 text-slate-900 dark:text-white">{employees.length}</h4>
+                <h4 className="text-xl font-extrabold mt-1 text-slate-900 dark:text-white">{visibleEmployees.length}</h4>
               </div>
               <div className="p-3 bg-teal-500/10 rounded-2xl text-teal-500"><User size={20} /></div>
             </div>
@@ -403,6 +517,7 @@ export default function Payroll() {
                     <th className="px-5 py-3 text-right">Basic</th>
                     <th className="px-5 py-3 text-right">Bonus / Incentives</th>
                     <th className="px-5 py-3 text-right">Deductions</th>
+                    <th className="px-5 py-3 text-center">Status</th>
                     <th className="px-5 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -425,6 +540,62 @@ export default function Payroll() {
                             Unpaid Absence - {row.absentDays}.0 day(s): {formatCurrency(row.unpaidAbsence)}
                           </p>
                         )}
+                      </td>
+                      <td className="px-5 py-3.5 text-center">
+                        <div className="inline-flex rounded-lg border border-border p-0.5 bg-muted/50">
+                          <button
+                            onClick={async () => {
+                              const emp = employees.find(e => e.id === row.employeeId);
+                              await updateOrCreatePayrollStatus(row.employeeId, selectedMonth, 'Paid', {
+                                employeeName: row.employeeName,
+                                department: row.department,
+                                designation: row.designation,
+                                basic: row.basic,
+                                hra: emp?.salaryStructure?.hra || 0,
+                                allowances: emp?.salaryStructure?.allowances || 0,
+                                incentives: emp?.salaryStructure?.incentives || 0,
+                                bonus: row.bonus,
+                                pf: emp?.salaryStructure?.pf || 0,
+                                esi: emp?.salaryStructure?.esi || 0,
+                                tds: emp?.salaryStructure?.tds || 0,
+                                loanDeductions: (row.unpaidAbsence || 0) + (emp?.salaryStructure?.loanDeductions || 0),
+                              });
+                            }}
+                            className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all ${
+                              row.status === 'Paid'
+                                ? 'bg-success text-white shadow-xs'
+                                : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            Paid
+                          </button>
+                          <button
+                            onClick={async () => {
+                              const emp = employees.find(e => e.id === row.employeeId);
+                              await updateOrCreatePayrollStatus(row.employeeId, selectedMonth, 'Pending', {
+                                employeeName: row.employeeName,
+                                department: row.department,
+                                designation: row.designation,
+                                basic: row.basic,
+                                hra: emp?.salaryStructure?.hra || 0,
+                                allowances: emp?.salaryStructure?.allowances || 0,
+                                incentives: emp?.salaryStructure?.incentives || 0,
+                                bonus: row.bonus,
+                                pf: emp?.salaryStructure?.pf || 0,
+                                esi: emp?.salaryStructure?.esi || 0,
+                                tds: emp?.salaryStructure?.tds || 0,
+                                loanDeductions: (row.unpaidAbsence || 0) + (emp?.salaryStructure?.loanDeductions || 0),
+                              });
+                            }}
+                            className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all ${
+                              row.status !== 'Paid'
+                                ? 'bg-amber-500 text-white shadow-xs'
+                                : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            Unpaid
+                          </button>
+                        </div>
                       </td>
                       <td className="px-5 py-3.5 text-right flex items-center justify-end gap-1.5 mt-2">
                         <button
@@ -469,9 +640,9 @@ export default function Payroll() {
                 value={activeEmployeeId} 
                 onChange={e => setSelectedEmployeeId(e.target.value)}
                 className="w-full bg-muted border border-border rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
-                disabled={hrmsRole === 'Employee'}
+                disabled={isStandardEmployee}
               >
-                {employees.map(emp => (
+                {visibleEmployees.map(emp => (
                   <option key={emp.id} value={emp.id}>{emp.name}</option>
                 ))}
               </select>
@@ -503,17 +674,22 @@ export default function Payroll() {
 
             <button 
               onClick={() => {
-                const emp = employees.find(e => e.id === activeEmployeeId);
+                const emp = visibleEmployees.find(e => e.id === activeEmployeeId);
                 if (emp) {
+                  const basic = parseFloat(emp.salaryStructure?.basic || 0);
+                  const pf = parseFloat(emp.salaryStructure?.pf || 0);
+                  const tds = parseFloat(emp.salaryStructure?.tds || 0);
+                  const hra = parseFloat(emp.salaryStructure?.hra || 0);
+                  const allowances = parseFloat(emp.salaryStructure?.allowances || 0);
                   handleDownloadPayslip({
                     employeeId: emp.id,
                     employeeName: emp.name,
                     department: emp.department || 'General',
                     designation: emp.role || 'Staff',
-                    basic: parseFloat(emp.salaryStructure?.basic || 45000),
+                    basic: basic,
                     bonus: 0,
-                    deductions: parseFloat(emp.salaryStructure?.pf || 1800) + parseFloat(emp.salaryStructure?.tds || 2500),
-                    netPay: parseFloat(emp.salaryStructure?.basic || 45000) - parseFloat(emp.salaryStructure?.pf || 1800) - parseFloat(emp.salaryStructure?.tds || 2500),
+                    deductions: pf + tds,
+                    netPay: basic + hra + allowances - pf - tds,
                     status: 'DRAFT'
                   });
                 }
@@ -563,6 +739,7 @@ export default function Payroll() {
                             basic: row.basic,
                             bonus: row.bonus,
                             deductions: row.totalDeductions,
+                            unpaidAbsence: row.unpaidAbsence,
                             netPay: row.netSalary,
                             status: row.status
                           })}
@@ -628,7 +805,7 @@ export default function Payroll() {
 
             <button 
               onClick={() => {
-                setNewAdjEmpId(employees[0]?.id || '');
+                setNewAdjEmpId(visibleEmployees[0]?.id || '');
                 setIsAddAdjOpen(true);
               }}
               className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold transition-all shadow-xs shrink-0"
@@ -705,12 +882,13 @@ export default function Payroll() {
         const emp = employees.find(e => e.id === inspectedRecord.employeeId);
         const sal = emp?.salaryStructure || {};
         
-        // Resolve dynamic tenant details
+        // Resolve dynamic tenant details from workspaceSettings
         const isHk = activeOrg === 'HK Digiverse LLP' || activeOrg === 'HK Digiverse' || String(activeOrg).toLowerCase().includes('hk');
-        const companyName = isHk ? 'HARIKRUSHN DIGIVERSE LLP' : 'RAPIDMODEL CORP';
-        const companyAddress = isHk ? 'SURAT, GUJARAT, INDIA' : 'BANGALORE, KARNATAKA, INDIA';
-        const companyGstin = isHk ? '24APQPN3916P1Z4' : '29AAFCR1234A1Z1';
-        const companyLoc = isHk ? 'SURAT' : 'BANGALORE';
+        const companyName = workspaceSettings?.company_name || (isHk ? 'HARIKRUSHN DIGIVERSE LLP' : 'RAPIDMODEL CORP');
+        const companyAddress = workspaceSettings?.company_address || (isHk ? 'SURAT, GUJARAT, INDIA' : 'BANGALORE, KARNATAKA, INDIA');
+        const companyGstin = workspaceSettings?.company_gstin || (isHk ? '24APQPN3916P1Z4' : '29AAFCR1234A1Z1');
+        const companyPan = workspaceSettings?.company_pan || (isHk ? 'ABCDE1234F' : 'XYZ123456');
+        const companyLoc = workspaceSettings?.company_address ? workspaceSettings.company_address.split(',')[0].trim() : (isHk ? 'SURAT' : 'BANGALORE');
         const bankName = emp?.bankDetails?.bankName || '-';
         const accNo = emp?.bankDetails?.accountNumber || '-';
         const ifsc = emp?.bankDetails?.ifscCode || '-';
@@ -722,19 +900,26 @@ export default function Payroll() {
         const allowancesAmt = Math.round(inspectedRecord.basic > 0 ? parseFloat(sal.allowances || 0) : 0);
         const bonusAmt = Math.round(inspectedRecord.bonus);
         const totalEarnings = basicAmt + hraAmt + allowancesAmt + bonusAmt;
-
-        const unpaidAbsence = Math.round(inspectedRecord.unpaidAbsence);
+        
+        const deductionsVal = parseFloat(inspectedRecord.deductions !== undefined ? inspectedRecord.deductions : inspectedRecord.totalDeductions || 0);
+        const unpaidAbsence = Math.round(inspectedRecord.unpaidAbsence || 0);
         const secDeposit = 0;
         const leaveDeduction = unpaidAbsence;
-        const penaltyDeduction = Math.max(0, Math.round(inspectedRecord.deductions) - unpaidAbsence);
+        const penaltyDeduction = Math.max(0, Math.round(deductionsVal) - unpaidAbsence);
         const totalDeductions = secDeposit + penaltyDeduction + leaveDeduction;
         
         const netAmt = Math.max(0, totalEarnings - totalDeductions);
         const netInWords = numberToWords(netAmt);
 
         return (
-          <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs overflow-y-auto">
-            <div className="bg-white text-black border border-slate-350 rounded-xl p-5 w-full max-w-2xl shadow-2xl space-y-4 print:p-0 print:border-none print:shadow-none">
+          <div 
+            className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs overflow-y-auto cursor-pointer"
+            onClick={() => setInspectedRecord(null)}
+          >
+            <div 
+              className="bg-white text-black border border-slate-350 rounded-xl p-5 w-full max-w-2xl shadow-2xl space-y-4 print:p-0 print:border-none print:shadow-none cursor-default"
+              onClick={e => e.stopPropagation()}
+            >
               
               {/* Modal controls - hidden in print */}
               <div className="flex justify-between items-center border-b pb-2 print:hidden">
@@ -762,7 +947,7 @@ export default function Payroll() {
                 <div className="text-center border-b-2 border-black pb-2 space-y-0.5">
                   <h2 className="text-sm font-extrabold tracking-wider">{companyName}</h2>
                   <p className="text-[10px] font-bold text-slate-700">{companyAddress}</p>
-                  <p className="text-[10px] font-bold text-slate-700">GSTIN: {companyGstin}</p>
+                  <p className="text-[10px] font-bold text-slate-700">GSTIN: {companyGstin} {companyPan && `| PAN: ${companyPan}`}</p>
                   <div className="border-t border-black mt-2 pt-1 font-extrabold text-[11px] uppercase">
                     Salary Slip
                   </div>
@@ -927,6 +1112,24 @@ export default function Payroll() {
 
               </div>
 
+              {/* Bottom controls - hidden in print */}
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 print:hidden">
+                <button
+                  type="button"
+                  onClick={() => setInspectedRecord(null)}
+                  className="px-4 py-2 border border-slate-300 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-50 cursor-pointer"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-4 py-2 bg-primary text-white text-xs font-bold rounded-xl hover:bg-primary-hover flex items-center gap-1 cursor-pointer"
+                >
+                  <Download size={13} /> Print / Save PDF
+                </button>
+              </div>
+
               {/* Print stylesheet */}
               <style dangerouslySetInnerHTML={{__html: `
                 @media print {
@@ -977,7 +1180,7 @@ export default function Payroll() {
                   className="w-full bg-muted border border-border rounded-xl px-4.5 py-2.5 font-semibold focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
                   required
                 >
-                  {employees.map(emp => (
+                  {visibleEmployees.map(emp => (
                     <option key={emp.id} value={emp.id}>{emp.name}</option>
                   ))}
                 </select>
@@ -1045,9 +1248,10 @@ export default function Payroll() {
               </button>
               <button 
                 type="submit"
-                className="px-4 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold"
+                className="px-4 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isSubmitting}
               >
-                Save Adjustment
+                {isSubmitting ? 'Saving...' : 'Save Adjustment'}
               </button>
             </div>
           </form>

@@ -70,6 +70,39 @@ class AttendanceService:
             if not employee:
                 raise HTTPException(status_code=404, detail="Employee not found")
 
+            # Determine dynamic late status based on workspace settings
+            status_val = "Present"
+            try:
+                from backend.app.core.database import get_db
+                from sqlalchemy import text
+                with get_db() as db:
+                    row = db.execute(text("SELECT shift_start FROM workspaces WHERE workspace_id = :ws_id"), {"ws_id": tenant_id}).mappings().first()
+                    shift_start = row["shift_start"] if (row and row["shift_start"]) else "09:00"
+                
+                def time_to_mins(ts: str) -> int:
+                    ts = ts.strip().upper()
+                    if "AM" in ts or "PM" in ts:
+                        parts = ts.split()
+                        h_m = parts[0].split(":")
+                        h = int(h_m[0])
+                        m = int(h_m[1])
+                        if parts[1] == "PM" and h < 12:
+                            h += 12
+                        if parts[1] == "AM" and h == 12:
+                            h = 0
+                        return h * 60 + m
+                    else:
+                        h_m = ts.split(":")
+                        return int(h_m[0]) * 60 + int(h_m[1])
+                
+                ci_mins = time_to_mins(time_now)
+                ss_mins = time_to_mins(shift_start)
+                if ci_mins > ss_mins:
+                    status_val = "Late"
+            except Exception as e:
+                print(f"Error checking late punch: {e}")
+                status_val = "Present"
+
             att = Attendance(
                 workspace_id=tenant_id,
                 employee_id=employee_id,
@@ -82,7 +115,7 @@ class AttendanceService:
                 break_duration="0h 0m",
                 overtime_hours=0.0,
                 method="Web Check-In",
-                status="Present",
+                status=status_val,
                 active=True,
                 current_status="punch-in",
                 break_history="[]"
@@ -149,6 +182,25 @@ class AttendanceService:
             # Calculate final production hours (total elapsed - break duration)
             total_elapsed_mins = calculate_time_diff_minutes(existing.check_in, time_now)
             
+            # Fetch configured break duration and start/end times from workspaces
+            config_break_mins = 60
+            db_break_start = "01:00 PM"
+            db_break_end = "02:00 PM"
+            try:
+                from backend.app.core.database import get_db
+                from sqlalchemy import text
+                with get_db() as db:
+                    row = db.execute(text("SELECT break_duration, break_start, break_end FROM workspaces WHERE workspace_id = :ws_id"), {"ws_id": tenant_id}).mappings().first()
+                    if row:
+                        if row.get("break_start") and row.get("break_end"):
+                            db_break_start = row["break_start"]
+                            db_break_end = row["break_end"]
+                            config_break_mins = calculate_time_diff_minutes(row["break_start"], row["break_end"])
+                        elif row.get("break_duration") is not None:
+                            config_break_mins = int(row["break_duration"])
+            except Exception as e:
+                print(f"Error fetching break_duration: {e}")
+
             # Calculate total break duration
             total_break_mins = 0
             try:
@@ -163,6 +215,12 @@ class AttendanceService:
             for b in breaks:
                 if b.get("start") and b.get("end"):
                     total_break_mins += calculate_time_diff_minutes(b["start"], b["end"])
+
+            # If no manual breaks were recorded, automatically apply the configured break time
+            if (not breaks or total_break_mins == 0) and config_break_mins > 0:
+                total_break_mins = config_break_mins
+                # Automatically log a default break slot
+                breaks = [{"start": db_break_start, "end": db_break_end}]
 
             production_mins = max(0, total_elapsed_mins - total_break_mins)
             production_hours = round(production_mins / 60.0, 2)

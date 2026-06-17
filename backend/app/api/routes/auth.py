@@ -89,3 +89,48 @@ async def logout(
     Invalidate the user session/token (client should discard token).
     """
     return success_response(message="Logged out successfully")
+
+
+@router.get("/workspace-greeting")
+async def get_workspace_greeting(request: Request):
+    from backend.app.core.database import get_db
+    from sqlalchemy import text
+    
+    tenant_id = None
+    try:
+        tenant_id = request.state.tenant.id
+    except AttributeError:
+        pass
+        
+    if not tenant_id:
+        tenant_id = request.headers.get("X-Tenant-ID") or "rapidmodel_corp"
+        
+    with get_db() as db:
+        row = db.execute(text("""
+            SELECT workspace_name, logo_url, brand_color, login_greeting 
+            FROM workspaces WHERE workspace_id = :ws_id
+        """), {"ws_id": tenant_id}).mappings().first()
+        
+        if not row:
+            # Try to match custom domain
+            host = request.headers.get("host", "")
+            row = db.execute(text("""
+                SELECT workspace_name, logo_url, brand_color, login_greeting 
+                FROM workspaces WHERE custom_domain = :domain
+            """), {"domain": host}).mappings().first()
+            
+        if not row:
+            return success_response(data={
+                "company_name": "AIO CRM Platform",
+                "logo_url": None,
+                "brand_color": "#4f46e5",
+                "login_greeting": "Enterprise multi-tenant customer relationship hub"
+            })
+            
+        return success_response(data={
+            "company_name": row["workspace_name"],
+            "logo_url": row["logo_url"],
+            "brand_color": row["brand_color"],
+            "login_greeting": row["login_greeting"] or "Enterprise multi-tenant customer relationship hub"
+        })
+

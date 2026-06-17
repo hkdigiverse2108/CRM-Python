@@ -15,7 +15,8 @@ export default function Directory() {
     editEmployee, 
     deleteEmployee, 
     updateEmployeeStatus,
-    addToast 
+    addToast,
+    user
   } = useApp();
 
   const [search, setSearch] = useState('');
@@ -44,18 +45,104 @@ export default function Directory() {
   const [transferFields, setTransferFields] = useState({ department: '', workLocation: '' });
   const [promoteFields, setPromoteFields] = useState({ role: '', basic: 60000, hra: 24000 });
 
+  const loggedInEmp = useMemo(() => {
+    return employees.find(e => e.email === user?.email);
+  }, [employees, user]);
+
+  const isAdmin = useMemo(() => {
+    return user?.role === 'super_admin' || user?.role_name === 'Super Admin' || 
+           user?.role === 'admin' || user?.role_name === 'Admin' || 
+           user?.role_name === 'Workspace Admin' || user?.role_name === 'Organization Admin' || 
+           user?.role?.includes('admin') || user?.role_name?.toLowerCase()?.includes('admin') ||
+           user?.role_name === 'HR Manager';
+  }, [user]);
+
+  const canManageEmployee = (emp) => {
+    if (isAdmin) return true;
+    if (!emp) return false;
+    const isManagerOfEmp = loggedInEmp && emp.reportingManager && 
+      (emp.reportingManager === loggedInEmp.id ||
+       emp.reportingManager === loggedInEmp.employee_id ||
+       emp.reportingManager.toLowerCase().trim() === loggedInEmp.name?.toLowerCase().trim() ||
+       emp.reportingManager.toLowerCase().trim() === user?.full_name?.toLowerCase()?.trim());
+    return !!isManagerOfEmp;
+  };
+
+  const canEditPersonalOnly = (emp) => {
+    if (!emp) return false;
+    return loggedInEmp?.id === emp.id;
+  };
+
+  const editingEmp = formFields.id ? employees.find(e => e.id === formFields.id) : null;
+  const isSelfEditing = !!(editingEmp && canEditPersonalOnly(editingEmp) && !canManageEmployee(editingEmp));
+
+  const startEditEmployee = (emp) => {
+    setFormFields({
+      id: emp.id,
+      name: emp.name || '',
+      role: emp.role || '',
+      department: emp.department || 'Engineering',
+      email: emp.email || '',
+      password: '', // Leave blank unless updating
+      phone: emp.phone || '',
+      gender: emp.gender || 'Male',
+      dob: emp.dob || '',
+      bloodGroup: emp.bloodGroup || 'O+',
+      maritalStatus: emp.maritalStatus || 'Single',
+      emergencyContact: emp.emergencyContact || '',
+      currentAddress: emp.currentAddress || '',
+      permanentAddress: emp.permanentAddress || '',
+      aadhaarNumber: emp.aadhaarNumber || '',
+      panNumber: emp.panNumber || '',
+      bankName: emp.bankDetails?.bankName || 'HDFC Bank',
+      accountNumber: emp.bankDetails?.accountNumber || '',
+      ifscCode: emp.bankDetails?.ifscCode || '',
+      uanNumber: emp.uanNumber || '',
+      pfNumber: emp.pfNumber || '',
+      reportingManager: emp.reportingManager || '',
+      employmentType: emp.employmentType || 'Full-Time',
+      joinDate: emp.joinDate || '',
+      shiftAssignment: emp.shiftAssignment || 'General Shift',
+      workLocation: emp.workLocation || 'Bangalore Office',
+      basic: emp.salaryStructure?.basic || 50000,
+      hra: emp.salaryStructure?.hra || 20000,
+      allowances: emp.salaryStructure?.allowances || 5000,
+      incentives: emp.salaryStructure?.incentives || 0,
+      bonus: emp.salaryStructure?.bonus || 0,
+      pf: emp.salaryStructure?.pf || 6000,
+      esi: emp.salaryStructure?.esi || 375,
+      tds: emp.salaryStructure?.tds || 2500,
+      loanDeductions: emp.salaryStructure?.loanDeductions || 0,
+      attendanceStatus: emp.attendanceStatus || 'Present'
+    });
+    setShowAddModal(true);
+  };
+
   const departments = useMemo(() => {
     return ['All', ...new Set(employees.map(e => e.department))];
   }, [employees]);
 
+  const visibleEmployees = useMemo(() => {
+    if (isAdmin) return employees;
+    return employees.filter(e => {
+      const isSelf = loggedInEmp && e.id === loggedInEmp.id;
+      const isManagerOfThisEmp = loggedInEmp && e.reportingManager && 
+        (e.reportingManager === loggedInEmp.id ||
+         e.reportingManager === loggedInEmp.employee_id ||
+         e.reportingManager.toLowerCase().trim() === loggedInEmp.name?.toLowerCase().trim() ||
+         e.reportingManager.toLowerCase().trim() === user?.full_name?.toLowerCase()?.trim());
+      return isSelf || isManagerOfThisEmp;
+    });
+  }, [employees, isAdmin, loggedInEmp, user]);
+
   const filtered = useMemo(() => {
-    return employees.filter(e =>
+    return visibleEmployees.filter(e =>
       (deptFilter === 'All' || e.department === deptFilter) &&
       (e.name.toLowerCase().includes(search.toLowerCase()) || 
        e.role.toLowerCase().includes(search.toLowerCase()) ||
        e.id.toLowerCase().includes(search.toLowerCase()))
     );
-  }, [employees, deptFilter, search]);
+  }, [visibleEmployees, deptFilter, search]);
 
   const handleAddSubmit = (e) => {
     e.preventDefault();
@@ -107,7 +194,13 @@ export default function Directory() {
       payload.id = formFields.id;
     }
 
-    addEmployee(payload);
+    const isEdit = formFields.id && employees.some(emp => emp.id === formFields.id);
+    if (isEdit) {
+      editEmployee(formFields.id, payload);
+    } else {
+      addEmployee(payload);
+    }
+    
     setShowAddModal(false);
     // Reset Form Fields
     setFormFields({
@@ -155,12 +248,14 @@ export default function Directory() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <PageHeader title="Employee Directory" subtitle="Complete employee database & profile management" />
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-1.5 btn-primary text-xs px-3 py-2 font-bold"
-        >
-          <UserPlus size={14} /> Add New Employee
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-1.5 btn-primary text-xs px-3 py-2 font-bold"
+          >
+            <UserPlus size={14} /> Add New Employee
+          </button>
+        )}
       </div>
 
       {/* Filters and search */}
@@ -237,17 +332,29 @@ export default function Directory() {
                 <Eye size={12} /> View Profile
               </button>
               
-              <button
-                onClick={() => {
-                  if (confirm(`Are you sure you want to delete profile for ${emp.name}?`)) {
-                    deleteEmployee(emp.id);
-                  }
-                }}
-                className="btn-outline text-danger hover:bg-danger/10 border-danger/30 p-1.5"
-                title="Delete Employee"
-              >
-                <Trash2 size={13} />
-              </button>
+              {(canManageEmployee(emp) || canEditPersonalOnly(emp)) && (
+                <button
+                  onClick={() => startEditEmployee(emp)}
+                  className="btn-outline text-primary hover:bg-primary/10 border-primary/30 p-1.5"
+                  title="Edit Employee"
+                >
+                  <Edit3 size={13} />
+                </button>
+              )}
+              
+              {canManageEmployee(emp) && (
+                <button
+                  onClick={() => {
+                    if (confirm(`Are you sure you want to delete profile for ${emp.name}?`)) {
+                      deleteEmployee(emp.id);
+                    }
+                  }}
+                  className="btn-outline text-danger hover:bg-danger/10 border-danger/30 p-1.5"
+                  title="Delete Employee"
+                >
+                  <Trash2 size={13} />
+                </button>
+              )}
             </div>
           </div>
         ))}
@@ -275,47 +382,63 @@ export default function Directory() {
             <div className="flex-1 overflow-y-auto p-6 space-y-6 text-xs text-slate-800 dark:text-slate-200">
               {/* Actions row */}
               <div className="flex items-center gap-2 flex-wrap border-b border-border/40 pb-4">
-                {selectedEmp.status === 'Active' ? (
-                  <button
-                    onClick={() => {
-                      updateEmployeeStatus(selectedEmp.id, 'Suspended');
-                      setSelectedEmp(prev => prev ? { ...prev, status: 'Suspended' } : null);
-                    }}
-                    className="flex items-center gap-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 font-bold px-3 py-1.5 rounded-lg"
-                  >
-                    <ShieldAlert size={13} /> Suspend Employee
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => {
-                      updateEmployeeStatus(selectedEmp.id, 'Active');
-                      setSelectedEmp(prev => prev ? { ...prev, status: 'Active' } : null);
-                    }}
-                    className="flex items-center gap-1 bg-success/15 hover:bg-success/20 text-success font-bold px-3 py-1.5 rounded-lg"
-                  >
-                    <ShieldCheck size={13} /> Activate Employee
-                  </button>
+                {canManageEmployee(selectedEmp) && (
+                  <>
+                    {selectedEmp.status === 'Active' ? (
+                      <button
+                        onClick={() => {
+                          updateEmployeeStatus(selectedEmp.id, 'Suspended');
+                          setSelectedEmp(prev => prev ? { ...prev, status: 'Suspended' } : null);
+                        }}
+                        className="flex items-center gap-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 font-bold px-3 py-1.5 rounded-lg"
+                      >
+                        <ShieldAlert size={13} /> Suspend Employee
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          updateEmployeeStatus(selectedEmp.id, 'Active');
+                          setSelectedEmp(prev => prev ? { ...prev, status: 'Active' } : null);
+                        }}
+                        className="flex items-center gap-1 bg-success/15 hover:bg-success/20 text-success font-bold px-3 py-1.5 rounded-lg"
+                      >
+                        <ShieldCheck size={13} /> Activate Employee
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        setTransferFields({ department: selectedEmp.department, workLocation: selectedEmp.workLocation || 'Bangalore Office' });
+                        setShowTransferModal(true);
+                      }}
+                      className="flex items-center gap-1 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-500 font-bold px-3 py-1.5 rounded-lg"
+                    >
+                      <RefreshCw size={13} /> Transfer Employee
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setPromoteFields({ role: selectedEmp.role, basic: selectedEmp.salaryStructure?.basic || 50000, hra: selectedEmp.salaryStructure?.hra || 20000 });
+                        setShowPromoteModal(true);
+                      }}
+                      className="flex items-center gap-1 bg-primary/10 hover:bg-primary/20 text-primary font-bold px-3 py-1.5 rounded-lg"
+                    >
+                      <Award size={13} /> Promote Employee
+                    </button>
+                  </>
                 )}
 
-                <button
-                  onClick={() => {
-                    setTransferFields({ department: selectedEmp.department, workLocation: selectedEmp.workLocation || 'Bangalore Office' });
-                    setShowTransferModal(true);
-                  }}
-                  className="flex items-center gap-1 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-500 font-bold px-3 py-1.5 rounded-lg"
-                >
-                  <RefreshCw size={13} /> Transfer Employee
-                </button>
-
-                <button
-                  onClick={() => {
-                    setPromoteFields({ role: selectedEmp.role, basic: selectedEmp.salaryStructure?.basic || 50000, hra: selectedEmp.salaryStructure?.hra || 20000 });
-                    setShowPromoteModal(true);
-                  }}
-                  className="flex items-center gap-1 bg-primary/10 hover:bg-primary/20 text-primary font-bold px-3 py-1.5 rounded-lg"
-                >
-                  <Award size={13} /> Promote Employee
-                </button>
+                {(canManageEmployee(selectedEmp) || canEditPersonalOnly(selectedEmp)) && (
+                  <button
+                    onClick={() => {
+                      startEditEmployee(selectedEmp);
+                      setSelectedEmp(null);
+                    }}
+                    className="flex items-center gap-1 bg-primary/10 hover:bg-primary/20 text-primary font-bold px-3 py-1.5 rounded-lg"
+                  >
+                    <Edit3 size={13} /> Edit Profile Details
+                  </button>
+                )}
               </div>
 
               {/* Grid content panels */}
@@ -405,36 +528,38 @@ export default function Directory() {
                   </h4>
                   
                   {selectedEmp.salaryStructure ? (
-                    <div className="space-y-1.5 font-semibold">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Basic Salary:</span>
-                        <span>{formatCurrency(selectedEmp.salaryStructure.basic)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">HRA Allowance:</span>
-                        <span>{formatCurrency(selectedEmp.salaryStructure.hra)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Special Allowances:</span>
-                        <span>{formatCurrency(selectedEmp.salaryStructure.allowances)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">PF Deduction:</span>
-                        <span className="text-danger">-{formatCurrency(selectedEmp.salaryStructure.pf)}</span>
-                      </div>
-                      <div className="flex justify-between border-t border-border/40 pt-1.5 font-bold">
-                        <span className="text-foreground">Estimated Net Pay:</span>
-                        <span className="text-success">
-                          {formatCurrency(
-                            selectedEmp.salaryStructure.basic + 
-                            selectedEmp.salaryStructure.hra + 
-                            selectedEmp.salaryStructure.allowances - 
-                            selectedEmp.salaryStructure.pf - 
-                            selectedEmp.salaryStructure.tds
-                          )}
-                        </span>
-                      </div>
-                    </div>
+                    (() => {
+                      const basic = Number(selectedEmp.salaryStructure.basic || 0);
+                      const hra = Number(selectedEmp.salaryStructure.hra || 0);
+                      const allowances = Number(selectedEmp.salaryStructure.allowances || 0);
+                      const pf = Number(selectedEmp.salaryStructure.pf || 0);
+                      const tds = Number(selectedEmp.salaryStructure.tds || 0);
+                      const netPay = basic + hra + allowances - pf - tds;
+                      return (
+                        <div className="space-y-1.5 font-semibold">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Basic Salary:</span>
+                            <span>{formatCurrency(basic)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">HRA Allowance:</span>
+                            <span>{formatCurrency(hra)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Special Allowances:</span>
+                            <span>{formatCurrency(allowances)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">PF Deduction:</span>
+                            <span className="text-danger">-{formatCurrency(pf)}</span>
+                          </div>
+                          <div className="flex justify-between border-t border-border/40 pt-1.5 font-bold">
+                            <span className="text-foreground">Estimated Net Pay:</span>
+                            <span className="text-success">{formatCurrency(netPay)}</span>
+                          </div>
+                        </div>
+                      );
+                    })()
                   ) : (
                     <p className="italic text-muted-foreground">Salary structure not assigned.</p>
                   )}
@@ -504,7 +629,7 @@ export default function Directory() {
           <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="text-sm font-bold flex items-center gap-1.5 text-foreground">
-                <UserPlus size={16} className="text-primary" /> Create Employee Profile
+                <UserPlus size={16} className="text-primary" /> {formFields.id && employees.some(emp => emp.id === formFields.id) ? 'Edit Employee Profile' : 'Create Employee Profile'}
               </h3>
               <button onClick={() => setShowAddModal(false)} className="text-muted-foreground"><X size={16} /></button>
             </div>
@@ -519,6 +644,7 @@ export default function Directory() {
                     value={formFields.id}
                     onChange={e => setFormFields(prev => ({ ...prev, id: e.target.value }))}
                     className="input-field"
+                    disabled={formFields.id && employees.some(emp => emp.id === formFields.id)}
                   />
                 </div>
 
@@ -531,6 +657,7 @@ export default function Directory() {
                     onChange={e => setFormFields(prev => ({ ...prev, name: e.target.value }))}
                     className="input-field"
                     required
+                    disabled={isSelfEditing}
                   />
                 </div>
 
@@ -543,6 +670,7 @@ export default function Directory() {
                     onChange={e => setFormFields(prev => ({ ...prev, email: e.target.value }))}
                     className="input-field"
                     required
+                    disabled={isSelfEditing}
                   />
                 </div>
 
@@ -554,7 +682,8 @@ export default function Directory() {
                     value={formFields.password || ''}
                     onChange={e => setFormFields(prev => ({ ...prev, password: e.target.value }))}
                     className="input-field"
-                    required
+                    required={!formFields.id}
+                    disabled={isSelfEditing}
                   />
                 </div>
 
@@ -579,6 +708,7 @@ export default function Directory() {
                     onChange={e => setFormFields(prev => ({ ...prev, role: e.target.value }))}
                     className="input-field"
                     required
+                    disabled={isSelfEditing}
                   />
                 </div>
 
@@ -588,6 +718,7 @@ export default function Directory() {
                     value={formFields.department}
                     onChange={e => setFormFields(prev => ({ ...prev, department: e.target.value }))}
                     className="bg-card border border-border w-full p-2 rounded focus:outline-none"
+                    disabled={isSelfEditing}
                   >
                     <option value="Engineering">Engineering</option>
                     <option value="Sales">Sales</option>
@@ -605,6 +736,7 @@ export default function Directory() {
                     onChange={e => setFormFields(prev => ({ ...prev, joinDate: e.target.value }))}
                     className="bg-card border border-border w-full p-1.5 rounded"
                     required
+                    disabled={isSelfEditing}
                   />
                 </div>
 
@@ -616,6 +748,7 @@ export default function Directory() {
                     value={formFields.reportingManager}
                     onChange={e => setFormFields(prev => ({ ...prev, reportingManager: e.target.value }))}
                     className="input-field"
+                    disabled={isSelfEditing}
                   />
                 </div>
 
@@ -625,6 +758,7 @@ export default function Directory() {
                     value={formFields.attendanceStatus}
                     onChange={e => setFormFields(prev => ({ ...prev, attendanceStatus: e.target.value }))}
                     className="bg-card border border-border w-full p-2 rounded focus:outline-none"
+                    disabled={isSelfEditing}
                   >
                     <option value="Present">Present</option>
                     <option value="Absent">Absent</option>
@@ -686,6 +820,7 @@ export default function Directory() {
                       value={formFields.basic}
                       onChange={e => setFormFields(prev => ({ ...prev, basic: e.target.value }))}
                       className="input-field"
+                      disabled={isSelfEditing}
                     />
                   </div>
 
@@ -696,6 +831,7 @@ export default function Directory() {
                       value={formFields.hra}
                       onChange={e => setFormFields(prev => ({ ...prev, hra: e.target.value }))}
                       className="input-field"
+                      disabled={isSelfEditing}
                     />
                   </div>
 
@@ -706,13 +842,14 @@ export default function Directory() {
                       value={formFields.allowances}
                       onChange={e => setFormFields(prev => ({ ...prev, allowances: e.target.value }))}
                       className="input-field"
+                      disabled={isSelfEditing}
                     />
                   </div>
                 </div>
               </div>
 
               <button type="submit" className="btn-primary w-full py-2.5 font-bold mt-2">
-                Save & Enlist Employee
+                {formFields.id && employees.some(emp => emp.id === formFields.id) ? 'Save Changes' : 'Save & Enlist Employee'}
               </button>
             </form>
           </div>

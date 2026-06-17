@@ -54,7 +54,7 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Skip public paths
         path = request.url.path
-        if path in PUBLIC_PATHS or path.startswith("/docs") or path.startswith("/redoc"):
+        if path in PUBLIC_PATHS or path.startswith("/docs") or path.startswith("/redoc") or path.startswith("/uploads"):
             return await call_next(request)
 
         # Allow OPTIONS preflight requests

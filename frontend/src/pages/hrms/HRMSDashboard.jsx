@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useApp } from '@/context/AppContext';
 import { formatCurrency } from '@/lib/utils';
 import {
@@ -35,7 +35,9 @@ export default function HRMSDashboard() {
     returnAsset,
     uploadDocument,
     user,
-    addToast
+    addToast,
+    workspaceSettings,
+    tasks
   } = useApp();
 
   const [activeTab, setActiveTab] = useState('ess-punch');
@@ -46,23 +48,32 @@ export default function HRMSDashboard() {
     setHrmsEmployeeId(selectedEmployeeId);
   }, [selectedEmployeeId, setHrmsEmployeeId]);
 
+  // Sync selected employee ID when context changes (e.g. parent auto-corrects or logs out)
+  useEffect(() => {
+    setSelectedEmployeeId(hrmsEmployeeId);
+  }, [hrmsEmployeeId]);
+
   // Sync default employee ID to logged-in user's employee record
   useEffect(() => {
     if (user?.email && employees.length > 0) {
       const loggedInEmp = employees.find(e => e.email === user.email);
       if (loggedInEmp) {
-        if (hrmsEmployeeId === 'EMP-001' && loggedInEmp.id !== 'EMP-001') {
+        const isValidEmployee = employees.some(e => e.id === selectedEmployeeId);
+        if (!isValidEmployee || selectedEmployeeId === 'EMP-001' || selectedEmployeeId === user.id) {
           setSelectedEmployeeId(loggedInEmp.id);
         }
       }
     }
-  }, [user, employees, hrmsEmployeeId]);
+  }, [user, employees, selectedEmployeeId]);
 
-  // Selected employee context for self-service
+  // Selected employee context for self-service - prioritize logged-in user's email
   const currentEmployee = useMemo(() => {
-    const found = employees.find(e => e.id === hrmsEmployeeId || e.employee_id === hrmsEmployeeId) ||
-                  employees.find(e => e.email === user?.email);
-    if (found) return found;
+    // First: match by logged-in user's email (most reliable)
+    const byEmail = employees.find(e => e.email === user?.email);
+    if (byEmail) return byEmail;
+    // Fallback: match by hrmsEmployeeId
+    const byId = employees.find(e => e.id === hrmsEmployeeId || e.employee_id === hrmsEmployeeId);
+    if (byId) return byId;
 
     if (user) {
       return {
@@ -87,6 +98,8 @@ export default function HRMSDashboard() {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+
 
   const getGreeting = () => {
     const hour = currentTime.getHours();
@@ -120,6 +133,127 @@ export default function HRMSDashboard() {
   const [leaveForm, setLeaveForm] = useState({ type: 'Casual Leave', start: '', end: '', days: 1, reason: '' });
   const [docFile, setDocFile] = useState({ name: '', type: 'Aadhaar Card' });
   const [profileSubTab, setProfileSubTab] = useState('personal');
+  // Calendar states & helpers
+  const [calendarDate, setCalendarDate] = useState(new Date());
+  const [selectedCalendarDay, setSelectedCalendarDay] = useState(new Date().getDate());
+
+  const calendarMonthDays = useMemo(() => {
+    const year = calendarDate.getFullYear();
+    const month = calendarDate.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const startDayOfWeek = firstDay.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    return {
+      year,
+      month,
+      startDayOfWeek,
+      totalDays,
+      monthName: calendarDate.toLocaleString('default', { month: 'long' })
+    };
+  }, [calendarDate]);
+
+  const handlePrevMonth = () => {
+    setCalendarDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+    setSelectedCalendarDay(null);
+  };
+
+  const handleNextMonth = () => {
+    setCalendarDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+    setSelectedCalendarDay(null);
+  };
+
+  const getDayEvents = useCallback((day) => {
+    const events = [];
+    const year = calendarMonthDays.year;
+    const month = calendarMonthDays.month;
+    const dayOfWeek = new Date(year, month, day).getDay();
+
+    // Birthdays
+    employees.forEach(emp => {
+      if (emp.dob) {
+        const dobParts = emp.dob.split('-');
+        if (dobParts.length === 3) {
+          const empMonth = parseInt(dobParts[1], 10) - 1;
+          const empDay = parseInt(dobParts[2], 10);
+          if (empMonth === month && empDay === day) {
+            events.push({ type: 'birthday', label: `🎂 ${emp.name}'s Birthday` });
+          }
+        }
+      }
+    });
+
+    // Saturdays off
+    if (dayOfWeek === 6) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const taskSaturdayOff = tasks?.some(t => 
+        (t.dueDate === dateStr || t.startDate === dateStr) && 
+        t.type?.toLowerCase() === 'holiday' && 
+        t.title === 'Saturday Off'
+      );
+
+      if (taskSaturdayOff) {
+        events.push({ type: 'saturday-off', label: '🏖️ Saturday Off' });
+      }
+    }
+
+    // Sundays off
+    if (dayOfWeek === 0) {
+      events.push({ type: 'sunday-off', label: '🏖️ Sunday Off' });
+    }
+
+    // Standard Holidays
+    const monthDayStr = `${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const standardHolidays = {
+      '01-01': "New Year's Day",
+      '01-26': "Republic Day",
+      '08-15': "Independence Day",
+      '10-02': "Gandhi Jayanti",
+      '12-25': "Christmas Day"
+    };
+    if (standardHolidays[monthDayStr]) {
+      events.push({ type: 'holiday', label: `🎉 ${standardHolidays[monthDayStr]}` });
+    }
+
+    // Organization Calendar Tasks, Meetings and Holidays
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const dayTasks = tasks?.filter(t => t.dueDate === dateStr || t.startDate === dateStr) || [];
+    dayTasks.forEach(t => {
+      // Prevent duplicating Saturday Off label which is already handled
+      if (t.title === 'Saturday Off' && dayOfWeek === 6) {
+        return;
+      }
+      const type = t.type?.toLowerCase();
+      let icon = '📝';
+      let eventType = 'task';
+      if (type === 'meeting') {
+        icon = '🤝';
+        eventType = 'meeting';
+      } else if (type === 'holiday') {
+        icon = '🎉';
+        eventType = 'holiday';
+      }
+      events.push({
+        type: eventType,
+        label: `${icon} ${t.title} (${t.status || 'To Do'})`
+      });
+    });
+
+    return events;
+  }, [calendarMonthDays, employees, workspaceSettings, tasks]);
+
+  // Aggregate all events for the current month
+  const monthEventsList = useMemo(() => {
+    const all = [];
+    for (let d = 1; d <= calendarMonthDays.totalDays; d++) {
+      const dayEvs = getDayEvents(d);
+      dayEvs.forEach(ev => {
+        if (ev.type !== 'sunday-off') {
+          all.push({ day: d, ...ev });
+        }
+      });
+    }
+    return all;
+  }, [calendarMonthDays, getDayEvents]);
 
   // Profile Edit Mode States
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -237,8 +371,9 @@ export default function HRMSDashboard() {
   }, [employees, todayAttendance, leaves, todayStr]);
 
   const currentEmployeeAttendance = useMemo(() => {
-    return attendance.find(a => a.employeeId === hrmsEmployeeId && a.date === todayStr);
-  }, [attendance, hrmsEmployeeId, todayStr]);
+    if (!currentEmployee) return null;
+    return attendance.find(a => (a.employeeId === currentEmployee.id || a.employeeId === currentEmployee.employee_id) && a.date === todayStr);
+  }, [attendance, currentEmployee, todayStr]);
 
   // Local state for breaks loaded/saved from localStorage
   const [localBreaks, setLocalBreaks] = useState(() => {
@@ -287,11 +422,11 @@ export default function HRMSDashboard() {
     
     const parseTimeStr = (tStr) => {
       const today = new Date();
-      const parts = tStr.split(' ');
+      const parts = tStr.trim().split(/\s+/);
       const [hp, mp] = parts[0].split(':');
       let h = parseInt(hp, 10);
       let m = parseInt(mp, 10);
-      const mod = parts[1];
+      const mod = parts[1] ? parts[1].toUpperCase() : '';
       if (mod === 'PM' && h < 12) h += 12;
       if (mod === 'AM' && h === 12) h = 0;
       return new Date(today.getFullYear(), today.getMonth(), today.getDate(), h, m, 0);
@@ -355,24 +490,66 @@ export default function HRMSDashboard() {
       action: 'punch-in'
     };
     setLocalBreaks([]); // Reset breaks for new punch in
-    clockInOut(hrmsEmployeeId, 'in', details);
+    clockInOut(currentEmployee?.id, 'in', details);
   };
 
   const handlePunchOut = () => {
     // End any active break on punch out
     setLocalBreaks(prev => prev.map(b => b.end === null ? { ...b, end: new Date().toISOString() } : b));
-    clockInOut(hrmsEmployeeId, 'out', { action: 'punch-out' });
+    clockInOut(currentEmployee?.id, 'out', { action: 'punch-out' });
   };
 
   const handleBreakIn = () => {
     setLocalBreaks(prev => [...prev, { start: new Date().toISOString(), end: null }]);
-    clockInOut(hrmsEmployeeId, 'in', { action: 'break-in' });
+    clockInOut(currentEmployee?.id, 'in', { action: 'break-in' });
   };
 
   const handleBreakOut = () => {
     setLocalBreaks(prev => prev.map(b => b.end === null ? { ...b, end: new Date().toISOString() } : b));
-    clockInOut(hrmsEmployeeId, 'in', { action: 'break-out' });
+    clockInOut(currentEmployee?.id, 'in', { action: 'break-out' });
   };
+
+  // Auto break-in / break-out based on workspace settings
+  useEffect(() => {
+    if (!currentEmployeeAttendance || !currentEmployeeAttendance.checkIn || currentEmployeeAttendance.checkIn === '-' || (currentEmployeeAttendance.checkOut && currentEmployeeAttendance.checkOut !== '-')) {
+      return;
+    }
+    if (!workspaceSettings?.break_start || !workspaceSettings?.break_end) return;
+
+    const formatTime12h = (date) => {
+      let hours = date.getHours();
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+      return `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
+    };
+
+    const formatTime24h = (date) => {
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${hours}:${minutes}`;
+    };
+
+    const time12h = formatTime12h(currentTime);
+    const time24h = formatTime24h(currentTime);
+
+    const configStart = workspaceSettings.break_start.trim().toUpperCase();
+    const configEnd = workspaceSettings.break_end.trim().toUpperCase();
+
+    const isStartMatch = time12h === configStart || time24h === configStart || time12h.replace(/^0/, '') === configStart;
+    const isEndMatch = time12h === configEnd || time24h === configEnd || time12h.replace(/^0/, '') === configEnd;
+
+    if (currentTime.getSeconds() === 0) {
+      if (isStartMatch && !isOnBreak) {
+        addToast('Automatic scheduled break started.', 'info');
+        handleBreakIn();
+      } else if (isEndMatch && isOnBreak) {
+        addToast('Automatic scheduled break ended.', 'info');
+        handleBreakOut();
+      }
+    }
+  }, [currentTime, workspaceSettings, currentEmployeeAttendance, isOnBreak]);
 
   const handleAddJob = (e) => {
     e.preventDefault();
@@ -585,7 +762,10 @@ export default function HRMSDashboard() {
                 <div className="flex justify-between border-b border-border/40 pb-1.5">
                   <span className="text-muted-foreground">Status Today:</span>
                   <span className={`font-semibold px-2 py-0.5 rounded-full text-[9px] ${
-                    currentEmployeeAttendance?.status === 'Absent' ? 'bg-danger/10 text-danger' : 'bg-success/15 text-success'
+                    currentEmployeeAttendance?.status === 'Absent' ? 'bg-danger/10 text-danger' 
+                    : !currentEmployeeAttendance ? 'bg-muted text-muted-foreground'
+                    : currentEmployeeAttendance?.status === 'Late' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                    : 'bg-success/15 text-success'
                   }`}>{currentEmployeeAttendance?.status || 'Not Checked-In'}</span>
                 </div>
               </div>
@@ -770,46 +950,116 @@ export default function HRMSDashboard() {
                   {/* Calendar Widget */}
                   <div className="border border-border/50 rounded-2xl p-4 bg-muted/10 space-y-4">
                     <div className="flex items-center justify-between">
-                      <button className="text-muted-foreground hover:text-foreground"><ChevronLeft size={16} /></button>
-                      <span className="text-xs font-bold text-slate-900 dark:text-white">June 2026</span>
-                      <button className="text-muted-foreground hover:text-foreground"><ChevronRight size={16} /></button>
+                      <button onClick={handlePrevMonth} className="text-muted-foreground hover:text-foreground"><ChevronLeft size={16} /></button>
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">
+                        {calendarMonthDays.monthName} {calendarMonthDays.year}
+                      </span>
+                      <button onClick={handleNextMonth} className="text-muted-foreground hover:text-foreground"><ChevronRight size={16} /></button>
                     </div>
-
+ 
                     <div className="grid grid-cols-7 gap-y-2.5 text-center text-[10px] font-bold">
                       {/* Weekday headers */}
-                      {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => (
-                        <span key={d} className="text-muted-foreground font-bold">{d}</span>
+                      {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, idx) => (
+                        <span key={`${d}-${idx}`} className="text-muted-foreground font-bold">{d}</span>
                       ))}
-
-                      {/* Week 1 padding (June 2026 starts on Monday, so Sunday is empty) */}
-                      <span className="text-slate-350"></span>
-
-                      {/* June Days */}
-                      {Array.from({ length: 30 }).map((_, idx) => {
+ 
+                      {/* Week 1 padding */}
+                      {Array.from({ length: calendarMonthDays.startDayOfWeek }).map((_, idx) => (
+                        <span key={`pad-${idx}`} className="text-slate-350"></span>
+                      ))}
+ 
+                      {/* Days of Month */}
+                      {Array.from({ length: calendarMonthDays.totalDays }).map((_, idx) => {
                         const day = idx + 1;
-                        const hasEvent = [3, 5].includes(day);
-                        const isToday = day === 16;
+                        const dayEvents = getDayEvents(day);
+                        const isToday = day === new Date().getDate() && calendarMonthDays.month === new Date().getMonth() && calendarMonthDays.year === new Date().getFullYear();
+                        const isSelected = day === selectedCalendarDay;
+
+                        const hasBirthday = dayEvents.some(e => e.type === 'birthday');
+                        const hasHoliday = dayEvents.some(e => e.type === 'holiday');
+                        const isOffDay = dayEvents.some(e => e.type === 'saturday-off' || e.type === 'sunday-off');
+
+                        let dayClass = 'text-foreground hover:bg-muted/40 cursor-pointer';
+                        if (isToday) {
+                          dayClass = 'bg-primary text-white font-black shadow-xs cursor-pointer';
+                        } else if (isSelected) {
+                          dayClass = 'border border-primary text-primary font-bold bg-primary/5 cursor-pointer';
+                        } else if (hasHoliday) {
+                          dayClass = 'border border-emerald-500/40 text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/[0.05] cursor-pointer';
+                        } else if (hasBirthday) {
+                          dayClass = 'border border-pink-500/40 text-pink-650 dark:text-pink-400 font-bold bg-pink-500/[0.05] cursor-pointer';
+                        } else if (isOffDay) {
+                          dayClass = 'text-muted-foreground/60 bg-muted/20 cursor-pointer';
+                        }
 
                         return (
-                          <div key={day} className="flex items-center justify-center relative h-6 w-full">
-                            <span className={`flex items-center justify-center w-6 h-6 rounded-full text-xs transition-colors ${
-                              isToday 
-                                ? 'bg-primary text-white font-black shadow-xs' 
-                                : hasEvent 
-                                  ? 'border border-emerald-500/40 text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/[0.05]' 
-                                  : 'text-foreground'
-                            }`}>
+                          <div 
+                            key={day} 
+                            onClick={() => setSelectedCalendarDay(day)}
+                            className="flex items-center justify-center relative h-6 w-full"
+                          >
+                            <span className={`flex items-center justify-center w-6 h-6 rounded-full text-xs transition-colors ${dayClass}`}>
                               {day}
                             </span>
+                            {!isToday && !isSelected && dayEvents.length > 0 && (
+                              <span className={`absolute bottom-0 w-1 h-1 rounded-full ${
+                                hasHoliday ? 'bg-emerald-500' : hasBirthday ? 'bg-pink-500' : 'bg-amber-500'
+                              }`}></span>
+                            )}
                           </div>
                         );
                       })}
                     </div>
                   </div>
-
+ 
                   {/* Scheduled Events details footer */}
-                  <div className="pt-2 text-center text-xs text-muted-foreground font-medium">
-                    No events scheduled.
+                  <div className="pt-2 text-xs text-muted-foreground font-medium space-y-2">
+                    {selectedCalendarDay ? (
+                      <div>
+                        <div className="flex justify-between items-center border-b border-border/40 pb-1.5 mb-1.5">
+                          <span className="font-bold text-foreground">
+                            Events for {calendarMonthDays.monthName} {selectedCalendarDay}:
+                          </span>
+                          <button 
+                            onClick={() => setSelectedCalendarDay(null)} 
+                            className="text-[9px] text-primary hover:underline"
+                          >
+                            View Month
+                          </button>
+                        </div>
+                        {getDayEvents(selectedCalendarDay).length > 0 ? (
+                          <div className="space-y-1">
+                            {getDayEvents(selectedCalendarDay).map((ev, idx) => (
+                              <p key={idx} className="text-foreground flex items-center gap-1.5">
+                                {ev.label}
+                              </p>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-center italic text-muted-foreground py-1">No events scheduled.</p>
+                        )}
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="border-b border-border/40 pb-1.5 mb-1.5">
+                          <span className="font-bold text-foreground">
+                            {calendarMonthDays.monthName} {calendarMonthDays.year} Events:
+                          </span>
+                        </div>
+                        {monthEventsList.length > 0 ? (
+                          <div className="max-h-32 overflow-y-auto space-y-1">
+                            {monthEventsList.map((ev, idx) => (
+                              <p key={idx} className="text-foreground flex items-center justify-between gap-1 text-[11px]">
+                                <span>{ev.label}</span>
+                                <span className="text-[10px] text-muted-foreground font-semibold">Day {ev.day}</span>
+                              </p>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-center italic text-muted-foreground py-1">No events scheduled.</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 

@@ -2,10 +2,10 @@ import { Outlet } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import Sidebar from './Sidebar';
 import Header from './Header';
-import { CheckCircle, AlertCircle, Info } from 'lucide-react';
+import { CheckCircle, AlertCircle, Info, X } from 'lucide-react';
 
 export default function AppLayout() {
-  const { sidebarCollapsed, toasts } = useApp();
+  const { sidebarCollapsed, toasts, removeToast } = useApp();
 
   return (
     <div className="min-h-screen bg-background">
@@ -33,6 +33,12 @@ export default function AppLayout() {
             {toast.type === 'error' && <AlertCircle size={16} className="text-red-500 shrink-0" />}
             {toast.type === 'info' && <Info size={16} className="text-blue-500 shrink-0" />}
             <span className="flex-1 text-slate-700 dark:text-slate-200">{toast.message}</span>
+            <button 
+              onClick={() => removeToast(toast.id)}
+              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 shrink-0 cursor-pointer"
+            >
+              <X size={12} />
+            </button>
           </div>
         ))}
       </div>

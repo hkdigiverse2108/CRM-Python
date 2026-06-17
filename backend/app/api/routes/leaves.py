@@ -73,3 +73,38 @@ async def delete_leave(
     tenant_id = request.state.tenant.id
     await leave_service.delete_leave(leave_id=leave_id, tenant_id=tenant_id)
     return success_response(message="Leave request deleted successfully")
+
+
+import os
+import shutil
+import uuid
+from fastapi import UploadFile, File, HTTPException
+
+@router.post("/upload")
+async def upload_leave_proof(
+    request: Request,
+    file: UploadFile = File(...),
+):
+    # Enforce maximum size of 200MB (200 * 1024 * 1024 bytes)
+    MAX_SIZE = 200 * 1024 * 1024
+    
+    # Fast size check via tell()
+    file.file.seek(0, os.SEEK_END)
+    size = file.file.tell()
+    file.file.seek(0)
+    
+    if size > MAX_SIZE:
+        raise HTTPException(status_code=400, detail="File size exceeds the 200MB limit.")
+        
+    os.makedirs("uploads", exist_ok=True)
+    file_ext = os.path.splitext(file.filename)[1]
+    unique_filename = f"{uuid.uuid4()}{file_ext}"
+    file_path = os.path.join("uploads", unique_filename)
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    return success_response(
+        data={"url": f"/uploads/{unique_filename}", "filename": file.filename},
+        message="File uploaded successfully",
+    )

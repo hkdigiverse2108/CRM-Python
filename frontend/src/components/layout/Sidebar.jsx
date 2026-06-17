@@ -179,7 +179,7 @@ const sidebarGroups = [
 ];
 
 export default function Sidebar() {
-  const { sidebarCollapsed, toggleSidebar, user } = useApp();
+  const { sidebarCollapsed, toggleSidebar, user, workspaceSettings, employees = [] } = useApp();
   const location = useLocation();
 
   const isSuperAdmin = user?.role === 'super_admin';
@@ -252,7 +252,32 @@ export default function Sidebar() {
   const allowedGroups = isSuperAdmin
     ? superAdminSidebarGroups
     : sidebarGroups.map(group => {
-        const allowedItems = group.items.filter(item => {
+        const allowedItems = group.items.map(item => {
+          if (item.label === 'Payroll' && item.subItems) {
+            const loggedInEmp = employees?.find(e => e.email === user?.email);
+            const isAdminUser = user?.role === 'super_admin' || user?.role_name === 'Super Admin' || 
+                                user?.role === 'admin' || user?.role_name === 'Admin' || 
+                                user?.role_name === 'Workspace Admin' || user?.role_name === 'Organization Admin' || 
+                                user?.role?.includes('admin') || user?.role_name?.toLowerCase()?.includes('admin') ||
+                                user?.role_name === 'HR Manager';
+
+            const isManagerUser = !isAdminUser && loggedInEmp && employees?.some(e => e.reportingManager && 
+              (e.reportingManager === loggedInEmp.id ||
+               e.reportingManager === loggedInEmp.employee_id ||
+               e.reportingManager.toLowerCase().trim() === loggedInEmp.name?.toLowerCase().trim() ||
+               e.reportingManager.toLowerCase().trim() === user?.full_name?.toLowerCase()?.trim()));
+
+            const hasProcessingAccess = isAdminUser || isManagerUser;
+            const filteredSubItems = item.subItems.filter(sub => {
+              if (sub.label === 'Payroll Processing' || sub.label === 'Bonuses & Deductions') {
+                return hasProcessingAccess;
+              }
+              return true;
+            });
+            return { ...item, subItems: filteredSubItems };
+          }
+          return item;
+        }).filter(item => {
           const mOk = !item.module || hasPermission(item.module, item.path);
           const pOk = !item.pageKey || hasPagePermission(item.pageKey, item.path);
           return mOk && pOk;
@@ -265,15 +290,22 @@ export default function Sidebar() {
       className="fixed top-0 left-0 h-screen bg-[var(--sidebar)] border-r border-[var(--border)] z-40 flex flex-col transition-all duration-300 ease-in-out select-none"
       style={{ width: sidebarCollapsed ? '68px' : 'var(--sidebar-width, 260px)' }}
     >
-      {/* Brand Header */}
       <div className="flex items-center h-[57px] px-4 border-b border-[var(--border)] shrink-0 bg-[var(--sidebar)]/80 backdrop-blur-md">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shrink-0 shadow-md shadow-indigo-500/10">
-            <span className="text-white text-xs font-bold">A</span>
-          </div>
+          {workspaceSettings?.logo_url ? (
+            <img 
+              src={workspaceSettings.logo_url.startsWith('/') ? `${import.meta.env.VITE_API_BASE_URL.replace('/api', '')}${workspaceSettings.logo_url}` : workspaceSettings.logo_url} 
+              alt="Logo" 
+              className="w-8 h-8 rounded-xl object-contain shrink-0"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shrink-0 shadow-md shadow-indigo-500/10">
+              <span className="text-white text-xs font-bold">A</span>
+            </div>
+          )}
           {!sidebarCollapsed && (
-            <span className="text-sm font-bold text-black dark:text-slate-100 tracking-tight whitespace-nowrap">
-              AIO CRM Platform
+            <span className="text-sm font-bold text-black dark:text-slate-100 tracking-tight whitespace-nowrap truncate">
+              {workspaceSettings?.company_name || 'AIO CRM Platform'}
             </span>
           )}
         </div>

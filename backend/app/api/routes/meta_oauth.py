@@ -560,7 +560,9 @@ async def test_webhook_simulation(
     Test utility to simulate webhook event payloads for Meta App Review and developer verification.
     """
     import httpx
-    url = "http://localhost:8000/webhooks/meta"
+    from backend.app.core.config import get_settings
+    settings = get_settings()
+    url = f"http://localhost:{settings.APP_PORT}/webhooks/meta"
     
     if event_type == "whatsapp":
         payload = {

@@ -14,7 +14,9 @@ export default function Leaves() {
     addLeaveRequest, 
     employees, 
     addToast,
-    user
+    user,
+    token,
+    tenantId
   } = useApp();
 
   const [statusFilter, setStatusFilter] = useState('All');
@@ -39,6 +41,7 @@ export default function Leaves() {
   });
 
   const [simulatedFileName, setSimulatedFileName] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
 
   const currentEmp = useMemo(() => {
     return employees.find(e => e.email === user?.email);
@@ -51,20 +54,33 @@ export default function Leaves() {
            user?.role_name === 'Admin';
   }, [user]);
 
+  const isHR = useMemo(() => {
+    return currentEmp?.department?.toUpperCase() === 'HR' || 
+           currentEmp?.role?.toUpperCase() === 'HR' || 
+           currentEmp?.role?.toUpperCase().includes('HR') ||
+           user?.role_name?.toUpperCase().includes('HR');
+  }, [currentEmp, user]);
+
   // Leaves visible to the current logged-in user
   const myLeaves = useMemo(() => {
     return leaves.filter(l => {
       const emp = employees.find(e => e.id === l.employeeId);
       
-      // Non-admins only see leave requests of employees who report directly to them
-      if (!isUserAdmin) {
-        if (!emp || emp.reportingManager !== currentEmp?.id) {
+      // Admins and HR see all leaves in the workspace
+      if (!isUserAdmin && !isHR) {
+        const isOwnLeave = l.employeeId === currentEmp?.id;
+        const isDirectReport = emp && (
+          emp.reportingManager === currentEmp?.id ||
+          emp.reportingManager === currentEmp?.name ||
+          emp.reportingManager === user?.full_name
+        );
+        if (!isOwnLeave && !isDirectReport) {
           return false;
         }
       }
       return true;
     });
-  }, [leaves, employees, currentEmp, isUserAdmin]);
+  }, [leaves, employees, currentEmp, isUserAdmin, isHR, user]);
 
   // Calculate statistics & balances based on myLeaves
   const stats = useMemo(() => {
@@ -75,9 +91,14 @@ export default function Leaves() {
     return { total, pending, approved, rejected };
   }, [myLeaves]);
 
+  // Leaves owned by the current employee specifically
+  const ownLeaves = useMemo(() => {
+    return leaves.filter(l => l.employeeId === currentEmp?.id);
+  }, [leaves, currentEmp]);
+
   // Calculate Dynamic Balance Cards metrics (for the current employee)
   const balances = useMemo(() => {
-    const juneLeaves = myLeaves.filter(l => {
+    const juneLeaves = ownLeaves.filter(l => {
       if (l.status !== 'Approved') return false;
       const start = l.startDate || l.start || '';
       return start.includes('-06-'); // June
@@ -90,7 +111,7 @@ export default function Leaves() {
     };
 
     const getPendingDaysForType = (type) => {
-      return myLeaves
+      return ownLeaves
         .filter(l => l.status === 'Pending' && (l.type || '').toLowerCase() === type.toLowerCase())
         .reduce((sum, l) => sum + Number(l.days || 1), 0);
     };
@@ -204,7 +225,7 @@ export default function Leaves() {
       days: diffDays,
       reason: newLeave.reason,
       dayType: newLeave.dayType,
-      proofOfLeave: simulatedFileName
+      proofOfLeave: newLeave.proofOfLeave
     });
 
     setShowApplyModal(false);
@@ -229,10 +250,51 @@ export default function Leaves() {
     setEndDateFilter('');
   };
 
-  const simulateFileUpload = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      setSimulatedFileName(e.target.files[0].name);
-      addToast(`File ${e.target.files[0].name} uploaded successfully!`, 'success');
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Size check: max 200MB
+    const MAX_SIZE = 200 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      addToast('File size exceeds the maximum limit of 200MB.', 'error');
+      return;
+    }
+
+    setIsUploading(true);
+    setSimulatedFileName(file.name);
+
+    try {
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const resp = await fetch(`${API_BASE}/leaves/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+        },
+        body: formData,
+      });
+
+      if (!resp.ok) {
+        throw new Error('Upload failed');
+      }
+
+      const data = await resp.json();
+      if (data.success && data.data?.url) {
+        setNewLeave(prev => ({ ...prev, proofOfLeave: data.data.url }));
+        addToast(`File ${file.name} uploaded successfully!`, 'success');
+      } else {
+        throw new Error(data.message || 'Upload failed');
+      }
+    } catch (err) {
+      console.error(err);
+      addToast(err.message || 'Error uploading file.', 'error');
+      setSimulatedFileName('');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -543,29 +605,39 @@ export default function Leaves() {
                   const name = l.employeeName || l.employee || 'Staff Member';
                   const start = l.startDate || l.start || '-';
                   const end = l.endDate || l.end || '-';
+                  
+                  const emp = employees.find(e => e.id === l.employeeId);
+                  const isOwnLeave = l.employeeId === currentEmp?.id;
+                  const isManager = emp && currentEmp && (
+                    emp.reportingManager === currentEmp.id || 
+                    emp.reportingManager === currentEmp.name || 
+                    emp.reportingManager === user?.full_name
+                  );
+                  const showApproveReject = l.status === 'Pending' && (isUserAdmin || isHR || isManager) && !isOwnLeave;
+
                   return (
                     <tr key={l.id} className="hover:bg-muted/40 transition-colors">
-                      <td className="px-6 py-4 text-center font-bold text-muted-foreground">{index + 1}</td>
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-4 text-center font-bold text-muted-foreground whitespace-nowrap">{index + 1}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
                         <div>
                           <p className="font-bold text-slate-900 dark:text-white">{name}</p>
                           <p className="text-[10px] text-muted-foreground font-normal">{l.department}</p>
                         </div>
                       </td>
-                      <td className="px-6 py-4 font-bold">{l.type}</td>
-                      <td className="px-6 py-4">
-                        <span className="px-2 py-0.5 rounded bg-muted border border-border/50 text-[10px]">
+                      <td className="px-6 py-4 font-bold whitespace-nowrap">{l.type}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="px-2 py-0.5 rounded bg-muted border border-border/50 text-[10px] whitespace-nowrap">
                           {l.dayType || 'Full Day'}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-center font-mono text-muted-foreground">{formatDate(start)}</td>
-                      <td className="px-6 py-4 text-center font-mono text-muted-foreground">{formatDate(end)}</td>
-                      <td className="px-6 py-4 text-center font-mono font-bold text-slate-900 dark:text-white">{l.days} days</td>
-                      <td className="px-6 py-4 text-muted-foreground font-medium">
+                      <td className="px-6 py-4 text-center font-mono text-muted-foreground whitespace-nowrap">{formatDate(start)}</td>
+                      <td className="px-6 py-4 text-center font-mono text-muted-foreground whitespace-nowrap">{formatDate(end)}</td>
+                      <td className="px-6 py-4 text-center font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">{l.days} days</td>
+                      <td className="px-6 py-4 text-muted-foreground font-medium whitespace-nowrap">
                         {l.approvedBy || '-'}
                       </td>
-                      <td className="px-6 py-4">
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border whitespace-nowrap ${
                           l.status === 'Approved' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' :
                           l.status === 'Rejected' ? 'bg-danger/10 text-danger border-danger/20' :
                           'bg-amber-400/10 text-amber-500 border-amber-400/20'
@@ -573,36 +645,49 @@ export default function Leaves() {
                           {l.status}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-right">
-                        {l.status === 'Pending' && (
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => updateLeaveStatus(l.id, 'Approved', user?.full_name || 'Admin')}
-                              className="w-7 h-7 rounded-lg bg-emerald-500/15 text-emerald-600 flex items-center justify-center hover:bg-emerald-500/25 transition-colors"
-                              title="Approve Leave"
-                            >
-                              <Check size={14} />
-                            </button>
-                            <button
-                              onClick={() => updateLeaveStatus(l.id, 'Rejected', user?.full_name || 'Admin')}
-                              className="w-7 h-7 rounded-lg bg-danger/15 text-danger flex items-center justify-center hover:bg-danger/25 transition-colors"
-                              title="Reject Leave"
-                            >
-                              <X size={14} />
-                            </button>
-                          </div>
-                        )}
-                        {l.proofOfLeave && (
-                          <div className="flex justify-end mt-1">
+                      <td className="px-6 py-4 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-2.5">
+                          {l.proofOfLeave && (
                             <a 
-                              href="#"
-                              onClick={(e) => { e.preventDefault(); addToast(`Opening file: ${l.proofOfLeave}`, 'info'); }}
-                              className="text-[10px] text-primary hover:underline flex items-center gap-0.5"
+                              href={
+                                l.proofOfLeave.startsWith('/') 
+                                  ? `${(import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api').replace('/api', '')}${l.proofOfLeave}` 
+                                  : l.proofOfLeave.startsWith('http') 
+                                    ? l.proofOfLeave 
+                                    : '#'
+                              }
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => {
+                                if (!l.proofOfLeave.startsWith('/') && !l.proofOfLeave.startsWith('http')) {
+                                  e.preventDefault();
+                                  addToast(`Opening file: ${l.proofOfLeave}`, 'info');
+                                }
+                              }}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 text-[10px] font-bold border border-indigo-100 dark:border-indigo-900/30 transition-all shadow-2xs whitespace-nowrap"
                             >
-                              <Eye size={10} /> View Proof
+                              <Eye size={12} /> View Proof
                             </a>
-                          </div>
-                        )}
+                          )}
+                          {showApproveReject && (
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => updateLeaveStatus(l.id, 'Approved', user?.full_name || 'Admin')}
+                                className="w-7 h-7 rounded-lg bg-emerald-500/15 text-emerald-600 flex items-center justify-center hover:bg-emerald-500/25 transition-colors border border-emerald-500/10 shadow-2xs"
+                                title="Approve Leave"
+                              >
+                                <Check size={14} />
+                              </button>
+                              <button
+                                onClick={() => updateLeaveStatus(l.id, 'Rejected', user?.full_name || 'Admin')}
+                                className="w-7 h-7 rounded-lg bg-danger/15 text-danger flex items-center justify-center hover:bg-danger/25 transition-colors border border-danger/10 shadow-2xs"
+                                title="Reject Leave"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -726,13 +811,13 @@ export default function Leaves() {
                 <div className="border border-dashed border-border/80 rounded-xl p-4 text-center cursor-pointer hover:bg-muted/30 transition-all relative">
                   <input 
                     type="file" 
-                    onChange={simulateFileUpload}
+                    onChange={handleFileUpload}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
                   />
                   <div className="space-y-1 flex flex-col items-center justify-center">
                     <Upload className="text-muted-foreground w-6 h-6" />
                     <span className="text-[10px] text-muted-foreground block">
-                      {simulatedFileName ? `Selected: ${simulatedFileName}` : 'Click to upload leave proof image'}
+                      {isUploading ? 'Uploading...' : simulatedFileName ? `Selected: ${simulatedFileName}` : 'Click to upload leave proof image'}
                     </span>
                   </div>
                 </div>
@@ -749,9 +834,10 @@ export default function Leaves() {
                 </button>
                 <button 
                   type="submit" 
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-5 py-2.5 rounded-xl text-xs transition-all shadow-sm"
+                  disabled={isUploading}
+                  className={`bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-5 py-2.5 rounded-xl text-xs transition-all shadow-sm ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  Submit Request
+                  {isUploading ? 'Uploading...' : 'Submit Request'}
                 </button>
               </div>
             </form>

@@ -54,7 +54,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
-        if path in TENANT_SKIP_PATHS or path.startswith("/docs") or path.startswith("/redoc"):
+        if path in TENANT_SKIP_PATHS or path.startswith("/docs") or path.startswith("/redoc") or path.startswith("/uploads"):
             return await call_next(request)
 
         if request.method == "OPTIONS":

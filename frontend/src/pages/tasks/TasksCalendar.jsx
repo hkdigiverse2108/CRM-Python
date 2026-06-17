@@ -7,7 +7,7 @@ import { ChevronLeft, ChevronRight, X, GripVertical, Plus } from 'lucide-react';
 import PageHeader from '@/components/ui/PageHeader';
 
 export default function TasksCalendar() {
-  const { tasks = [], createTask, updateTask, deleteTask, addToast } = useApp();
+  const { tasks = [], createTask, updateTask, deleteTask, addToast, user } = useApp();
   const events = tasks.map(t => ({
     id: t.id,
     title: t.title,
@@ -108,7 +108,7 @@ export default function TasksCalendar() {
     if (!newEvent.title) return;
     createTask({
       title: newEvent.title,
-      type: newEvent.type === 'meeting' ? 'Meeting' : newEvent.type === 'task' ? 'Task' : 'Review',
+      type: newEvent.type === 'meeting' ? 'Meeting' : newEvent.type === 'task' ? 'Task' : newEvent.type === 'holiday' ? 'Holiday' : 'Review',
       startDate: selectedDay,
       dueDate: selectedDay,
       status: 'To Do',
@@ -125,6 +125,37 @@ export default function TasksCalendar() {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     setSelectedDay(dateStr);
     setShowAddEvent(true);
+  };
+
+  const isAdmin = user?.role === 'admin' || user?.role_name === 'Admin' || user?.role_name === 'Super Admin' || user?.role === 'super_admin';
+
+  const toggleSaturdayOff = async (e, dateStr, existingEvent) => {
+    e.stopPropagation();
+    if (existingEvent) {
+      try {
+        await deleteTask(existingEvent.id);
+        addToast('Saturday Off removed successfully', 'success');
+      } catch (err) {
+        addToast('Failed to remove Saturday Off', 'error');
+      }
+    } else {
+      try {
+        await createTask({
+          title: 'Saturday Off',
+          type: 'Holiday',
+          startDate: dateStr,
+          dueDate: dateStr,
+          status: 'Done',
+          priority: 'Low',
+          assignee: 'All Employees',
+          project: 'General',
+          description: 'Saturday Weekly Off'
+        });
+        addToast('Saturday Off added successfully', 'success');
+      } catch (err) {
+        addToast('Failed to add Saturday Off', 'error');
+      }
+    }
   };
 
   // Week view dates
@@ -220,18 +251,53 @@ export default function TasksCalendar() {
                   const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                   const dayEvents = getEventsForDate(dateStr);
                   const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+                  
+                  const isSaturday = new Date(year, month, day).getDay() === 6;
+                  const satOffEvent = isSaturday
+                    ? dayEvents.find(ev => ev.type === 'holiday' && ev.title === 'Saturday Off')
+                    : null;
+                  
+                  const filteredDayEvents = dayEvents.filter(ev => !(ev.type === 'holiday' && ev.title === 'Saturday Off'));
+
                   return (
                     <div key={day} className={`calendar-cell ${isToday ? 'today' : ''}`} onClick={() => handleDayClick(day)}>
                       <div className="flex items-center justify-between px-1 mb-1">
                         <span className={`text-xs font-medium ${isToday ? 'w-6 h-6 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center' : ''}`}>{day}</span>
                       </div>
                       <div className="space-y-0.5 px-0.5">
-                        {dayEvents.slice(0, 3).map(ev => (
+                        {filteredDayEvents.slice(0, 3).map(ev => (
                           <div key={ev.id} className={`text-[10px] px-1 py-0.5 rounded truncate ${eventColors[ev.type]}`}>
                             {ev.title}
                           </div>
                         ))}
-                        {dayEvents.length > 3 && <div className="text-[10px] text-[var(--color-muted-foreground)] px-1">+{dayEvents.length - 3} more</div>}
+                        {filteredDayEvents.length > 3 && <div className="text-[10px] text-[var(--color-muted-foreground)] px-1">+{filteredDayEvents.length - 3} more</div>}
+                        
+                        {isSaturday && (
+                          isAdmin ? (
+                            satOffEvent ? (
+                              <button
+                                onClick={(e) => toggleSaturdayOff(e, dateStr, satOffEvent)}
+                                className="mt-1 w-full text-[10px] py-0.5 px-1 bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400 border border-red-200 dark:border-red-900 rounded font-bold flex items-center justify-between hover:bg-red-100 hover:text-red-700 dark:hover:bg-red-900/50 transition-colors"
+                              >
+                                <span>Saturday Off</span>
+                                <X size={10} className="shrink-0" />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={(e) => toggleSaturdayOff(e, dateStr, null)}
+                                className="mt-1 w-full text-[10px] py-0.5 px-1 text-slate-400 dark:text-slate-500 border border-dashed border-slate-200 dark:border-slate-800 rounded font-normal hover:bg-slate-50 dark:hover:bg-slate-900/40 hover:border-slate-300 transition-colors"
+                              >
+                                + Saturday Off
+                              </button>
+                            )
+                          ) : (
+                            satOffEvent && (
+                              <div className="mt-1 w-full text-[10px] py-0.5 px-1 bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400 border border-red-200 dark:border-red-900 rounded font-bold text-center">
+                                Saturday Off
+                              </div>
+                            )
+                          )
+                        )}
                       </div>
                     </div>
                   );

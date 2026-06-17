@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
 import { 
-  Clock, CheckCircle, AlertCircle, Calendar, Coffee, Briefcase, Search, Plus, X, Watch, User, RefreshCw
+  Clock, CheckCircle, AlertCircle, Calendar, Coffee, Briefcase, Search, Plus, X, Watch, User, RefreshCw, Activity
 } from 'lucide-react';
 
 export default function Attendance() {
@@ -12,13 +12,21 @@ export default function Attendance() {
     user,
     hrmsEmployeeId,
     hrmsRole,
-    addToast 
+    addToast,
+    workspaceSettings
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showCorrectionModal, setShowCorrectionModal] = useState(false);
   const [liveWorkedTime, setLiveWorkedTime] = useState('0h 0m');
   const [liveBreakTime, setLiveBreakTime] = useState('0h 0m');
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Digital clock timer
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Manual correction form fields
   const [correctionFields, setCorrectionFields] = useState({
@@ -31,12 +39,15 @@ export default function Attendance() {
 
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
 
-  // Find corresponding employee record for logged-in user or active simulator employee
+  // Find corresponding employee record - ALWAYS prioritize logged-in user's email
   const currentEmployee = useMemo(() => {
-    return employees.find(emp => emp.employee_id === hrmsEmployeeId || emp.id === hrmsEmployeeId) || 
-           employees.find(emp => emp.email === user?.email) || 
-           employees[0] || 
-           null;
+    // First: match by logged-in user's email (most reliable)
+    const byEmail = employees.find(emp => emp.email === user?.email);
+    if (byEmail) return byEmail;
+    // Fallback: match by hrmsEmployeeId (for simulator/admin switching)
+    const byId = employees.find(emp => emp.employee_id === hrmsEmployeeId || emp.id === hrmsEmployeeId);
+    if (byId) return byId;
+    return employees[0] || null;
   }, [employees, hrmsEmployeeId, user]);
 
   // Filter attendance records to ONLY show the logged-in user's records
@@ -59,12 +70,18 @@ export default function Attendance() {
     }
   }, [todayLog]);
 
-  // Helper: parse string time (e.g. "08:44 AM") into milliseconds from today start
+  // Helper: parse string time (e.g. "08:44 AM" or "12:55") into milliseconds from today start
   const parseTimeToMs = (timeStr) => {
     if (!timeStr) return 0;
     try {
-      const [time, modifier] = timeStr.split(' ');
-      let [hours, minutes] = time.split(':').map(Number);
+      const cleaned = timeStr.trim().toUpperCase();
+      const match = cleaned.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?/);
+      if (!match) return 0;
+      
+      let hours = parseInt(match[1], 10);
+      const minutes = parseInt(match[2], 10);
+      const modifier = match[3] || '';
+      
       if (modifier === 'PM' && hours < 12) hours += 12;
       if (modifier === 'AM' && hours === 12) hours = 0;
       
@@ -93,7 +110,7 @@ export default function Attendance() {
       return;
     }
 
-    const interval = setInterval(() => {
+    const updateTimer = () => {
       const now = Date.now();
       const checkInMs = parseTimeToMs(todayLog.checkIn);
       if (!checkInMs) return;
@@ -140,7 +157,10 @@ export default function Attendance() {
       }
 
       setLiveWorkedTime(formatMsToHrsMins(workedMs));
-    }, 1000);
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
 
     return () => clearInterval(interval);
   }, [todayLog]);
@@ -230,6 +250,42 @@ export default function Attendance() {
     setShowCorrectionModal(false);
   };
 
+  const getLateDuration = (log) => {
+    if (log.status !== 'Late') return '-';
+    if (!log.checkIn) return '-';
+    
+    const shiftStart = workspaceSettings?.shift_start || '09:00';
+    try {
+      const parseMins = (ts) => {
+        const str = ts.trim().toUpperCase();
+        if (str.includes('AM') || str.includes('PM')) {
+          const parts = str.split(' ');
+          const [h, m] = parts[0].split(':').map(Number);
+          let hours = h;
+          if (parts[1] === 'PM' && h < 12) hours += 12;
+          if (parts[1] === 'AM' && h === 12) hours = 0;
+          return hours * 60 + m;
+        } else {
+          const [h, m] = str.split(':').map(Number);
+          return h * 60 + m;
+        }
+      };
+      
+      const checkInMins = parseMins(log.checkIn);
+      const shiftStartMins = parseMins(shiftStart);
+      
+      if (checkInMins > shiftStartMins) {
+        const diff = checkInMins - shiftStartMins;
+        const h = Math.floor(diff / 60);
+        const m = diff % 60;
+        return h > 0 ? `${h}h ${m}m` : `${m} mins`;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return 'Yes';
+  };
+
   const getDayName = (dateStr) => {
     const dateObj = new Date(dateStr);
     return dateObj.toLocaleDateString('en-US', { weekday: 'long' });
@@ -274,9 +330,19 @@ export default function Attendance() {
                 <p className="text-[10px] text-slate-450 mt-0.5">
                   Employee • {currentEmployee?.role || 'Staff Member'}
                 </p>
-                <span className="inline-flex items-center gap-1 mt-1 text-[9px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-2 py-0.5 rounded-full border border-emerald-100 dark:border-emerald-900/30">
-                  <CheckCircle size={10} /> Present today
-                </span>
+                {todayLog ? (
+                  <span className={`inline-flex items-center gap-1 mt-1 text-[9px] font-bold px-2 py-0.5 rounded-full border ${
+                    todayLog.status === 'Late' 
+                      ? 'text-amber-600 bg-amber-50 border-amber-100 dark:bg-amber-950/20 dark:border-amber-900/30' 
+                      : 'text-emerald-600 bg-emerald-50 border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-450 dark:border-emerald-900/30'
+                  }`}>
+                    <CheckCircle size={10} /> {todayLog.status || 'Present'} today
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 mt-1 text-[9px] font-bold px-2 py-0.5 rounded-full text-slate-500 bg-slate-50 border border-slate-200 dark:bg-slate-950/20 dark:text-slate-400 dark:border-slate-800">
+                    <AlertCircle size={10} /> Not checked in today
+                  </span>
+                )}
               </div>
             </div>
 
@@ -302,26 +368,78 @@ export default function Attendance() {
             </div>
           </div>
 
+          {/* Beautiful Glassmorphic Digital Clock & Live Timeline Widget */}
+          <div className="my-6 p-5 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl border border-indigo-900/30 shadow-lg shadow-indigo-950/25 grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+            
+            {/* Clock Widget Column */}
+            <div className="md:col-span-4 flex flex-col justify-center text-center md:text-left">
+              <span className="text-[9px] font-bold text-indigo-400/80 uppercase tracking-widest flex items-center justify-center md:justify-start gap-1">
+                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></span> Live Tracking Clock
+              </span>
+              <span className="text-3xl font-black font-mono tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white via-indigo-100 to-indigo-300 mt-1 drop-shadow-[0_2px_8px_rgba(99,102,241,0.25)]">
+                {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </span>
+              <span className="text-[10px] font-bold text-slate-400 mt-1 flex items-center justify-center md:justify-start gap-1.5">
+                <Calendar size={11} className="text-indigo-400" />
+                {currentTime.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })}
+              </span>
+            </div>
+            
+            {/* Timeline Column */}
+            <div className="md:col-span-8 flex flex-col justify-center space-y-3 border-t md:border-t-0 md:border-l border-white/10 pt-4 md:pt-0 md:pl-6">
+              <div className="flex justify-between items-center">
+                <span className="text-[9px] font-bold text-indigo-400/80 uppercase tracking-widest">Shift Timeline & Status</span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                  <Activity size={10} className="animate-pulse" /> Active Session
+                </span>
+              </div>
+              
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[10px] font-medium text-slate-300 font-semibold">
+                <span className="flex items-center gap-1.5">
+                  <Clock size={11} className="text-indigo-400" /> 
+                  Shift: <strong className="text-white">{workspaceSettings?.shift_start || '09:00 AM'} - {workspaceSettings?.shift_end || '06:30 PM'}</strong>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Coffee size={11} className="text-amber-400" /> 
+                  Break Window: <strong className="text-white">{workspaceSettings?.break_start || '02:05 PM'} - {workspaceSettings?.break_end || '02:10 PM'}</strong>
+                </span>
+              </div>
+
+              {/* Enhanced timeline graphic */}
+              <div className="space-y-1">
+                <div className="relative h-2.5 bg-white/5 dark:bg-black/20 rounded-full border border-white/10 overflow-hidden">
+                  {/* Standard Shift background fill */}
+                  <div className="absolute left-[10%] right-[15%] bg-indigo-500/20 h-full rounded-full"></div>
+                  {/* Break Zone fill */}
+                  <div className="absolute left-[58%] w-[8%] bg-amber-500/40 h-full border-x border-amber-500/30"></div>
+                  {/* Current Progress Indicator */}
+                  <div 
+                    className="absolute bg-gradient-to-r from-indigo-500 to-indigo-300 h-full rounded-full shadow-[0_0_8px_rgba(99,102,241,0.5)] transition-all duration-1000"
+                    style={{
+                      width: (() => {
+                        const shiftStartMs = parseTimeToMs(workspaceSettings?.shift_start || '09:00 AM');
+                        const shiftEndMs = parseTimeToMs(workspaceSettings?.shift_end || '06:30 PM');
+                        if (!shiftStartMs || !shiftEndMs) return '0%';
+                        const totalShift = shiftEndMs - shiftStartMs;
+                        const elapsed = currentTime.getTime() - shiftStartMs;
+                        return `${Math.min(100, Math.max(0, Math.round((elapsed / totalShift) * 100)))}%`;
+                      })()
+                    }}
+                  ></div>
+                </div>
+                <div className="flex justify-between text-[8px] font-bold text-slate-400 uppercase tracking-wider px-1">
+                  <span>Start</span>
+                  <span className="text-amber-400">Lunch Break</span>
+                  <span>End</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Action buttons & Details */}
           <div className="mt-5 space-y-4">
             {todayLog && todayLog.currentStatus !== 'punch-out' ? (
               <>
-                {/* Worked progress bar */}
-                <div className="space-y-1.5 p-3.5 bg-slate-50/50 dark:bg-slate-850/30 rounded-xl border border-slate-100 dark:border-slate-800/40">
-                  <div className="flex justify-between items-center text-[10px] font-bold text-slate-450 uppercase tracking-wider">
-                    <span>Shift Progress (8h standard)</span>
-                    <span className="text-indigo-600 dark:text-indigo-400 font-extrabold">
-                      {Math.min(100, Math.round(((parseInt(liveWorkedTime.match(/(\d+)h/)?.[1] || 0) * 60 + parseInt(liveWorkedTime.match(/(\d+)m/)?.[1] || 0)) / 480) * 100))}% ({liveWorkedTime} / 8h)
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-                    <div 
-                      className="bg-indigo-600 h-full rounded-full transition-all duration-500" 
-                      style={{ width: `${Math.min(100, Math.round(((parseInt(liveWorkedTime.match(/(\d+)h/)?.[1] || 0) * 60 + parseInt(liveWorkedTime.match(/(\d+)m/)?.[1] || 0)) / 480) * 100))}%` }}
-                    ></div>
-                  </div>
-                </div>
-
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pt-2">
                   {todayBreaks.length > 0 ? (
                     <div className="flex flex-wrap gap-2 items-center">
@@ -494,7 +612,7 @@ export default function Attendance() {
                       <td className="px-5 py-3.5 font-mono text-indigo-600 dark:text-indigo-400">{log.checkIn || '--:--'}</td>
                       <td className="px-5 py-3.5 font-mono text-slate-450">{log.checkOut || '--:--'}</td>
                       <td className="px-5 py-3.5 text-slate-450 font-mono">{log.breakDuration || '0h 0m'}</td>
-                      <td className="px-5 py-3.5 text-slate-450">-</td>
+                      <td className="px-5 py-3.5 text-amber-600 dark:text-amber-400 font-mono">{getLateDuration(log)}</td>
                       <td className="px-5 py-3.5 text-slate-450 font-mono">
                         {log.overtimeHours > 0 ? `${overH}h ${overM}m` : '-'}
                       </td>

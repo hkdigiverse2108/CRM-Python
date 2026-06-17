@@ -29,7 +29,8 @@ export default function Header() {
     activeOrg,
     setActiveOrg,
     darkMode,
-    toggleDarkMode
+    toggleDarkMode,
+    workspaceSettings
   } = useApp();
   
   const navigate = useNavigate();
@@ -85,11 +86,19 @@ export default function Header() {
           
           {sidebarCollapsed && (
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/20 shrink-0">
-                <span className="text-white text-sm font-black tracking-tighter">A</span>
-              </div>
+              {workspaceSettings?.logo_url ? (
+                <img 
+                  src={workspaceSettings.logo_url.startsWith('/') ? `${import.meta.env.VITE_API_BASE_URL.replace('/api', '')}${workspaceSettings.logo_url}` : workspaceSettings.logo_url} 
+                  alt="Logo" 
+                  className="w-9 h-9 rounded-xl object-contain shrink-0"
+                />
+              ) : (
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/20 shrink-0">
+                  <span className="text-white text-sm font-black tracking-tighter">A</span>
+                </div>
+              )}
               <span className="text-sm font-bold text-black dark:text-white tracking-tight whitespace-nowrap hidden sm:block">
-                AIO CRM Platform
+                {workspaceSettings?.company_name || 'AIO CRM Platform'}
               </span>
             </div>
           )}

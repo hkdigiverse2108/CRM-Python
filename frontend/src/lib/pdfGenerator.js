@@ -6,6 +6,42 @@
 import { formatCurrency, formatDate } from './utils';
 
 export function printDocument(type, data) {
+  const settingsStr = localStorage.getItem('crm-workspace-settings');
+  let workspaceSettings = null;
+  if (settingsStr) {
+    try {
+      workspaceSettings = JSON.parse(settingsStr);
+    } catch(e) {}
+  }
+  
+  const activeOrg = localStorage.getItem('auth-tenant-id') || 'rapidmodel_corp';
+  const isHk = activeOrg !== 'rapidmodel_corp' && activeOrg !== 'rapidmodel';
+
+  const companyName = workspaceSettings?.company_name || (isHk ? 'HARIKRUSHN DIGIVERSE LLP' : 'RapidModel Corp Private Limited');
+  const companyAddress = workspaceSettings?.company_address || (isHk ? 'SURAT, GUJARAT, INDIA' : 'DLF CyberCity, Phase III, Gurugram, Haryana, 122002');
+  const companyGstin = workspaceSettings?.company_gstin || (isHk ? '24APQPN3916P1Z4' : '06AAACR9821Q1ZH');
+  const companyPan = workspaceSettings?.company_pan || (isHk ? 'ABCDE1234F' : 'XYZ123456');
+  const logoUrl = workspaceSettings?.logo_url || '';
+
+  const headerHtml = `
+    <div class="header">
+      <div class="logo-container">
+        \${logoUrl ? \`
+          <img src="\${logoUrl.startsWith('/') ? \`\${window.location.origin}\${logoUrl}\` : logoUrl}" style="height: 35px; max-width: 150px; object-fit: contain; margin-bottom: 5px;" />
+        \` : \`
+          <div class="logo">\${companyName.split(' ')[0]}<span>\${companyName.split(' ').slice(1).join('') || ''}</span></div>
+        \`}
+        <div style="font-size: 8px; font-weight: 700; color: #64748b; margin-top: 4px; letter-spacing: 1px; text-transform: uppercase;">INTELLIGENT BUSINESS SYSTEMS</div>
+      </div>
+      <div class="company-info">
+        <p style="font-weight: 700; margin: 0; color: #1e1b4b; font-size: 12px;">\${companyName}</p>
+        \${companyAddress.split(',').map(part => \`<p style="margin: 2px 0;">\${part.trim()}</p>\`).join('')}
+        <p style="margin: 2px 0; font-weight: 600;">GSTIN: \${companyGstin}</p>
+        \${companyPan ? \`<p style="margin: 2px 0; font-weight: 600;">PAN: \${companyPan}</p>\` : ''}
+      </div>
+    </div>
+  `;
+
   const printIframe = document.createElement('iframe');
   printIframe.style.position = 'absolute';
   printIframe.style.top = '-10000px';
@@ -315,18 +351,7 @@ export function printDocument(type, data) {
         </head>
         <body>
           <div class="brand-bar"></div>
-          <div class="header">
-            <div class="logo-container">
-              <div class="logo">RAPIDMODEL<span>CORP</span></div>
-              <div style="font-size: 10px; font-weight: 700; color: #64748b; margin-top: 4px; letter-spacing: 1px;">INTELLIGENT BUSINESS SYSTEMS</div>
-            </div>
-            <div class="company-info">
-              <p style="font-weight: 700; margin: 0; color: #1e1b4b; font-size: 12px;">RapidModel Corp Private Limited</p>
-              <p style="margin: 2px 0;">DLF CyberCity, Phase III</p>
-              <p style="margin: 2px 0;">Gurugram, Haryana, 122002</p>
-              <p style="margin: 2px 0; font-weight: 600;">GSTIN: 06AAACR9821Q1ZH</p>
-            </div>
-          </div>
+          \${headerHtml}
 
           <div class="title-section">
             <div>
@@ -435,17 +460,7 @@ export function printDocument(type, data) {
         </head>
         <body>
           <div class="brand-bar"></div>
-          <div class="header">
-            <div class="logo-container">
-              <div class="logo">RAPIDMODEL<span>CORP</span></div>
-              <div style="font-size: 10px; font-weight: 700; color: #64748b; margin-top: 4px; letter-spacing: 1px;">INTELLIGENT BUSINESS SYSTEMS</div>
-            </div>
-            <div class="company-info">
-              <p style="font-weight: 700; margin: 0; color: #1e1b4b; font-size: 12px;">RapidModel Corp Private Limited</p>
-              <p style="margin: 2px 0;">DLF CyberCity, Gurugram</p>
-              <p style="margin: 2px 0;">Haryana, India, 122002</p>
-            </div>
-          </div>
+          \${headerHtml}
 
           <div class="title-section">
             <div>
@@ -543,16 +558,7 @@ export function printDocument(type, data) {
         </head>
         <body>
           <div class="brand-bar"></div>
-          <div class="header">
-            <div class="logo-container">
-              <div class="logo">RAPIDMODEL<span>CORP</span></div>
-              <div style="font-size: 10px; font-weight: 700; color: #64748b; margin-top: 4px; letter-spacing: 1px;">INTELLIGENT BUSINESS SYSTEMS</div>
-            </div>
-            <div class="company-info">
-              <p style="font-weight: 700; margin: 0; color: #1e1b4b; font-size: 12px;">RapidModel Corp Private Limited</p>
-              <p style="margin: 2px 0;">Gurugram, HR, 122002</p>
-            </div>
-          </div>
+          ${headerHtml}
 
           <div class="title-section">
             <div>
@@ -619,16 +625,7 @@ export function printDocument(type, data) {
         </head>
         <body>
           <div class="brand-bar"></div>
-          <div class="header">
-            <div class="logo-container">
-              <div class="logo">RAPIDMODEL<span>CORP</span></div>
-              <div style="font-size: 10px; font-weight: 700; color: #64748b; margin-top: 4px; letter-spacing: 1px;">INTELLIGENT BUSINESS SYSTEMS</div>
-            </div>
-            <div class="company-info">
-              <p style="font-weight: 700; margin: 0; color: #1e1b4b; font-size: 12px;">RapidModel Corp Private Limited</p>
-              <p style="margin: 2px 0;">Gurugram, HR, 122002</p>
-            </div>
-          </div>
+          ${headerHtml}
 
           <div class="title-section">
             <div>

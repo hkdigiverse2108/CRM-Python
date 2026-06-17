@@ -51,9 +51,38 @@ class UserCreatePayload(BaseModel):
     password: str = Field(..., min_length=6, max_length=50)
     phone: Optional[str] = Field(None, max_length=20)
     reporting_manager: Optional[str] = Field(None, max_length=100)
+    salary: Optional[float] = 0.0
+
+class UserUpdatePayload(BaseModel):
+    email: EmailStr
+    full_name: str = Field(..., min_length=2, max_length=100)
+    phone: Optional[str] = Field(None, max_length=20)
+    role_name: Optional[str] = None
+    department: Optional[str] = None
+    reporting_manager: Optional[str] = Field(None, max_length=100)
+    salary: Optional[float] = 0.0
 
 class PasswordResetPayload(BaseModel):
     password: str = Field(..., min_length=6, max_length=50)
+
+class WorkspaceSettingsPayload(BaseModel):
+    company_name: str = Field(..., min_length=2, max_length=100)
+    custom_domain: Optional[str] = Field(None, max_length=255)
+    logo_url: Optional[str] = Field(None, max_length=500)
+    brand_color: Optional[str] = Field(None, max_length=50)
+    company_address: Optional[str] = None
+    company_gstin: Optional[str] = Field(None, max_length=100)
+    company_docs: Optional[str] = None
+    working_days: Optional[int] = 26
+    login_greeting: Optional[str] = "Enterprise multi-tenant customer relationship hub"
+    shift_start: Optional[str] = "09:00 AM"
+    shift_end: Optional[str] = "06:00 PM"
+    company_pan: Optional[str] = None
+    break_duration: Optional[int] = 60
+    break_start: Optional[str] = "01:00 PM"
+    break_end: Optional[str] = "02:00 PM"
+    saturdays_off: Optional[str] = "2,4"
+
 
 class UserPermissionsUpdatePayload(BaseModel):
     pages_permissions: List[str]
@@ -119,7 +148,7 @@ async def list_workspace_users(
         if search:
             # Using ft_users FULLTEXT search
             users_query = text("""
-                SELECT u.user_id, u.email, u.full_name, u.phone, u.status, u.role_id, u.created_at, r.role_name, e.employee_id
+                SELECT u.user_id, u.email, u.full_name, u.phone, u.status, u.role_id, u.created_at, r.role_name, e.employee_id, e.department, e.reporting_manager, e.salary_structure
                 FROM users u
                 LEFT JOIN roles r ON u.role_id = r.role_id
                 LEFT JOIN hrms_employees e ON u.email = e.email AND e.workspace_id = u.workspace_id AND e.deleted_at IS NULL
@@ -136,7 +165,7 @@ async def list_workspace_users(
             params = {"workspace_id": workspace_id, "search": search, "limit": per_page, "offset": offset}
         else:
             users_query = text("""
-                SELECT u.user_id, u.email, u.full_name, u.phone, u.status, u.role_id, u.created_at, r.role_name, e.employee_id
+                SELECT u.user_id, u.email, u.full_name, u.phone, u.status, u.role_id, u.created_at, r.role_name, e.employee_id, e.department, e.reporting_manager, e.salary_structure
                 FROM users u
                 LEFT JOIN roles r ON u.role_id = r.role_id
                 LEFT JOIN hrms_employees e ON u.email = e.email AND e.workspace_id = u.workspace_id AND e.deleted_at IS NULL
@@ -153,8 +182,17 @@ async def list_workspace_users(
         rows = db.execute(users_query, params).mappings().all()
         total = db.execute(count_query, {"workspace_id": workspace_id, "search": search} if search else {"workspace_id": workspace_id}).scalar() or 0
 
+        import json
         users_list = []
         for r in rows:
+            sal_struct = {}
+            if r["salary_structure"]:
+                try:
+                    sal_struct = json.loads(r["salary_structure"]) if isinstance(r["salary_structure"], str) else r["salary_structure"]
+                except:
+                    pass
+            basic_sal = float(sal_struct.get("basic") or 0.0)
+
             users_list.append({
                 "user_id": r["user_id"],
                 "email": r["email"],
@@ -163,6 +201,9 @@ async def list_workspace_users(
                 "status": r["status"],
                 "role_name": r["role_name"] or "Custom Role",
                 "employee_id": r["employee_id"],
+                "department": r["department"],
+                "reporting_manager": r["reporting_manager"],
+                "salary": basic_sal,
                 "created_at": r["created_at"].isoformat() if r["created_at"] else None
             })
 
@@ -321,11 +362,24 @@ async def create_workspace_user(
         elif "support" in rd_lower:
             dept_name = "Support"
 
+        import json
+        salary_structure = {
+            "basic": float(payload.salary or 0.0),
+            "hra": 0.0,
+            "allowances": 0.0,
+            "incentives": 0.0,
+            "bonus": 0.0,
+            "pf": 0.0,
+            "esi": 0.0,
+            "tds": 0.0,
+            "loanDeductions": 0.0
+        }
+
         if not existing_emp:
             emp_id = f"EMP-{str(uuid.uuid4())[:6].upper()}"
             insert_emp_sql = text("""
-                INSERT INTO hrms_employees (employee_id, workspace_id, name, role, department, email, phone, status, reporting_manager, join_date)
-                VALUES (:emp_id, :ws_id, :name, :role, :department, :email, :phone, 'Active', :reporting_manager, CURRENT_DATE)
+                INSERT INTO hrms_employees (employee_id, workspace_id, name, role, department, email, phone, status, reporting_manager, join_date, salary_structure)
+                VALUES (:emp_id, :ws_id, :name, :role, :department, :email, :phone, 'Active', :reporting_manager, CURRENT_DATE, :salary_structure)
             """)
             db.execute(insert_emp_sql, {
                 "emp_id": emp_id,
@@ -335,12 +389,24 @@ async def create_workspace_user(
                 "department": dept_name,
                 "email": payload.email,
                 "phone": payload.phone,
-                "reporting_manager": payload.reporting_manager
+                "reporting_manager": payload.reporting_manager,
+                "salary_structure": json.dumps(salary_structure)
             })
         else:
+            # Preserving other fields of existing salary structure if present
+            sal_struct = {}
+            if existing_emp:
+                emp_row = db.execute(text("SELECT salary_structure FROM hrms_employees WHERE employee_id = :emp_id"), {"emp_id": existing_emp}).mappings().first()
+                if emp_row and emp_row["salary_structure"]:
+                    try:
+                        sal_struct = json.loads(emp_row["salary_structure"]) if isinstance(emp_row["salary_structure"], str) else emp_row["salary_structure"]
+                    except:
+                        pass
+            sal_struct["basic"] = float(payload.salary or 0.0)
+
             update_emp_sql = text("""
                 UPDATE hrms_employees 
-                SET reporting_manager = :reporting_manager, role = :role, department = :department, name = :name, phone = :phone, deleted_at = NULL
+                SET reporting_manager = :reporting_manager, role = :role, department = :department, name = :name, phone = :phone, salary_structure = :salary_structure, deleted_at = NULL
                 WHERE employee_id = :emp_id
             """)
             db.execute(update_emp_sql, {
@@ -349,6 +415,7 @@ async def create_workspace_user(
                 "department": dept_name,
                 "name": payload.full_name,
                 "phone": payload.phone,
+                "salary_structure": json.dumps(sal_struct),
                 "emp_id": existing_emp
             })
         
@@ -363,6 +430,113 @@ async def create_workspace_user(
         message="User created successfully",
         status_code=201
     )
+
+@router.put("/users/{user_id}/details")
+async def update_workspace_user_details(
+    user_id: str,
+    payload: UserUpdatePayload,
+    request: Request,
+    current_user: dict = Depends(require_workspace_admin)
+):
+    workspace_id = current_user.get("tenant_id") or current_user.get("workspace_id")
+    ip = request.client.host if request.client else None
+
+    with get_db() as db:
+        # Verify user exists and belongs to workspace
+        user_row = db.execute(text("""
+            SELECT email, role_id, full_name FROM users 
+            WHERE user_id = :uid AND workspace_id = :ws_id AND deleted_at IS NULL
+        """), {"uid": user_id, "ws_id": workspace_id}).mappings().first()
+        if not user_row:
+            raise HTTPException(status_code=404, detail="User not found in this workspace.")
+
+        # Check email uniqueness if it changed
+        if payload.email != user_row["email"]:
+            email_check = db.execute(text("""
+                SELECT user_id FROM users 
+                WHERE email = :email AND workspace_id = :ws_id AND deleted_at IS NULL AND user_id != :uid
+            """), {"email": payload.email, "ws_id": workspace_id, "uid": user_id}).scalar()
+            if email_check:
+                raise HTTPException(status_code=400, detail="Email is already in use by another user in this workspace.")
+
+        # Update users table
+        db.execute(text("""
+            UPDATE users 
+            SET email = :email, full_name = :name, phone = :phone
+            WHERE user_id = :uid AND workspace_id = :ws_id
+        """), {
+            "email": payload.email,
+            "name": payload.full_name,
+            "phone": payload.phone,
+            "uid": user_id,
+            "ws_id": workspace_id
+        })
+
+        # Update or create hrms_employees record
+        existing_emp = db.execute(text("""
+            SELECT employee_id FROM hrms_employees WHERE email = :email AND workspace_id = :ws_id
+        """), {"email": user_row["email"], "ws_id": workspace_id}).scalar()
+
+        if not existing_emp:
+            # Check if there is one with the new email
+            existing_emp = db.execute(text("""
+                SELECT employee_id FROM hrms_employees WHERE email = :email AND workspace_id = :ws_id
+            """), {"email": payload.email, "ws_id": workspace_id}).scalar()
+
+        import json
+        role_designation = payload.role_name or "Sales Executive"
+        dept_name = payload.department or "Sales"
+
+        # Preserving other fields of existing salary structure if present
+        sal_struct = {}
+        if existing_emp:
+            emp_row = db.execute(text("SELECT salary_structure FROM hrms_employees WHERE employee_id = :emp_id"), {"emp_id": existing_emp}).mappings().first()
+            if emp_row and emp_row["salary_structure"]:
+                try:
+                    sal_struct = json.loads(emp_row["salary_structure"]) if isinstance(emp_row["salary_structure"], str) else emp_row["salary_structure"]
+                except:
+                    pass
+        sal_struct["basic"] = float(payload.salary or 0.0)
+
+        if not existing_emp:
+            emp_id = f"EMP-{str(uuid.uuid4())[:6].upper()}"
+            db.execute(text("""
+                INSERT INTO hrms_employees (employee_id, workspace_id, name, role, department, email, phone, status, reporting_manager, join_date, salary_structure)
+                VALUES (:emp_id, :ws_id, :name, :role, :department, :email, :phone, 'Active', :reporting_manager, CURRENT_DATE, :salary_structure)
+            """), {
+                "emp_id": emp_id,
+                "ws_id": workspace_id,
+                "name": payload.full_name,
+                "role": role_designation,
+                "department": dept_name,
+                "email": payload.email,
+                "phone": payload.phone,
+                "reporting_manager": payload.reporting_manager,
+                "salary_structure": json.dumps(sal_struct)
+            })
+        else:
+            db.execute(text("""
+                UPDATE hrms_employees 
+                SET name = :name, email = :email, phone = :phone, role = :role, department = :department, reporting_manager = :reporting_manager, salary_structure = :salary_structure
+                WHERE employee_id = :emp_id
+            """), {
+                "name": payload.full_name,
+                "email": payload.email,
+                "phone": payload.phone,
+                "role": role_designation,
+                "department": dept_name,
+                "reporting_manager": payload.reporting_manager,
+                "salary_structure": json.dumps(sal_struct),
+                "emp_id": existing_emp
+            })
+
+        log_audit_event(
+            db, workspace_id, current_user["id"], current_user["email"],
+            "UPDATE_USER_DETAILS", f"Updated details for user {payload.email}", ip
+        )
+        db.commit()
+
+    return success_response(message="User details updated successfully")
 
 @router.put("/users/{user_id}/password")
 async def change_user_password(
@@ -730,3 +904,83 @@ async def update_user_permissions(
         db.commit()
         
     return success_response(message="User permissions updated successfully")
+
+@router.get("/settings")
+async def get_workspace_settings(current_user: dict = Depends(get_current_user)):
+    workspace_id = current_user.get("tenant_id") or current_user.get("workspace_id")
+    with get_db() as db:
+        row = db.execute(text("""
+            SELECT workspace_name, custom_domain, logo_url, brand_color, company_address, company_gstin, company_docs, working_days,
+                   login_greeting, shift_start, shift_end, company_pan, break_duration, break_start, break_end, saturdays_off
+            FROM workspaces WHERE workspace_id = :ws_id
+        """), {"ws_id": workspace_id}).mappings().first()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail="Workspace settings not found.")
+            
+        return success_response(data={
+            "company_name": row["workspace_name"],
+            "custom_domain": row["custom_domain"],
+            "logo_url": row["logo_url"],
+            "brand_color": row["brand_color"],
+            "company_address": row["company_address"],
+            "company_gstin": row["company_gstin"],
+            "company_docs": row["company_docs"],
+            "working_days": row["working_days"] or 26,
+            "login_greeting": row["login_greeting"] or "Enterprise multi-tenant customer relationship hub",
+            "shift_start": row["shift_start"] or "09:00 AM",
+            "shift_end": row["shift_end"] or "06:00 PM",
+            "company_pan": row["company_pan"],
+            "break_duration": row["break_duration"] if row["break_duration"] is not None else 60,
+            "break_start": row["break_start"] or "01:00 PM",
+            "break_end": row["break_end"] or "02:00 PM",
+            "saturdays_off": row["saturdays_off"] if row["saturdays_off"] is not None else "2,4"
+        })
+
+@router.put("/settings")
+async def update_workspace_settings(
+    payload: WorkspaceSettingsPayload,
+    request: Request,
+    current_user: dict = Depends(require_workspace_admin)
+):
+    workspace_id = current_user.get("tenant_id") or current_user.get("workspace_id")
+    ip = request.client.host if request.client else None
+
+    with get_db() as db:
+        db.execute(text("""
+            UPDATE workspaces 
+            SET workspace_name = :company_name, business_name = :company_name, custom_domain = :custom_domain, 
+                logo_url = :logo_url, brand_color = :brand_color, company_address = :company_address, 
+                company_gstin = :company_gstin, company_docs = :company_docs, working_days = :working_days,
+                login_greeting = :login_greeting, shift_start = :shift_start, shift_end = :shift_end, company_pan = :company_pan,
+                break_duration = :break_duration, break_start = :break_start, break_end = :break_end, saturdays_off = :saturdays_off
+            WHERE workspace_id = :ws_id
+        """), {
+            "company_name": payload.company_name,
+            "custom_domain": payload.custom_domain,
+            "logo_url": payload.logo_url,
+            "brand_color": payload.brand_color,
+            "company_address": payload.company_address,
+            "company_gstin": payload.company_gstin,
+            "company_docs": payload.company_docs,
+            "working_days": payload.working_days,
+            "login_greeting": payload.login_greeting,
+            "shift_start": payload.shift_start,
+            "shift_end": payload.shift_end,
+            "company_pan": payload.company_pan,
+            "break_duration": payload.break_duration,
+            "break_start": payload.break_start,
+            "break_end": payload.break_end,
+            "saturdays_off": payload.saturdays_off,
+            "ws_id": workspace_id
+        })
+        
+        log_audit_event(
+            db, workspace_id, current_user["id"], current_user["email"],
+            "UPDATE_WORKSPACE_SETTINGS", "Updated workspace general settings and branding.", ip
+        )
+        db.commit()
+
+    return success_response(message="Workspace settings updated successfully")
+
+

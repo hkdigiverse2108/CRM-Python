@@ -143,6 +143,35 @@ class AuthService:
         if user is None:
             raise UnauthorizedException("User not found")
         
+        # Auto-sync user to hrms_employees if missing
+        try:
+            from backend.app.repositories.employee_repo import get_employee_repository
+            from backend.app.models.employee import Employee
+            
+            emp_repo = get_employee_repository()
+            existing_employees = await emp_repo.get_all(tenant_id, {"email": user.email}, 0, 1)
+            if not existing_employees:
+                total_emp = await emp_repo.count(tenant_id)
+                next_id = f"EMP-{str(total_emp + 1).zfill(3)}"
+                
+                role_designation = "Organization Admin" if user.role == "admin" else "Staff"
+                dept_name = "Management" if user.role == "admin" else "Staff"
+                
+                employee = Employee(
+                    workspace_id=tenant_id,
+                    name=user.full_name,
+                    role=role_designation,
+                    department=dept_name,
+                    email=user.email,
+                    phone=user.phone,
+                    status="Active",
+                )
+                employee.employee_id = next_id
+                await emp_repo.create(employee)
+                print(f"[+] Auto-Synced Profile: Created employee {next_id} for user {user.email}")
+        except Exception as e:
+            print(f"[!] Auto-syncing employee on get_profile failed: {e}")
+
         res = user.to_dict()
         
         # Load permissions and role name
