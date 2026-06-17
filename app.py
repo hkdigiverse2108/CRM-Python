@@ -27,7 +27,7 @@ def start_servers():
 
     # 1. Start Frontend Dev Server
     print(f"[*] Launching React frontend at http://{frontend_host}:{frontend_port}...")
-    frontend_cmd = ["npm", "run", "dev", "--", "--port", str(frontend_port), "--host", "0.0.0.0"]
+    frontend_cmd = ["npm", "run", "preview", "--", "--port", str(frontend_port), "--host", "0.0.0.0"]
     
     # Windows requires shell=True to correctly resolve and run npm commands
     is_windows = sys.platform.startswith("win")
