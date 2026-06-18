@@ -35,7 +35,8 @@ async def get_oauth_url(
     The frontend redirects the user to this URL to begin the OAuth flow.
     """
     tenant_id = request.state.tenant.id
-    result = meta_service.generate_oauth_url(workspace_id=tenant_id)
+    user_id = current_user["id"]
+    result = meta_service.generate_oauth_url(workspace_id=tenant_id, user_id=user_id)
     return success_response(data=result, message="OAuth URL generated")
 
 
