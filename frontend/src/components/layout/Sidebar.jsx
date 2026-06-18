@@ -104,9 +104,8 @@ const sidebarGroups = [
   {
     title: 'Automation',
     icon: Bot,
-    module: 'whatsapp',
+    module: 'automation',
     items: [
-      { label: 'Bot Builder', path: '/omnichannel/whatsapp/bot-builder', module: 'whatsapp', pageKey: 'whatsapp_inbox' },
       { label: 'Workflows', path: '/marketing/automations', module: 'automation', pageKey: 'automation_workflows' },
     ]
   },

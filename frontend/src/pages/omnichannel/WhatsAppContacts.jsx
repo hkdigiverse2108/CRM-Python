@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
-import { Search, Phone, Mail, Building2, Plus, X, Edit, Trash2, Tag, Zap, MessageSquare } from 'lucide-react';
+import { Search, Phone, Mail, Building2, Plus, X, Edit, Trash2, Tag, Zap, MessageSquare, Users } from 'lucide-react';
 import PageHeader from '@/components/ui/PageHeader';
 
 export default function Contacts() {

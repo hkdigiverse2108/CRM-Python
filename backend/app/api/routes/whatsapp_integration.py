@@ -280,7 +280,7 @@ async def get_conversations(
     with get_db() as db:
         # Get all leads that have messages in lead_messages on the 'whatsapp' channel
         query = text("""
-            SELECT l.lead_id, l.full_name AS name, l.phone_primary, l.email, l.score,
+            SELECT l.lead_id, l.full_name AS name, l.phone_primary, l.email, l.lead_score AS score,
                    lm.message_body, lm.message_time, lm.sender, lm.delivery_status
             FROM leads l
             JOIN (
