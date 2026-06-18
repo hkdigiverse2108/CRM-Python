@@ -4,7 +4,7 @@ import { useApp } from '@/context/AppContext';
 import {
   LayoutDashboard, Target, MessageSquare, ShoppingCart, FileText,
   Users, ClipboardList, Settings, Briefcase, Building2, Shield, KeyRound, ToggleRight,
-  ChevronDown, ChevronRight, PanelLeftClose, PanelLeft, Megaphone, LifeBuoy
+  ChevronDown, ChevronRight, PanelLeftClose, PanelLeft, Megaphone, LifeBuoy, Bot
 } from 'lucide-react';
 
 // ─── Super Admin sidebar (only org management) ─────────────────────
