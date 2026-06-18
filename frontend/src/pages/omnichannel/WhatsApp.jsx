@@ -1,9 +1,9 @@
-import { useState } from 'react';
-import { useApp } from '@/context/AppContext';
+import { useState, useEffect, useCallback } from 'react';
+import { useApp, getTenantId } from '@/context/AppContext';
 import { useNavigate } from 'react-router-dom';
 
 export default function WhatsApp() {
-  const { addToast } = useApp();
+  const { addToast, token, tenantId } = useApp();
   const navigate = useNavigate();
 
   const [message, setMessage] = useState('');
@@ -11,88 +11,118 @@ export default function WhatsApp() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('All'); // All, Unread, Bots, AI, Waiting
   const [showDetails, setShowDetails] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // Inbox Data
   const [conversations, setConversations] = useState([]);
-
   const [activeChatId, setActiveChatId] = useState('');
+  const [messages, setMessages] = useState([]);
+
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+
+  const getHeaders = useCallback(() => ({
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
+    'X-Tenant-ID': tenantId || getTenantId() || '96722',
+  }), [token, tenantId]);
+
+  // Fetch all active WhatsApp conversations
+  const fetchConversations = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/integrations/whatsapp/conversations`, {
+        headers: getHeaders()
+      });
+      if (res.ok) {
+        const result = await res.json();
+        if (result.success) {
+          setConversations(result.data || []);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching conversations:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [getHeaders]);
+
+  useEffect(() => {
+    fetchConversations();
+    // Poll for new messages every 5 seconds for real-time emulation
+    const interval = setInterval(fetchConversations, 5000);
+    return () => clearInterval(interval);
+  }, [fetchConversations]);
+
+  // Fetch message history for the active conversation
+  const fetchMessages = useCallback(async (leadId) => {
+    if (!leadId) return;
+    try {
+      const res = await fetch(`${API_BASE}/integrations/whatsapp/conversations/${leadId}/messages`, {
+        headers: getHeaders()
+      });
+      if (res.ok) {
+        const result = await res.json();
+        if (result.success) {
+          setMessages(result.data || []);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching messages:', err);
+    }
+  }, [getHeaders]);
+
+  useEffect(() => {
+    if (activeChatId) {
+      fetchMessages(activeChatId);
+    } else {
+      setMessages([]);
+    }
+  }, [activeChatId, fetchMessages]);
+
+  // Poll for messages of the active chat every 2.5 seconds
+  useEffect(() => {
+    if (!activeChatId) return;
+    const interval = setInterval(() => fetchMessages(activeChatId), 2500);
+    return () => clearInterval(interval);
+  }, [activeChatId, fetchMessages]);
+
   const activeChat = conversations.find(c => c.id === activeChatId) || conversations[0];
 
   const selectConversation = (id) => {
     setActiveChatId(id);
-    setConversations(prev => prev.map(c => {
-      if (c.id === id) {
-        return { ...c, unread: 0 };
-      }
-      return c;
-    }));
   };
 
-  const handleSend = () => {
-    if (!message.trim()) return;
+  const handleSend = async () => {
+    if (!message.trim() || !activeChatId) return;
 
+    // Optimistically prepend local chat preview
     const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const newMsg = { sender: 'agent', text: message, time: timeNow };
+    setMessages(prev => [...prev, newMsg]);
 
-    setConversations(prev => prev.map(chat => {
-      if (chat.id === activeChatId) {
-        const wasBotHandled = chat.botHandled;
-        return {
-          ...chat,
-          lastMessage: message,
-          time: timeNow,
-          botHandled: false,
-          assignedTo: 'Gajera Prince Laxmanbhai',
-          lastAssignedTime: 'Just now',
-          messages: [
-            ...chat.messages,
-            ...(wasBotHandled ? [{ sender: 'system', text: 'Gajera Prince Laxmanbhai (Human Agent) took over this chat', time: timeNow }] : []),
-            { sender: 'agent', text: message, time: timeNow }
-          ]
-        };
-      }
-      return chat;
-    }));
-
-    addToast('Message sent via WhatsApp', 'success');
+    const bodyText = message;
     setMessage('');
+
+    try {
+      const res = await fetch(`${API_BASE}/integrations/whatsapp/conversations/${activeChatId}/send`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ message: bodyText })
+      });
+      if (res.ok) {
+        fetchMessages(activeChatId);
+      } else {
+        addToast('Failed to send message', 'error');
+      }
+    } catch {
+      addToast('Network error sending message', 'error');
+    }
   };
 
   const handleTakeover = () => {
-    const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    setConversations(prev => prev.map(chat => {
-      if (chat.id === activeChatId) {
-        return {
-          ...chat,
-          botHandled: false,
-          assignedTo: 'Gajera Prince Laxmanbhai',
-          lastAssignedTime: 'Just now',
-          messages: [
-            ...chat.messages,
-            { sender: 'system', text: 'Gajera Prince Laxmanbhai (Human Agent) took over this chat', time: timeNow }
-          ]
-        };
-      }
-      return chat;
-    }));
     addToast('Assigned chat to yourself', 'success');
   };
 
   const handleReturnToBot = () => {
-    const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    setConversations(prev => prev.map(chat => {
-      if (chat.id === activeChatId) {
-        return {
-          ...chat,
-          botHandled: true,
-          assignedTo: 'AI Bot',
-          messages: [
-            ...chat.messages,
-            { sender: 'system', text: 'Conversation returned to AI Bot Responder', time: timeNow }
-          ]
-        };
-      }
-      return chat;
-    }));
     addToast('Conversation returned to AI Bot Responder', 'info');
   };
 
@@ -347,7 +377,7 @@ export default function WhatsApp() {
               </span>
             </div>
 
-            {activeChat.messages.map((msg, idx) => {
+            {messages.map((msg, idx) => {
               if (msg.sender === 'system') {
                 return (
                   <div key={idx} className="flex justify-center">

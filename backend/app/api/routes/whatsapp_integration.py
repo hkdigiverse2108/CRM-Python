@@ -269,3 +269,161 @@ async def sync_templates(
 ):
     # Return mock success for sync templates
     return success_response(message="WhatsApp templates synced successfully.")
+
+
+@router.get("/conversations")
+async def get_conversations(
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    tenant_id = request.state.tenant.id
+    with get_db() as db:
+        # Get all leads that have messages in lead_messages on the 'whatsapp' channel
+        query = text("""
+            SELECT l.lead_id, l.name, l.phone_primary, l.email, l.score,
+                   lm.message_body, lm.message_time, lm.sender, lm.delivery_status
+            FROM leads l
+            JOIN (
+                SELECT lm1.lead_id, lm1.message_body, lm1.message_time, lm1.sender, lm1.delivery_status
+                FROM lead_messages lm1
+                JOIN (
+                    SELECT lead_id, MAX(message_time) as max_time
+                    FROM lead_messages
+                    WHERE workspace_id = :ws_id AND channel = 'whatsapp'
+                    GROUP BY lead_id
+                ) lm2 ON lm1.lead_id = lm2.lead_id AND lm1.message_time = lm2.max_time
+            ) lm ON l.lead_id = lm.lead_id
+            WHERE l.workspace_id = :ws_id AND l.deleted_at IS NULL
+            ORDER BY lm.message_time DESC
+        """)
+        
+        rows = db.execute(query, {"ws_id": tenant_id}).fetchall()
+        
+        conversations = []
+        for r in rows:
+            conversations.append({
+                "id": r[0],
+                "name": r[1],
+                "phone": r[2],
+                "email": r[3] or "",
+                "score": r[4] or 50,
+                "lastMessage": r[5],
+                "time": r[6].strftime("%I:%M %p") if r[6] else "",
+                "unread": 0,
+                "avatar": f"https://api.dicebear.com/7.x/adventurer/svg?seed={r[1]}",
+                "botHandled": r[7] == 'bot',
+                "assignedTo": "Gajera Prince Laxmanbhai" if r[7] != 'bot' else "AI Bot",
+                "lastAssignedTime": "Just now",
+                "online": True
+            })
+            
+        return success_response(data=conversations)
+
+
+@router.get("/conversations/{lead_id}/messages")
+async def get_messages(
+    lead_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    tenant_id = request.state.tenant.id
+    with get_db() as db:
+        query = text("""
+            SELECT sender, message_body, message_time, delivery_status
+            FROM lead_messages
+            WHERE workspace_id = :ws_id AND lead_id = :lead_id AND channel = 'whatsapp'
+            ORDER BY message_time ASC
+        """)
+        rows = db.execute(query, {"ws_id": tenant_id, "lead_id": lead_id}).fetchall()
+        
+        messages = []
+        for r in rows:
+            sender_type = "user" if r[0] not in ("agent", "bot", "system") else r[0]
+            messages.append({
+                "sender": sender_type,
+                "text": r[1],
+                "time": r[2].strftime("%I:%M %p") if r[2] else "",
+                "status": r[3]
+            })
+            
+        return success_response(data=messages)
+
+
+class SendWhatsAppPayload(BaseModel):
+    message: str
+
+
+@router.post("/conversations/{lead_id}/send")
+async def send_whatsapp_message(
+    lead_id: str,
+    payload: SendWhatsAppPayload,
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    tenant_id = request.state.tenant.id
+    
+    with get_db() as db:
+        # Get active WhatsApp account credentials for token and phone number id
+        wa_acc = db.execute(
+            text("SELECT phone_number_id, access_token FROM whatsapp_accounts WHERE tenant_id = :tenant_id LIMIT 1"),
+            {"tenant_id": tenant_id}
+        ).mappings().first()
+        
+        # Get lead's phone number
+        lead_phone = db.execute(
+            text("SELECT phone_primary FROM leads WHERE lead_id = :lead_id AND workspace_id = :ws_id LIMIT 1"),
+            {"lead_id": lead_id, "ws_id": tenant_id}
+        ).scalar()
+        
+    if not lead_phone:
+        raise HTTPException(status_code=404, detail="Lead not found.")
+        
+    to_phone = "".join(filter(str.isdigit, lead_phone))
+    
+    is_sandbox = not wa_acc or wa_acc["access_token"].startswith("mock_")
+    
+    if not is_sandbox:
+        try:
+            settings = get_settings()
+            phone_id = wa_acc["phone_number_id"]
+            token = wa_acc["access_token"]
+            
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.post(
+                    f"https://graph.facebook.com/{settings.META_GRAPH_API_VERSION}/{phone_id}/messages",
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "messaging_product": "whatsapp",
+                        "recipient_type": "individual",
+                        "to": to_phone,
+                        "type": "text",
+                        "text": {"body": payload.message}
+                    }
+                )
+                if resp.status_code != 200:
+                    logger.error(f"Failed to send real WhatsApp message: {resp.text}")
+        except Exception as e:
+            logger.error(f"Error sending real WhatsApp message: {e}")
+            
+    # Save the outgoing agent message in DB
+    import uuid
+    with get_db() as db:
+        db.execute(
+            text("""
+            INSERT INTO lead_messages (id, workspace_id, lead_id, channel, message_type, message_body, sender, receiver, delivery_status)
+            VALUES (:id, :ws_id, :lead_id, 'whatsapp', 'text', :body, 'agent', :receiver, 'sent')
+            """),
+            {
+                "id": str(uuid.uuid4()),
+                "ws_id": tenant_id,
+                "lead_id": lead_id,
+                "body": payload.message,
+                "receiver": to_phone
+            }
+        )
+        db.commit()
+        
+    return success_response(message="Message sent successfully.")

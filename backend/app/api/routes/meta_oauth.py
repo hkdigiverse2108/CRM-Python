@@ -498,9 +498,10 @@ async def _create_lead_if_not_exists(workspace_id: str, name: str, phone: str, e
         sql = text("SELECT lead_id FROM leads WHERE workspace_id = :ws_id AND phone_primary = :phone AND deleted_at IS NULL LIMIT 1")
         res = db.execute(sql, {"ws_id": workspace_id, "phone": phone}).scalar()
         if not res:
+            lead_id = str(uuid.uuid4())
             lead_repo = get_lead_repository()
             new_lead = Lead(
-                id=str(uuid.uuid4()),
+                id=lead_id,
                 name=name,
                 email=email or "",
                 phone=phone,
@@ -517,8 +518,10 @@ async def _create_lead_if_not_exists(workspace_id: str, name: str, phone: str, e
             )
             await lead_repo.create(new_lead)
             logger.info(f"Automatically created lead '{name}' for workspace '{workspace_id}' from source '{source}'")
+            return lead_id
         else:
             logger.info(f"Lead with phone '{phone}' already exists in workspace '{workspace_id}'. Skipping duplication.")
+            return res
 
 
 @meta_integration_router.post("/webhooks/meta")
@@ -582,7 +585,7 @@ async def process_webhook(
 
                             logger.info(f"[WHATSAPP MESSAGE EVENT] ID: {msg.get('id')}, From: {phone}, Text: {body}")
                             
-                            await _create_lead_if_not_exists(
+                            lead_id = await _create_lead_if_not_exists(
                                 workspace_id=workspace_id,
                                 name=f"WhatsApp Contact {phone}",
                                 phone=phone,
@@ -590,6 +593,24 @@ async def process_webhook(
                                 source="whatsapp",
                                 notes=f"Created via incoming WhatsApp message: '{body}'"
                             )
+
+                            # Also save to lead_messages table
+                            import uuid
+                            with get_db() as db:
+                                db.execute(
+                                    text("""
+                                    INSERT INTO lead_messages (id, workspace_id, lead_id, channel, message_type, message_body, sender, receiver, delivery_status)
+                                    VALUES (:id, :ws_id, :lead_id, 'whatsapp', 'text', :body, 'user', :receiver, 'received')
+                                    """),
+                                    {
+                                        "id": str(uuid.uuid4()),
+                                        "ws_id": workspace_id,
+                                        "lead_id": lead_id,
+                                        "body": body,
+                                        "receiver": phone_id or ""
+                                    }
+                                )
+                                db.commit()
                     
                     elif "statuses" in value:
                         for status in value.get("statuses", []):
