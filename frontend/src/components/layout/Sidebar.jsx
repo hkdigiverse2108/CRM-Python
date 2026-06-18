@@ -69,6 +69,10 @@ const sidebarGroups = [
         pageKey: 'whatsapp_inbox',
         subItems: [
           { label: 'Inbox', path: '/omnichannel/whatsapp' },
+          { label: 'Campaigns', path: '/omnichannel/whatsapp/campaigns' },
+          { label: 'Templates', path: '/omnichannel/whatsapp/templates' },
+          { label: 'Bot Builder', path: '/omnichannel/whatsapp/bot-builder' },
+          { label: 'Contacts', path: '/omnichannel/whatsapp/contacts' },
           { label: 'Automation Dashboard', path: '/omnichannel/whatsapp/automation' }
         ]
       },
@@ -95,7 +99,6 @@ const sidebarGroups = [
     module: 'marketing',
     items: [
       { label: 'Campaigns', path: '/marketing/campaigns', module: 'marketing', pageKey: 'marketing_campaigns' },
-      { label: 'Templates', path: '/marketing/templates', module: 'marketing', pageKey: 'marketing_campaigns' },
     ]
   },
   {
@@ -103,7 +106,7 @@ const sidebarGroups = [
     icon: Bot,
     module: 'whatsapp',
     items: [
-      { label: 'Bot Builder', path: '/omnichannel/bot-builder', module: 'whatsapp', pageKey: 'whatsapp_inbox' },
+      { label: 'Bot Builder', path: '/omnichannel/whatsapp/bot-builder', module: 'whatsapp', pageKey: 'whatsapp_inbox' },
       { label: 'Workflows', path: '/marketing/automations', module: 'automation', pageKey: 'automation_workflows' },
     ]
   },
@@ -204,8 +207,8 @@ export default function Sidebar() {
     'HRMS & Payroll': false,
     'Tasks & Calendar': false,
     'Support Center': false,
-    'Marketing Suite': false,
-    'Automation': false,
+    'Marketing Suite': true,
+    'Automation': true,
     'Admin Console': false,
     'Platform Control': true,
   });

@@ -18,6 +18,7 @@ import Customer360 from '@/pages/crm/Customer360';
 // Omnichannel
 import WhatsApp from '@/pages/omnichannel/WhatsApp';
 import WhatsAppAutomationDashboard from '@/pages/omnichannel/WhatsAppAutomationDashboard';
+import WhatsAppContacts from '@/pages/omnichannel/WhatsAppContacts';
 import CallDialer from '@/pages/omnichannel/CallDialer';
 import Email from '@/pages/omnichannel/Email';
 import SMS from '@/pages/omnichannel/SMS';
@@ -56,7 +57,8 @@ import Reminders from '@/pages/tasks/Reminders';
 
 // Marketing & Automation
 import Campaigns from '@/pages/marketing/Campaigns';
-import Templates from '@/pages/marketing/Templates';
+import WhatsAppCampaigns from '@/pages/omnichannel/WhatsAppCampaigns';
+import WhatsAppTemplates from '@/pages/omnichannel/WhatsAppTemplates';
 import Automations from '@/pages/marketing/Automations';
 import BotBuilder from '@/pages/omnichannel/BotBuilder';
 
@@ -168,7 +170,10 @@ export default function App() {
             {/* Omnichannel Hub */}
             <Route path="/omnichannel/whatsapp" element={<PermissionGuard module="whatsapp"><WhatsApp /></PermissionGuard>} />
             <Route path="/omnichannel/whatsapp/automation" element={<PermissionGuard module="whatsapp"><WhatsAppAutomationDashboard /></PermissionGuard>} />
-            <Route path="/omnichannel/bot-builder" element={<PermissionGuard module="whatsapp"><BotBuilder /></PermissionGuard>} />
+            <Route path="/omnichannel/whatsapp/contacts" element={<PermissionGuard module="whatsapp"><WhatsAppContacts /></PermissionGuard>} />
+            <Route path="/omnichannel/whatsapp/campaigns" element={<PermissionGuard module="whatsapp"><WhatsAppCampaigns /></PermissionGuard>} />
+            <Route path="/omnichannel/whatsapp/templates" element={<PermissionGuard module="whatsapp"><WhatsAppTemplates /></PermissionGuard>} />
+            <Route path="/omnichannel/whatsapp/bot-builder" element={<PermissionGuard module="whatsapp"><BotBuilder /></PermissionGuard>} />
             <Route path="/omnichannel/calls" element={<PermissionGuard module="whatsapp"><CallDialer /></PermissionGuard>} />
             <Route path="/omnichannel/email" element={<PermissionGuard module="whatsapp"><Email /></PermissionGuard>} />
             <Route path="/omnichannel/sms" element={<PermissionGuard module="whatsapp"><SMS /></PermissionGuard>} />
@@ -184,7 +189,6 @@ export default function App() {
             <Route path="/ecommerce/woocommerce" element={<PermissionGuard module="ecommerce"><Integrations /></PermissionGuard>} />
             {/* Marketing & Automation */}
             <Route path="/marketing/campaigns" element={<PermissionGuard module="marketing"><Campaigns /></PermissionGuard>} />
-            <Route path="/marketing/templates" element={<PermissionGuard module="marketing"><Templates /></PermissionGuard>} />
             <Route path="/marketing/automations" element={<PermissionGuard module="automation"><Automations /></PermissionGuard>} />
 
             {/* Support */}
