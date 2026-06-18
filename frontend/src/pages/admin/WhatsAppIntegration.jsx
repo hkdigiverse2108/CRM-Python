@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useApp } from '@/context/AppContext';
+import { useApp, getTenantId } from '@/context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import {
   MessageCircle, RefreshCw, Loader2, ArrowLeft,
@@ -25,7 +25,7 @@ export default function WhatsAppIntegration() {
   const getHeaders = useCallback(() => ({
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${token}`,
-    'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+    'X-Tenant-ID': tenantId || getTenantId() || '96722',
   }), [token, tenantId]);
 
   // Fetch status
