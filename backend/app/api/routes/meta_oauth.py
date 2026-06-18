@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from datetime import datetime
 from backend.app.services.meta_service import MetaService, get_meta_service, META_SCOPES
+from backend.app.services.chatbot_service import is_duplicate_message, run_chatbot_flow_engine
 from backend.app.api.dependencies.auth import get_current_user
 from backend.app.utils.response import success_response
 
@@ -568,6 +569,12 @@ async def process_webhook(
                     # Check for messages
                     if "messages" in value:
                         for msg in value.get("messages", []):
+                            wamid = msg.get("id")
+                            # Deduplicate messages
+                            if wamid and is_duplicate_message(wamid):
+                                logger.info(f"Duplicate WhatsApp message ignored: {wamid}")
+                                continue
+
                             phone = msg.get("from")
                             phone_id = value.get("metadata", {}).get("phone_number_id")
                             if phone_id:
@@ -578,23 +585,37 @@ async def process_webhook(
                                     ).scalar()
                                     if ws_res:
                                         workspace_id = ws_res
+                                    else:
+                                        # Fallback: try whatsapp_accounts table
+                                        ws_res2 = db.execute(
+                                            text("SELECT tenant_id FROM whatsapp_accounts WHERE phone_number_id = :pid LIMIT 1"),
+                                            {"pid": phone_id}
+                                        ).scalar()
+                                        if ws_res2:
+                                            workspace_id = ws_res2
 
                             body = ""
                             if "text" in msg:
                                 body = msg.get("text", {}).get("body", "")
+                            elif "button" in msg:
+                                body = msg.get("button", {}).get("text", "")
 
-                            logger.info(f"[WHATSAPP MESSAGE EVENT] ID: {msg.get('id')}, From: {phone}, Text: {body}")
+                            if not workspace_id or workspace_id == "rapidmodel_corp":
+                                logger.warning(f"No tenant registered for phone_number_id '{phone_id}'. Message dropped.")
+                                continue
+
+                            logger.info(f"[WHATSAPP MESSAGE EVENT] ID: {wamid}, From: {phone}, Text: {body}, Tenant: {workspace_id}")
                             
                             lead_id = await _create_lead_if_not_exists(
                                 workspace_id=workspace_id,
-                                name=f"WhatsApp Contact {phone}",
+                                name=value.get("contacts", [{}])[0].get("profile", {}).get("name", f"WhatsApp Contact {phone}"),
                                 phone=phone,
                                 email="",
                                 source="whatsapp",
                                 notes=f"Created via incoming WhatsApp message: '{body}'"
                             )
 
-                            # Also save to lead_messages table
+                            # Save incoming message to lead_messages table
                             import uuid
                             with get_db() as db:
                                 db.execute(
@@ -603,7 +624,7 @@ async def process_webhook(
                                     VALUES (:id, :ws_id, :lead_id, 'whatsapp', 'text', :body, 'user', :receiver, 'received')
                                     """),
                                     {
-                                        "id": str(uuid.uuid4()),
+                                        "id": wamid or str(uuid.uuid4()),
                                         "ws_id": workspace_id,
                                         "lead_id": lead_id,
                                         "body": body,
@@ -611,6 +632,13 @@ async def process_webhook(
                                     }
                                 )
                                 db.commit()
+
+                            # Run Chatbot Flow Engine for automated bot responses
+                            try:
+                                with get_db() as db:
+                                    await run_chatbot_flow_engine(workspace_id, phone, body, db)
+                            except Exception as bot_err:
+                                logger.error(f"Chatbot flow engine error for lead {lead_id}: {bot_err}")
                     
                     elif "statuses" in value:
                         for status in value.get("statuses", []):
