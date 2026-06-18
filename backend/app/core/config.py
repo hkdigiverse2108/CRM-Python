@@ -56,8 +56,8 @@ class Settings(BaseSettings):
     META_APP_ID: str = ""
     META_APP_SECRET: str = ""
     META_REDIRECT_URI: str = "http://localhost:8000/api/auth/meta/callback"
-    META_GRAPH_API_VERSION: str = "v24.0"
-    META_API_VERSION: str = "v24.0"
+    META_GRAPH_API_VERSION: str = "v20.0"
+    META_API_VERSION: str = "v20.0"
     META_WEBHOOK_VERIFY_TOKEN: str = "AIO_CRM_META_WEBHOOK_SECRET"
 
     # ── Shopify OAuth Integration ────────────────────────────────

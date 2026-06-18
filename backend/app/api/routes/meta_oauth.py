@@ -317,20 +317,18 @@ async def meta_callback(
         lead_forms=lead_forms,
     )
 
-    return success_response(
-        data={
-            "integration_id": integration_id,
-            "business_name": business_name,
-            "platforms_discovered": {
-                "facebook_pages": len(pages),
-                "facebook_lead_forms": len(lead_forms),
-                "ad_accounts": len(ad_accounts),
-                "whatsapp_accounts": len(whatsapp_accounts),
-                "instagram_accounts": len(instagram_accounts),
-            },
-        },
-        message="Meta integration connected successfully!",
-    )
+    # Redirect the user back to the CRM integration hub on frontend
+    from backend.app.core.config import get_settings
+    settings = get_settings()
+    host = request.headers.get("host", "")
+    if "hkdigiverse.com" in host:
+        frontend_url = "https://crm.hkdigiverse.com"
+    else:
+        frontend_url = settings.frontend_url
+        if "https" in str(request.url):
+            frontend_url = frontend_url.replace("http://", "https://")
+
+    return RedirectResponse(url=f"{frontend_url}/admin/integrations/meta?status=success")
 
 
 @meta_integration_router.get("/webhooks/meta")

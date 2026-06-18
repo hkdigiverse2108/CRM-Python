@@ -137,6 +137,14 @@ export default function MetaIntegrationHub() {
     fetchStatus();
   }, [fetchStatus]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('status') === 'success') {
+      addToast('Meta platforms connected successfully!', 'success');
+      navigate(window.location.pathname, { replace: true });
+    }
+  }, [addToast, navigate]);
+
   // Handle Meta developer app credentials update
   const handleSaveConfig = async (e) => {
     e.preventDefault();
