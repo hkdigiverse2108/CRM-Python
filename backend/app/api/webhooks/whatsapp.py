@@ -13,6 +13,13 @@ import uuid
 router = APIRouter()
 logger = logging.getLogger("whatsapp_webhook")
 
+RECEIVED_WEBHOOKS = []
+
+@router.get("/whatsapp/logs")
+async def get_received_webhooks():
+    """Return the recent received WhatsApp webhook payloads for debugging."""
+    return {"received_count": len(RECEIVED_WEBHOOKS), "logs": RECEIVED_WEBHOOKS}
+
 @router.get("/whatsapp")
 async def verify_whatsapp_webhook(request: Request):
     """
@@ -75,6 +82,15 @@ async def process_whatsapp_webhook(request: Request):
         logger.error(f"Failed to parse WhatsApp webhook JSON: {str(e)}")
         return {"status": "error", "message": "Invalid JSON body"}
     
+    # Store in memory for debugging
+    RECEIVED_WEBHOOKS.append({
+        "time": datetime.utcnow().isoformat(),
+        "payload": payload
+    })
+    # Keep only the last 50 requests
+    if len(RECEIVED_WEBHOOKS) > 50:
+        RECEIVED_WEBHOOKS.pop(0)
+
     logger.info(f"Received WhatsApp webhook payload: {payload}")
     
     if payload.get("object") == "whatsapp_business_account":

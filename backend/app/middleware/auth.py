@@ -31,6 +31,7 @@ PUBLIC_PATHS = {
     "/api/integrations/shopify/webhook/customers_create",
     "/webhooks/meta",
     "/api/webhooks/whatsapp",
+    "/api/webhooks/whatsapp/logs",
     "/data-deletion",
     "/api/health",
     "/api/version",
