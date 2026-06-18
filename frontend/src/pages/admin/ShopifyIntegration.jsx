@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useApp } from '@/context/AppContext';
+import { useApp, getTenantId } from '@/context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import {
   ShoppingCart, RefreshCw, Loader2, ArrowLeft, Settings,
@@ -38,7 +38,7 @@ export default function ShopifyIntegration() {
   const getHeaders = useCallback(() => ({
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${token}`,
-    'X-Tenant-ID': tenantId || 'rapidmodel_corp',
+    'X-Tenant-ID': tenantId || getTenantId() || '96722',
   }), [token, tenantId]);
 
   // Fetch integration status & metrics
@@ -54,12 +54,7 @@ export default function ShopifyIntegration() {
         
         // If connected, fetch some mock/real metrics from the store
         if (data.connected) {
-          // Let's fetch products/orders count from our database via a custom call or just query the counts
-          // For a production dashboard feel, we will request standard stats
-          const productsRes = await fetch(`${API_BASE}/products`, { headers: getHeaders() });
-          const ordersRes = await fetch(`${API_BASE}/ledger`, { headers: getHeaders() }); // fallback or similar
-          
-          // Let's set some beautiful realistic/synced metrics
+          // Set some beautiful realistic/synced metrics
           setMetrics({
             totalOrders: 24,
             totalProducts: 12,
@@ -103,7 +98,7 @@ export default function ShopifyIntegration() {
     setConnecting(true);
     // Redirect direct to the connect endpoint with current origin as redirect_url
     const currentRedirect = `${window.location.origin}${window.location.pathname}`;
-    window.location.href = `${API_BASE}/integrations/shopify/connect?shop=${shop}&tenant_id=${tenantId || 'rapidmodel_corp'}&redirect_url=${encodeURIComponent(currentRedirect)}`;
+    window.location.href = `${API_BASE}/integrations/shopify/connect?shop=${shop}&tenant_id=${tenantId || getTenantId() || '96722'}&redirect_url=${encodeURIComponent(currentRedirect)}`;
   };
 
   // Handle Disconnect

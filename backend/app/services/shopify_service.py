@@ -315,59 +315,63 @@ class ShopifyService:
             data = response.json()
             products = data.get("products", [])
             
-            with get_db() as db:
-                for p in products:
-                    p_id = str(p["id"])
-                    name = p.get("title", "")
-                    category = p.get("product_type", "")
-                    brand = p.get("vendor", "")
-                    status = p.get("status", "active")
-                    description = p.get("body_html", "")
-                    image_url = p.get("image", {}).get("src") if p.get("image") else (p.get("images", [{}])[0].get("src") if p.get("images") else None)
+            params_list = []
+            for p in products:
+                p_id = str(p["id"])
+                name = p.get("title", "")
+                category = p.get("product_type", "")
+                brand = p.get("vendor", "")
+                status = p.get("status", "active")
+                description = p.get("body_html", "")
+                image_url = p.get("image", {}).get("src") if p.get("image") else (p.get("images", [{}])[0].get("src") if p.get("images") else None)
 
-                    # Extract price/sku from variants
-                    variants = p.get("variants", [])
-                    sku = variants[0].get("sku", "") if variants else ""
-                    price = float(variants[0].get("price", 0.0)) if variants else 0.0
-                    stock = int(variants[0].get("inventory_quantity", 0)) if variants else 0
+                # Extract price/sku from variants
+                variants = p.get("variants", [])
+                sku = variants[0].get("sku", "") if variants else ""
+                price = float(variants[0].get("price", 0.0)) if variants else 0.0
+                stock = int(variants[0].get("inventory_quantity", 0)) if variants else 0
 
-                    sql = text("""
-                        INSERT INTO ecommerce_products (
-                            product_id, workspace_id, name, sku, category, brand, status,
-                            cost_price, retail_price, tax, discount, stock_quantity,
-                            safety_stock, warehouse, platforms, description, image_url,
-                            created_at, updated_at
-                        ) VALUES (
-                            :p_id, :tenant_id, :name, :sku, :category, :brand, :status,
-                            0.0, :price, 0.0, 0.0, :stock,
-                            0, 'Shopify Store', '["Shopify"]', :description, :image_url,
-                            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                        ) ON DUPLICATE KEY UPDATE
-                            name = :name,
-                            sku = :sku,
-                            category = :category,
-                            brand = :brand,
-                            status = :status,
-                            retail_price = :price,
-                            stock_quantity = :stock,
-                            description = :description,
-                            image_url = :image_url,
-                            updated_at = CURRENT_TIMESTAMP
-                    """)
-                    db.execute(sql, {
-                        "p_id": p_id,
-                        "tenant_id": tenant_id,
-                        "name": name,
-                        "sku": sku,
-                        "category": category,
-                        "brand": brand,
-                        "status": status,
-                        "price": price,
-                        "stock": stock,
-                        "description": description,
-                        "image_url": image_url
-                    })
-                db.commit()
+                params_list.append({
+                    "p_id": p_id,
+                    "tenant_id": tenant_id,
+                    "name": name,
+                    "sku": sku,
+                    "category": category,
+                    "brand": brand,
+                    "status": status,
+                    "price": price,
+                    "stock": stock,
+                    "description": description,
+                    "image_url": image_url
+                })
+
+            if params_list:
+                sql = text("""
+                    INSERT INTO ecommerce_products (
+                        product_id, workspace_id, name, sku, category, brand, status,
+                        cost_price, retail_price, tax, discount, stock_quantity,
+                        safety_stock, warehouse, platforms, description, image_url,
+                        created_at, updated_at
+                    ) VALUES (
+                        :p_id, :tenant_id, :name, :sku, :category, :brand, :status,
+                        0.0, :price, 0.0, 0.0, :stock,
+                        0, 'Shopify Store', '["Shopify"]', :description, :image_url,
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    ) ON DUPLICATE KEY UPDATE
+                        name = :name,
+                        sku = :sku,
+                        category = :category,
+                        brand = :brand,
+                        status = :status,
+                        retail_price = :price,
+                        stock_quantity = :stock,
+                        description = :description,
+                        image_url = :image_url,
+                        updated_at = CURRENT_TIMESTAMP
+                """)
+                with get_db() as db:
+                    db.execute(sql, params_list)
+                    db.commit()
             return len(products), False
 
     async def sync_customers(self, tenant_id: str) -> tuple[int, bool]:
@@ -432,36 +436,40 @@ class ShopifyService:
                 data = response.json()
                 customers = data.get("customers", [])
             
-            with get_db() as db:
-                for c in customers:
-                    c_id = str(c["id"])
-                    first_name = c.get("first_name") or ""
-                    last_name = c.get("last_name") or ""
-                    name = f"{first_name} {last_name}".strip() or "Shopify Customer"
-                    email = c.get("email")
-                    phone = c.get("phone")
-                    
-                    sql = text("""
-                        INSERT INTO contacts (
-                            contact_id, workspace_id, name, email, phone, is_active,
-                            created_at, updated_at
-                        ) VALUES (
-                            :c_id, :tenant_id, :name, :email, :phone, 1,
-                            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                        ) ON DUPLICATE KEY UPDATE
-                            name = :name,
-                            email = :email,
-                            phone = :phone,
-                            updated_at = CURRENT_TIMESTAMP
-                    """)
-                    db.execute(sql, {
-                        "c_id": c_id,
-                        "tenant_id": tenant_id,
-                        "name": name,
-                        "email": email,
-                        "phone": phone
-                    })
-                db.commit()
+            params_list = []
+            for c in customers:
+                c_id = str(c["id"])
+                first_name = c.get("first_name") or ""
+                last_name = c.get("last_name") or ""
+                name = f"{first_name} {last_name}".strip() or "Shopify Customer"
+                email = c.get("email")
+                phone = c.get("phone")
+                
+                params_list.append({
+                    "c_id": c_id,
+                    "tenant_id": tenant_id,
+                    "name": name,
+                    "email": email,
+                    "phone": phone
+                })
+
+            if params_list:
+                sql = text("""
+                    INSERT INTO contacts (
+                        contact_id, workspace_id, name, email, phone, is_active,
+                        created_at, updated_at
+                    ) VALUES (
+                        :c_id, :tenant_id, :name, :email, :phone, 1,
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    ) ON DUPLICATE KEY UPDATE
+                        name = :name,
+                        email = :email,
+                        phone = :phone,
+                        updated_at = CURRENT_TIMESTAMP
+                """)
+                with get_db() as db:
+                    db.execute(sql, params_list)
+                    db.commit()
             return len(customers), is_mock
 
     async def sync_orders(self, tenant_id: str) -> tuple[int, bool]:
@@ -593,69 +601,80 @@ class ShopifyService:
                 data = response.json()
                 orders = data.get("orders", [])
             
-            with get_db() as db:
-                for o in orders:
-                    o_id = str(o["id"])
-                    customer_info = o.get("customer") or {}
-                    customer_name = f"{customer_info.get('first_name', '')} {customer_info.get('last_name', '')}".strip() or "Guest"
-                    value = float(o.get("total_price", 0.0))
-                    status = o.get("fulfillment_status") or "unfulfilled"
-                    payment_status = o.get("financial_status") or "pending"
-                    
-                    line_items = o.get("line_items", [])
-                    items_desc = ", ".join([li.get("title", "") for li in line_items])
-                    qty = sum([int(li.get("quantity", 0)) for li in line_items])
-                    unit_price = float(line_items[0].get("price", 0.0)) if line_items else 0.0
+            params_list = []
+            for o in orders:
+                o_id = str(o["id"])
+                customer_info = o.get("customer") or {}
+                customer_name = f"{customer_info.get('first_name', '')} {customer_info.get('last_name', '')}".strip() or "Guest"
+                value = float(o.get("total_price", 0.0))
+                status = o.get("fulfillment_status") or "unfulfilled"
+                payment_status = o.get("financial_status") or "pending"
+                
+                line_items = o.get("line_items", [])
+                items_desc = ", ".join([li.get("title", "") for li in line_items])
+                qty = sum([int(li.get("quantity", 0)) for li in line_items])
+                unit_price = float(line_items[0].get("price", 0.0)) if line_items else 0.0
 
-                    billing_address = o.get("billing_address") or {}
-                    address = billing_address.get("address1") or ""
-                    city = billing_address.get("city") or ""
-                    state = billing_address.get("province") or ""
-                    country = billing_address.get("country") or ""
-                    pin_code = billing_address.get("zip") or ""
+                billing_address = o.get("billing_address") or {}
+                address = billing_address.get("address1") or ""
+                city = billing_address.get("city") or ""
+                state = billing_address.get("province") or ""
+                country = billing_address.get("country") or ""
+                pin_code = billing_address.get("zip") or ""
 
-                    sql = text("""
-                        INSERT INTO ecommerce_orders (
-                            order_id, workspace_id, source, customer, value, status,
-                            date, items, qty, unit_price, payment_status, address,
-                            city, state, country, pin_code, created_at, updated_at
-                        ) VALUES (
-                            :o_id, :tenant_id, 'Shopify', :customer_name, :value, :status,
-                            CURRENT_DATE, :items_desc, :qty, :unit_price, :payment_status, :address,
-                            :city, :state, :country, :pin_code, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                        ) ON DUPLICATE KEY UPDATE
-                            customer = :customer_name,
-                            value = :value,
-                            status = :status,
-                            items = :items_desc,
-                            qty = :qty,
-                            unit_price = :unit_price,
-                            payment_status = :payment_status,
-                            address = :address,
-                            city = :city,
-                            state = :state,
-                            country = :country,
-                            pin_code = :pin_code,
-                            updated_at = CURRENT_TIMESTAMP
-                    """)
-                    db.execute(sql, {
-                        "o_id": o_id,
-                        "tenant_id": tenant_id,
-                        "customer_name": customer_name,
-                        "value": value,
-                        "status": status,
-                        "items_desc": items_desc[:500],  # Ensure length limits
-                        "qty": qty,
-                        "unit_price": unit_price,
-                        "payment_status": payment_status,
-                        "address": address,
-                        "city": city,
-                        "state": state,
-                        "country": country,
-                        "pin_code": pin_code
-                    })
-                db.commit()
+                params_list.append({
+                    "o_id": o_id,
+                    "tenant_id": tenant_id,
+                    "customer_name": customer_name,
+                    "value": value,
+                    "status": status,
+                    "items_desc": items_desc[:500],
+                    "qty": qty,
+                    "unit_price": unit_price,
+                    "payment_status": payment_status,
+                    "address": address,
+                    "city": city,
+                    "state": state,
+                    "country": country,
+                    "pin_code": pin_code
+                })
+
+            if params_list:
+                sql = text("""
+                    INSERT INTO ecommerce_orders (
+                        order_id, workspace_id, source, customer, value, status,
+                        date, items, qty, unit_price, payment_status, address,
+                        city, state, country, pin_code, created_at, updated_at
+                    ) VALUES (
+                        :o_id, :tenant_id, 'Shopify', :customer_name, :value, :status,
+                        CURRENT_DATE, :items_desc, :qty, :unit_price, :payment_status, :address,
+                        :city, :state, :country, :pin_code, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    ) ON DUPLICATE KEY UPDATE
+                        customer = :customer_name,
+                        value = :value,
+                        status = :status,
+                        items = :items_desc,
+                        qty = :qty,
+                        unit_price = :unit_price,
+                        payment_status = :payment_status,
+                        address = :address,
+                        city = :city,
+                        state = :state,
+                        country = :country,
+                        pin_code = :pin_code,
+                        updated_at = CURRENT_TIMESTAMP
+                """)
+                with get_db() as db:
+                    db.execute(sql, params_list)
+                    db.commit()
             return len(orders), is_mock
+
+    async def sync_inventory(self, tenant_id: str) -> tuple[int, bool]:
+        """Fetch inventory details/levels and update locally."""
+        # For a standard sync_inventory, we can fetch the inventory levels or reuse sync_products
+        # because sync_products already fetches and saves updated stock_quantity.
+        # Let's run product sync and return the count.
+        return await self.sync_products(tenant_id)
 
     async def sync_inventory(self, tenant_id: str) -> tuple[int, bool]:
         """Fetch inventory details/levels and update locally."""
