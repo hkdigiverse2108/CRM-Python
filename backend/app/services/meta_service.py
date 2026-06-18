@@ -24,7 +24,6 @@ from backend.app.utils.exceptions import AppException
 logger = get_logger("meta_service")
 
 # Meta OAuth scopes required for active platform integrations.
-# Invalid, deprecated, or unconfigured scopes (email, pages_manage_posts, instagram_basic, instagram_manage_messages, instagram_manage_comments)
 # have been removed to prevent "Invalid Scopes" OAuth errors during Facebook login.
 META_SCOPES = [
     "public_profile",
