@@ -23,8 +23,6 @@ from backend.app.utils.exceptions import AppException
 
 logger = get_logger("meta_service")
 
-# Meta OAuth scopes required for active platform integrations.
-# have been removed to prevent "Invalid Scopes" OAuth errors during Facebook login.
 META_SCOPES = [
     "public_profile",
     "pages_show_list",
