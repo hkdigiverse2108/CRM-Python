@@ -477,7 +477,7 @@ export function AppProvider({ children }) {
     const interval = setInterval(() => {
       refreshUserProfile();
       refreshWorkspaceSettings();
-    }, 2000);
+    }, 30000);
 
     const channel = new BroadcastChannel('crm-auth-channel');
     const handleMessage = (event) => {
