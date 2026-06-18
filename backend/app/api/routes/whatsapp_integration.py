@@ -1,8 +1,9 @@
 import uuid
 import httpx
 import logging
+import json
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import text
@@ -427,3 +428,304 @@ async def send_whatsapp_message(
         db.commit()
         
     return success_response(message="Message sent successfully.")
+
+
+# --- Chatbot Flow Builder APIs ---
+
+class FlowTrigger(BaseModel):
+    type: str  # 'keyword', 'any', 'source'
+    keywords: List[str] = []
+
+class FlowNodePayload(BaseModel):
+    id: str
+    type: str
+    position: Dict[str, float]
+    data: Dict[str, Any] = {}
+
+class FlowEdgePayload(BaseModel):
+    id: str
+    source: str
+    target: str
+    label: Optional[str] = None
+    condition: Optional[Dict[str, Any]] = None
+
+class ChatbotFlowPayload(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    trigger: FlowTrigger
+    entryNodeId: Optional[str] = None
+    isActive: bool = False
+    nodes: List[FlowNodePayload] = []
+    edges: List[FlowEdgePayload] = []
+
+@router.get("/flows")
+async def get_chatbot_flows(
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    tenant_id = request.state.tenant.id
+    with get_db() as db:
+        rows = db.execute(
+            text("""
+            SELECT id, name, description, trigger_type, trigger_keywords, entry_node_id, is_active, created_at, updated_at
+            FROM chatbot_flows
+            WHERE workspace_id = :ws_id
+            ORDER BY created_at DESC
+            """),
+            {"ws_id": tenant_id}
+        ).mappings().all()
+        
+        flows = []
+        for r in rows:
+            trigger_kw = []
+            if r["trigger_keywords"]:
+                try:
+                    trigger_kw = json.loads(r["trigger_keywords"])
+                except Exception:
+                    pass
+            flows.append({
+                "id": r["id"],
+                "name": r["name"],
+                "description": r["description"] or "",
+                "trigger": {
+                    "type": r["trigger_type"],
+                    "keywords": trigger_kw
+                },
+                "entryNodeId": r["entry_node_id"] or "",
+                "isActive": bool(r["is_active"]),
+                "createdAt": r["created_at"].isoformat() if r["created_at"] else None,
+                "updatedAt": r["updated_at"].isoformat() if r["updated_at"] else None,
+            })
+            
+        return success_response(data=flows)
+
+@router.get("/flows/{flow_id}")
+async def get_chatbot_flow_detail(
+    flow_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    tenant_id = request.state.tenant.id
+    with get_db() as db:
+        flow_row = db.execute(
+            text("""
+            SELECT id, name, description, trigger_type, trigger_keywords, entry_node_id, is_active
+            FROM chatbot_flows
+            WHERE workspace_id = :ws_id AND id = :flow_id
+            """),
+            {"ws_id": tenant_id, "flow_id": flow_id}
+        ).mappings().first()
+        
+        if not flow_row:
+            raise HTTPException(status_code=404, detail="Flow not found.")
+            
+        node_rows = db.execute(
+            text("SELECT id, type, pos_x, pos_y, data FROM chatbot_flow_nodes WHERE flow_id = :flow_id"),
+            {"flow_id": flow_id}
+        ).mappings().all()
+        
+        edge_rows = db.execute(
+            text("SELECT id, source_node_id, target_node_id, label, condition_data FROM chatbot_flow_edges WHERE flow_id = :flow_id"),
+            {"flow_id": flow_id}
+        ).mappings().all()
+        
+        trigger_kw = []
+        if flow_row["trigger_keywords"]:
+            try:
+                trigger_kw = json.loads(flow_row["trigger_keywords"])
+            except Exception:
+                pass
+                
+        nodes = []
+        for n in node_rows:
+            node_data = {}
+            if n["data"]:
+                try:
+                    node_data = json.loads(n["data"])
+                except Exception:
+                    pass
+            nodes.append({
+                "id": n["id"],
+                "type": n["type"],
+                "position": {"x": n["pos_x"], "y": n["pos_y"]},
+                "data": node_data
+            })
+            
+        edges = []
+        for e in edge_rows:
+            cond_data = None
+            if e["condition_data"]:
+                try:
+                    cond_data = json.loads(e["condition_data"])
+                except Exception:
+                    pass
+            edges.append({
+                "id": e["id"],
+                "source": e["source_node_id"],
+                "target": e["target_node_id"],
+                "label": e["label"] or "",
+                "condition": cond_data
+            })
+            
+        flow_detail = {
+            "id": flow_row["id"],
+            "name": flow_row["name"],
+            "description": flow_row["description"] or "",
+            "trigger": {
+                "type": flow_row["trigger_type"],
+                "keywords": trigger_kw
+            },
+            "entryNodeId": flow_row["entry_node_id"] or "",
+            "isActive": bool(flow_row["is_active"]),
+            "nodes": nodes,
+            "edges": edges
+        }
+        
+        return success_response(data=flow_detail)
+
+@router.post("/flows")
+async def save_chatbot_flow(
+    payload: ChatbotFlowPayload,
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    tenant_id = request.state.tenant.id
+    
+    with get_db() as db:
+        # Check if flow exists
+        exist_check = db.execute(
+            text("SELECT id FROM chatbot_flows WHERE workspace_id = :ws_id AND id = :id"),
+            {"ws_id": tenant_id, "id": payload.id}
+        ).scalar()
+        
+        trigger_keywords_str = json.dumps([k.lower().strip() for k in payload.trigger.keywords])
+        
+        if exist_check:
+            # Update flow
+            db.execute(
+                text("""
+                UPDATE chatbot_flows 
+                SET name = :name, description = :desc, trigger_type = :trig_type, 
+                    trigger_keywords = :trig_kws, entry_node_id = :entry_node, is_active = :active
+                WHERE workspace_id = :ws_id AND id = :id
+                """),
+                {
+                    "name": payload.name,
+                    "desc": payload.description,
+                    "trig_type": payload.trigger.type,
+                    "trig_kws": trigger_keywords_str,
+                    "entry_node": payload.entryNodeId,
+                    "active": payload.isActive,
+                    "ws_id": tenant_id,
+                    "id": payload.id
+                }
+            )
+        else:
+            # Insert flow
+            db.execute(
+                text("""
+                INSERT INTO chatbot_flows (id, workspace_id, name, description, trigger_type, trigger_keywords, entry_node_id, is_active)
+                VALUES (:id, :ws_id, :name, :desc, :trig_type, :trig_kws, :entry_node, :active)
+                """),
+                {
+                    "id": payload.id,
+                    "ws_id": tenant_id,
+                    "name": payload.name,
+                    "desc": payload.description,
+                    "trig_type": payload.trigger.type,
+                    "trig_kws": trigger_keywords_str,
+                    "entry_node": payload.entryNodeId,
+                    "active": payload.isActive
+                }
+            )
+            
+        # Clean up old nodes and edges
+        db.execute(text("DELETE FROM chatbot_flow_nodes WHERE flow_id = :flow_id"), {"flow_id": payload.id})
+        db.execute(text("DELETE FROM chatbot_flow_edges WHERE flow_id = :flow_id"), {"flow_id": payload.id})
+        
+        # Insert new nodes
+        for node in payload.nodes:
+            db.execute(
+                text("""
+                INSERT INTO chatbot_flow_nodes (id, flow_id, type, pos_x, pos_y, data)
+                VALUES (:id, :flow_id, :type, :pos_x, :pos_y, :data)
+                """),
+                {
+                    "id": node.id,
+                    "flow_id": payload.id,
+                    "type": node.type,
+                    "pos_x": node.position.get("x", 0.0),
+                    "pos_y": node.position.get("y", 0.0),
+                    "data": json.dumps(node.data)
+                }
+            )
+            
+        # Insert new edges
+        for edge in payload.edges:
+            db.execute(
+                text("""
+                INSERT INTO chatbot_flow_edges (id, flow_id, source_node_id, target_node_id, label, condition_data)
+                VALUES (:id, :flow_id, :src, :target, :label, :cond)
+                """),
+                {
+                    "id": edge.id,
+                    "flow_id": payload.id,
+                    "src": edge.source,
+                    "target": edge.target,
+                    "label": edge.label or "",
+                    "cond": json.dumps(edge.condition) if edge.condition else None
+                }
+            )
+            
+        db.commit()
+        
+    return success_response(message="Chatbot flow saved successfully.")
+
+@router.delete("/flows/{flow_id}")
+async def delete_chatbot_flow(
+    flow_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    tenant_id = request.state.tenant.id
+    with get_db() as db:
+        result = db.execute(
+            text("DELETE FROM chatbot_flows WHERE workspace_id = :ws_id AND id = :flow_id"),
+            {"ws_id": tenant_id, "flow_id": flow_id}
+        )
+        db.commit()
+        
+    return success_response(message="Chatbot flow deleted successfully.")
+
+@router.post("/flows/{flow_id}/toggle")
+async def toggle_flow_active(
+    flow_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    tenant_id = request.state.tenant.id
+    with get_db() as db:
+        # Get current status
+        current_status = db.execute(
+            text("SELECT is_active FROM chatbot_flows WHERE workspace_id = :ws_id AND id = :flow_id"),
+            {"ws_id": tenant_id, "flow_id": flow_id}
+        ).scalar()
+        
+        new_status = not bool(current_status)
+        
+        # If activating, deactivate all other flows in this workspace
+        if new_status:
+            db.execute(
+                text("UPDATE chatbot_flows SET is_active = FALSE WHERE workspace_id = :ws_id"),
+                {"ws_id": tenant_id}
+            )
+            
+        db.execute(
+            text("UPDATE chatbot_flows SET is_active = :status WHERE workspace_id = :ws_id AND id = :flow_id"),
+            {"status": new_status, "ws_id": tenant_id, "flow_id": flow_id}
+        )
+        db.commit()
+        
+    return success_response(data={"is_active": new_status}, message=f"Flow {'activated' if new_status else 'deactivated'} successfully.")
+

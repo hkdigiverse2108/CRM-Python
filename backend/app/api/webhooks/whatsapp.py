@@ -7,6 +7,7 @@ from backend.app.core.config import get_settings
 from backend.app.core.database import get_db
 from backend.app.repositories.lead_repo import get_lead_repository
 from backend.app.models.lead import Lead
+from backend.app.services.chatbot_service import is_duplicate_message, run_chatbot_flow_engine
 import uuid
 
 router = APIRouter()
@@ -84,6 +85,11 @@ async def process_whatsapp_webhook(request: Request):
                 # Check for incoming messages
                 if "messages" in value:
                     for msg in value.get("messages", []):
+                        wamid = msg.get("id")
+                        if wamid and is_duplicate_message(wamid):
+                            logger.info(f"Duplicate WhatsApp message ignored: {wamid}")
+                            continue
+                            
                         phone = msg.get("from")
                         phone_id = value.get("metadata", {}).get("phone_number_id")
                         
@@ -110,12 +116,35 @@ async def process_whatsapp_webhook(request: Request):
                         
                         logger.info(f"[WHATSAPP MESSAGE] Tenant: {tenant_id}, Phone: {phone}, Text: {body}")
                         
+                        # Save the incoming message in DB
+                        with get_db() as db:
+                            db.execute(
+                                text("""
+                                INSERT INTO lead_messages (id, workspace_id, lead_id, channel, message_type, message_body, sender, receiver, delivery_status)
+                                SELECT :id, :ws_id, l.lead_id, 'whatsapp', 'text', :body, 'user', :receiver, 'received'
+                                FROM leads l
+                                WHERE l.workspace_id = :ws_id AND l.phone_primary = :receiver AND l.deleted_at IS NULL
+                                LIMIT 1
+                                """),
+                                {
+                                    "id": wamid or str(uuid.uuid4()),
+                                    "ws_id": tenant_id,
+                                    "body": body,
+                                    "receiver": phone
+                                }
+                            )
+                            db.commit()
+                        
                         await _create_lead_if_not_exists(
                             workspace_id=tenant_id,
                             name=sender_name,
                             phone=phone,
                             body=body
                         )
+                        
+                        # Run Chatbot flow execution engine
+                        with get_db() as db:
+                            await run_chatbot_flow_engine(tenant_id, phone, body, db)
                         
                 elif "statuses" in value:
                     for status in value.get("statuses", []):
