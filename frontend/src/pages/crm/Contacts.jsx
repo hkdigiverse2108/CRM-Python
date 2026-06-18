@@ -1,25 +1,30 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
-import { Search, Phone, Mail, Building2, Plus, X, Edit, Trash2 } from 'lucide-react';
+import { Search, Phone, Mail, Building2, Plus, X, Edit, Trash2, Tag, Zap, MessageSquare } from 'lucide-react';
 import PageHeader from '@/components/ui/PageHeader';
 
 export default function Contacts() {
   const { contacts, addContact, updateContact, deleteContact, addToast } = useApp();
   const [search, setSearch] = useState('');
-  const [view, setView] = useState('grid');
   const [showAddContact, setShowAddContact] = useState(false);
   const [showEditContact, setShowEditContact] = useState(false);
   const [editContactData, setEditContactData] = useState(null);
+  
+  const [selectedTagFilter, setSelectedTagFilter] = useState('');
+  const [selectedSourceFilter, setSelectedSourceFilter] = useState('All Sources');
+  const [selectedSegmentFilter, setSelectedSegmentFilter] = useState('All Segments');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState('All Statuses');
+
   const [newContact, setNewContact] = useState({
     name: '',
     company: '',
-    role: '', // Designation
+    role: '',
     department: '',
-    phone: '', // Mobile Number
-    altPhone: '', // Alternate Number
-    email: '', // Email Address
-    whatsapp: '', // WhatsApp Number
+    phone: '',
+    altPhone: '',
+    email: '',
+    whatsapp: '',
     website: '',
     address1: '',
     address2: '',
@@ -36,15 +41,6 @@ export default function Contacts() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const isEcom = location.pathname.includes('/ecommerce');
-  const title = isEcom ? 'Customers' : 'Contacts';
-
-  const filtered = contacts.filter(c =>
-    (c.name || '').toLowerCase().includes(search.toLowerCase()) ||
-    (c.company || '').toLowerCase().includes(search.toLowerCase()) ||
-    (c.email || '').toLowerCase().includes(search.toLowerCase())
-  );
-
   const handleCreateContact = (e) => {
     e.preventDefault();
     if (!newContact.name) {
@@ -52,15 +48,17 @@ export default function Contacts() {
       return;
     }
     
-    // Split tags by comma
     const tagList = newContact.tags
       ? newContact.tags.split(',').map(t => t.trim()).filter(Boolean)
-      : ['Lead'];
+      : ['call_followup'];
 
     addContact({
       ...newContact,
       avatar: newContact.name.split(' ').map(n => n.charAt(0)).join('').toUpperCase(),
-      tags: tagList
+      tags: tagList,
+      engagement: Math.floor(Math.random() * 80) + 20,
+      source: 'Direct',
+      status: 'Active'
     });
 
     setShowAddContact(false);
@@ -122,92 +120,270 @@ export default function Contacts() {
     }
   };
 
-  return (
-    <div className="space-y-5">
-      <PageHeader title={title} subtitle={isEcom ? `${filtered.length} customers in your store` : `${filtered.length} contacts in your CRM`}>
-        <div className="relative">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: '#818cf8' }} />
-          <input type="text" placeholder="Search contacts..." value={search} onChange={e => setSearch(e.target.value)} className="text-xs rounded-lg pl-8 pr-3 py-1.5 w-48 focus:outline-none focus:ring-1 focus:ring-primary" style={{ background: 'rgba(49,46,129,0.4)', border: '1px solid rgba(99,102,241,0.3)', color: '#ffffff' }} />
-        </div>
-        <button onClick={() => setView('grid')} className={`px-3 py-1.5 rounded-lg text-xs font-medium ${view === 'grid' ? 'bg-primary' : ''}`} style={{ color: '#ffffff', background: view === 'grid' ? undefined : 'rgba(49,46,129,0.4)', border: '1px solid rgba(99,102,241,0.3)' }}>Grid</button>
-        <button onClick={() => setView('table')} className={`px-3 py-1.5 rounded-lg text-xs font-medium ${view === 'table' ? 'bg-primary' : ''}`} style={{ color: '#ffffff', background: view === 'table' ? undefined : 'rgba(49,46,129,0.4)', border: '1px solid rgba(99,102,241,0.3)' }}>Table</button>
-        <button onClick={() => setShowAddContact(true)} className="btn-primary py-1.5 px-3.5 text-xs rounded-xl" style={{ color: '#ffffff' }}>
-          <Plus size={14} />
-          <span>Create Contact</span>
-        </button>
-      </PageHeader>
+  // Setup sample elements if contact list is empty, with same details as screenshot
+  const displayContacts = contacts.length > 0 ? contacts.map(c => ({
+    ...c,
+    engagement: c.engagement || 50,
+    source: c.source || 'Direct',
+    status: c.status || 'Active',
+    tags: Array.isArray(c.tags) ? c.tags : ['call_followup']
+  })) : [
+    { id: 'CFA939', name: 'Contact from Phone Call', avatar: 'CO', phone: '7862017545', email: '-', engagement: 38, source: 'Direct', tags: ['call_followup'], status: 'Active' },
+    { id: '4ECFFD', name: 'Harikrushn', avatar: 'HA', phone: '918780564463', email: '-', engagement: 88, source: 'Direct', tags: [], status: 'Active' },
+    { id: '8061D9', name: 'Amit Suvagia', avatar: 'AM', phone: '919978838133', email: '-', engagement: 70, source: 'Direct', tags: [], status: 'Active' },
+    { id: '57921F', name: 'Rishi Ginoya', avatar: 'RI', phone: '919624954426', email: '-', engagement: 88, source: 'Direct', tags: [], status: 'Active' },
+  ];
 
-      {view === 'grid' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtered.map(contact => (
-            <div 
-              key={contact.id} 
-              onClick={() => navigate('/crm/customer-360')}
-              className="bg-white dark:bg-slate-900 border border-[var(--color-border)] rounded-xl p-4 hover:shadow-sm transition-all cursor-pointer hover:border-indigo-500/50"
-            >
-              <div className="flex items-start justify-between gap-3 mb-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-emerald-600 flex items-center justify-center text-white text-sm font-semibold shrink-0">
-                    {contact.avatar}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold truncate text-slate-800 dark:text-white">{contact.name}</p>
-                    <p className="text-xs text-[var(--color-muted-foreground)] truncate">{contact.role}</p>
-                  </div>
-                </div>
-                <div className="flex gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                  <button onClick={(e) => handleStartEdit(contact, e)} className="p-1 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer" title="Edit Contact"><Edit size={13} /></button>
-                  <button onClick={(e) => handleDeleteClick(contact.id, e)} className="p-1 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer" title="Delete Contact"><Trash2 size={13} /></button>
-                </div>
-              </div>
-              <div className="space-y-1.5 text-xs text-[var(--color-muted-foreground)]">
-                <div className="flex items-center gap-2"><Building2 size={12} /><span className="truncate">{contact.company}</span></div>
-                <div className="flex items-center gap-2"><Mail size={12} /><span className="truncate">{contact.email}</span></div>
-                <div className="flex items-center gap-2"><Phone size={12} /><span>{contact.phone}</span></div>
-              </div>
-              <div className="flex flex-wrap gap-1 mt-3">
-                {(contact.tags || []).map(tag => (
-                  <span key={tag} className="badge badge-neutral text-[10px]">{tag}</span>
-                ))}
-              </div>
-            </div>
-          ))}
+  const filtered = displayContacts.filter(c => {
+    const matchesSearch = (c.name || '').toLowerCase().includes(search.toLowerCase()) ||
+                          (c.phone || '').includes(search) ||
+                          (c.email || '').toLowerCase().includes(search.toLowerCase());
+    
+    const matchesTag = !selectedTagFilter || c.tags.some(t => t.toLowerCase().includes(selectedTagFilter.toLowerCase()));
+    const matchesSource = selectedSourceFilter === 'All Sources' || c.source === selectedSourceFilter;
+    const matchesStatus = selectedStatusFilter === 'All Statuses' || c.status === selectedStatusFilter;
+
+    return matchesSearch && matchesTag && matchesSource && matchesStatus;
+  });
+
+  const getEngagementBadge = (score) => {
+    if (score >= 80) {
+      return (
+        <span className="flex items-center gap-1 px-2.5 py-0.5 rounded border border-red-200 bg-red-50/50 text-red-600 font-bold text-[10px] w-fit">
+          💧 {score}
+        </span>
+      );
+    } else if (score >= 50) {
+      return (
+        <span className="flex items-center gap-1 px-2.5 py-0.5 rounded border border-orange-200 bg-orange-50/50 text-orange-600 font-bold text-[10px] w-fit">
+          💧 {score}
+        </span>
+      );
+    } else {
+      return (
+        <span className="flex items-center gap-1 px-2.5 py-0.5 rounded border border-sky-200 bg-sky-50/50 text-sky-600 font-bold text-[10px] w-fit">
+          💧 {score}
+        </span>
+      );
+    }
+  };
+
+  const getAvatarColor = (initials) => {
+    const bgColors = {
+      'CO': 'bg-purple-100 text-purple-750',
+      'HA': 'bg-pink-100 text-pink-750',
+      'AM': 'bg-sky-100 text-sky-750',
+      'RI': 'bg-emerald-100 text-emerald-750'
+    };
+    return bgColors[initials] || 'bg-slate-100 text-slate-700';
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Top Breadcrumb and Actions Banner */}
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+        <div>
+          <h1 className="text-xl font-bold text-slate-800 dark:text-white">Contacts & Audience</h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Manage your customer database, labels/tags, and configure tag automation rules.
+          </p>
         </div>
-      ) : (
-        <div className="bg-white dark:bg-slate-900 border border-[var(--color-border)] rounded-xl overflow-hidden">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition-all shadow-sm">
+            <Users size={14} /> Contacts List
+          </button>
+          <button onClick={() => addToast('Manage tags panel')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold transition-all border border-slate-200 dark:border-slate-700">
+            <Tag size={14} /> Manage Tags
+          </button>
+          <button onClick={() => addToast('Auto-Tag rules configuration')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold transition-all border border-slate-200 dark:border-slate-700">
+            <Zap size={14} /> Auto-Tag Rules
+          </button>
+        </div>
+      </div>
+
+      {/* Main contacts database count & search filters panel */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm space-y-5">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h2 className="text-lg font-bold text-slate-800 dark:text-white">Contacts & Audience ({filtered.length})</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Manage your subscribers, view tag analytics, and bulk import customers.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={() => addToast('Importing contacts list')} className="flex items-center gap-1 px-4 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 bg-white dark:bg-slate-900 transition-colors">
+              Import CSV
+            </button>
+            <button onClick={() => setShowAddContact(true)} className="flex items-center gap-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors">
+              <Plus size={14} /> Add Contact
+            </button>
+          </div>
+        </div>
+
+        {/* Filter controls row */}
+        <div className="flex flex-wrap items-center gap-3 bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl">
+          <div className="relative flex items-center border border-slate-200 dark:border-slate-850 rounded-lg px-3 py-1.5 bg-white dark:bg-slate-900 text-xs shadow-inner flex-1 min-w-[200px]">
+            <Search size={14} className="text-slate-400 mr-2 shrink-0" />
+            <input
+              type="text"
+              placeholder="Search by name, phone, or email..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="bg-transparent border-none focus:outline-none focus:ring-0 text-xs w-full placeholder-slate-400 dark:text-white"
+            />
+          </div>
+
+          <div className="relative flex items-center border border-slate-200 dark:border-slate-850 rounded-lg px-3 py-1.5 bg-white dark:bg-slate-900 text-xs">
+            <span className="material-symbols-outlined text-[16px] text-slate-400 mr-1.5">filter_list</span>
+            <input
+              type="text"
+              placeholder="Filter by tag..."
+              value={selectedTagFilter}
+              onChange={(e) => setSelectedTagFilter(e.target.value)}
+              className="bg-transparent border-none focus:outline-none focus:ring-0 text-xs w-28 placeholder-slate-400 dark:text-white"
+            />
+          </div>
+
+          <select 
+            value={selectedSourceFilter} 
+            onChange={(e) => setSelectedSourceFilter(e.target.value)}
+            className="border border-slate-205 dark:border-slate-850 rounded-lg px-3 py-1.5 bg-white dark:bg-slate-900 text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          >
+            <option>All Sources</option>
+            <option>Direct</option>
+            <option>Shopify</option>
+            <option>Meta Lead Form</option>
+          </select>
+
+          <select 
+            value={selectedSegmentFilter} 
+            onChange={(e) => setSelectedSegmentFilter(e.target.value)}
+            className="border border-slate-205 dark:border-slate-855 rounded-lg px-3 py-1.5 bg-white dark:bg-slate-900 text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          >
+            <option>All Segments</option>
+            <option>VIP</option>
+            <option>Leads</option>
+          </select>
+
+          <select 
+            value={selectedStatusFilter} 
+            onChange={(e) => setSelectedStatusFilter(e.target.value)}
+            className="border border-slate-205 dark:border-slate-855 rounded-lg px-3 py-1.5 bg-white dark:bg-slate-900 text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          >
+            <option>All Statuses</option>
+            <option>Active</option>
+            <option>Inactive</option>
+          </select>
+        </div>
+
+        {/* Contacts Table */}
+        <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900">
           <table className="data-table">
-            <thead><tr><th>Name</th><th>Company</th><th>Role</th><th>Email</th><th>Phone</th><th>Tags</th><th className="text-right">Actions</th></tr></thead>
+            <thead>
+              <tr>
+                <th className="w-10">
+                  <input type="checkbox" className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+                </th>
+                <th>NAME</th>
+                <th>WHATSAPP PHONE</th>
+                <th>EMAIL</th>
+                <th>ENGAGEMENT</th>
+                <th>SOURCE</th>
+                <th>TAGS</th>
+                <th>STATUS</th>
+                <th className="text-right">ACTIONS</th>
+              </tr>
+            </thead>
             <tbody>
-              {filtered.map(c => (
-                <tr 
-                  key={c.id} 
-                  onClick={() => navigate('/crm/customer-360')}
-                  className="cursor-pointer hover:bg-indigo-50/10"
-                >
-                  <td className="font-semibold text-xs text-slate-800 dark:text-white">{c.name}</td>
-                  <td className="text-xs text-slate-600 dark:text-slate-305 font-medium">{c.company}</td>
-                  <td className="text-xs text-[var(--color-muted-foreground)]">{c.role}</td>
-                  <td className="text-xs text-[var(--color-muted-foreground)]">{c.email}</td>
-                  <td className="text-xs text-slate-600 dark:text-slate-305 font-semibold">{c.phone}</td>
-                  <td><div className="flex gap-1">{(c.tags || []).slice(0, 2).map(t => <span key={t} className="badge badge-neutral text-[10px]">{t}</span>)}</div></td>
-                  <td className="text-right" onClick={e => e.stopPropagation()}>
-                    <div className="flex justify-end gap-1">
-                      <button onClick={(e) => handleStartEdit(c, e)} className="p-1 text-slate-400 hover:text-indigo-600 rounded-lg transition-colors cursor-pointer" title="Edit Contact"><Edit size={13} /></button>
-                      <button onClick={(e) => handleDeleteClick(c.id, e)} className="p-1 text-slate-400 hover:text-rose-500 rounded-lg transition-colors cursor-pointer" title="Delete Contact"><Trash2 size={13} /></button>
-                    </div>
+              {filtered.map(c => {
+                const initials = c.avatar || c.name.split(' ').map(n => n.charAt(0)).join('').toUpperCase().slice(0, 2);
+                return (
+                  <tr key={c.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
+                    <td>
+                      <input type="checkbox" className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+                    </td>
+                    <td>
+                      <div className="flex items-center gap-3">
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${getAvatarColor(initials)}`}>
+                          {initials}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-slate-800 dark:text-white truncate text-xs">{c.name}</p>
+                          <span className="text-[10px] text-slate-400 font-mono bg-slate-50 dark:bg-slate-800 px-1 py-0.5 rounded">ID: {c.id}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="font-mono text-xs text-slate-700 dark:text-slate-350">{c.phone || '-'}</td>
+                    <td className="text-xs text-slate-500">{c.email || '-'}</td>
+                    <td>{getEngagementBadge(c.engagement)}</td>
+                    <td>
+                      <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-650 dark:text-slate-300 text-[11px] font-semibold">
+                        {c.source}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="flex flex-wrap gap-1">
+                        {c.tags.map(tag => (
+                          <span key={tag} className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 dark:bg-orange-950/20 dark:text-orange-400 text-[10px] font-bold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-orange-500 inline-block"></span>
+                            {tag}
+                          </span>
+                        ))}
+                        {c.tags.length === 0 && <span className="text-slate-400 text-[11px]">-</span>}
+                      </div>
+                    </td>
+                    <td>
+                      <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 text-[10px] font-bold w-fit">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
+                        {c.status}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="flex justify-end items-center gap-2.5">
+                        <button 
+                          onClick={() => { navigate('/omnichannel/whatsapp'); addToast(`Chatting with ${c.name}`); }}
+                          className="p-1.5 text-slate-400 hover:text-emerald-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                          title="Open WhatsApp Chat"
+                        >
+                          <MessageSquare size={15} />
+                        </button>
+                        <button 
+                          onClick={(e) => handleStartEdit(c, e)}
+                          className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                          title="Edit Contact"
+                        >
+                          <Edit size={15} />
+                        </button>
+                        <button 
+                          onClick={(e) => handleDeleteClick(c.id, e)}
+                          className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                          title="Delete Contact"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan="9" className="text-center py-10 text-slate-400 text-xs">
+                    <span className="material-symbols-outlined text-3xl text-slate-300 dark:text-slate-700 block mb-2">contacts</span>
+                    No contacts found.
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
-      )}
+      </div>
 
-      {/* Add Contact Drawer / Sheet */}
+      {/* Add Contact Modal */}
       {showAddContact && (
         <>
           <div className="sheet-overlay" onClick={() => setShowAddContact(false)} />
-          <div className="sheet-content w-full max-w-2xl p-6 overflow-y-auto">
+          <div className="sheet-content w-full max-w-2xl p-6 overflow-y-auto bg-white dark:bg-slate-900">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider">Add New CRM Contact</h2>
               <button onClick={() => setShowAddContact(false)} className="btn-ghost p-1"><X size={18} /></button>
@@ -247,13 +423,13 @@ export default function Contacts() {
         </>
       )}
 
-      {/* Edit Contact Drawer / Sheet */}
+      {/* Edit Contact Modal */}
       {showEditContact && editContactData && (
         <>
           <div className="sheet-overlay" onClick={() => { setShowEditContact(false); setEditContactData(null); }} />
-          <div className="sheet-content w-full max-w-2xl p-6 overflow-y-auto">
+          <div className="sheet-content w-full max-w-2xl p-6 overflow-y-auto bg-white dark:bg-slate-900">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-sm font-bold text-slate-808 dark:text-white uppercase tracking-wider">Edit CRM Contact Details</h2>
+              <h2 className="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider">Edit CRM Contact Details</h2>
               <button onClick={() => { setShowEditContact(false); setEditContactData(null); }} className="btn-ghost p-1"><X size={18} /></button>
             </div>
             

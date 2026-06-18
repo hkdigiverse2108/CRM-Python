@@ -24,17 +24,7 @@ from backend.app.utils.exceptions import AppException
 logger = get_logger("meta_service")
 
 META_SCOPES = [
-    "public_profile",
-    "pages_show_list",
-    "pages_read_engagement",
-    "pages_manage_metadata",
-    "pages_messaging",
-    "leads_retrieval",
-    "ads_read",
-    "ads_management",
-    "business_management",
-    "whatsapp_business_management",
-    "whatsapp_business_messaging",
+    "public_profile"
 ]
 
 
@@ -57,7 +47,7 @@ class MetaService:
         Returns the URL and a CSRF state token.
         """
         state = f"{workspace_id}:{user_id}:{secrets.token_urlsafe(16)}"
-        scope_str = ",".join(META_SCOPES)
+        scope_str = "public_profile"
 
         settings = get_settings()
         

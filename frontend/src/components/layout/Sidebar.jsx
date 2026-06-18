@@ -95,7 +95,16 @@ const sidebarGroups = [
     module: 'marketing',
     items: [
       { label: 'Campaigns', path: '/marketing/campaigns', module: 'marketing', pageKey: 'marketing_campaigns' },
-      { label: 'Automations', path: '/marketing/automations', module: 'automation', pageKey: 'automation_workflows' },
+      { label: 'Templates', path: '/marketing/templates', module: 'marketing', pageKey: 'marketing_campaigns' },
+    ]
+  },
+  {
+    title: 'Automation',
+    icon: Bot,
+    module: 'whatsapp',
+    items: [
+      { label: 'Bot Builder', path: '/omnichannel/bot-builder', module: 'whatsapp', pageKey: 'whatsapp_inbox' },
+      { label: 'Workflows', path: '/marketing/automations', module: 'automation', pageKey: 'automation_workflows' },
     ]
   },
   {
@@ -196,6 +205,7 @@ export default function Sidebar() {
     'Tasks & Calendar': false,
     'Support Center': false,
     'Marketing Suite': false,
+    'Automation': false,
     'Admin Console': false,
     'Platform Control': true,
   });
