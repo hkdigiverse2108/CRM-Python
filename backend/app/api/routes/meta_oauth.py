@@ -11,7 +11,7 @@ Endpoints for Meta (Facebook) OAuth integration lifecycle:
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from datetime import datetime
-from backend.app.services.meta_service import MetaService, get_meta_service
+from backend.app.services.meta_service import MetaService, get_meta_service, META_SCOPES
 from backend.app.api.dependencies.auth import get_current_user
 from backend.app.utils.response import success_response
 
@@ -96,12 +96,7 @@ async def oauth_callback(
         lead_forms.extend(forms)
 
     # Step 5: Persist everything to database
-    scopes = ",".join([
-        "whatsapp_business_management", "whatsapp_business_messaging",
-        "pages_manage_metadata", "pages_read_engagement", "pages_messaging",
-        "leads_retrieval", "ads_management", "ads_read",
-        "instagram_basic", "instagram_manage_messages", "business_management",
-    ])
+    scopes = ",".join(META_SCOPES)
 
     integration_id = meta_service.save_integration(
         workspace_id=tenant_id,
@@ -303,14 +298,7 @@ async def meta_callback(
         lead_forms.extend(forms)
 
     # Step 5: Save everything to database according to tenant_id and user_id
-    scopes = ",".join([
-        "pages_show_list", "pages_read_engagement", "pages_manage_metadata",
-        "pages_manage_posts", "pages_messaging", "instagram_basic",
-        "instagram_manage_messages", "instagram_manage_comments",
-        "leads_retrieval", "ads_read", "ads_management",
-        "business_management", "whatsapp_business_management",
-        "whatsapp_business_messaging"
-    ])
+    scopes = ",".join(META_SCOPES)
 
     integration_id = meta_service.save_integration(
         workspace_id=tenant_id,
