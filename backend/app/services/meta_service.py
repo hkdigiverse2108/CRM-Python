@@ -234,6 +234,32 @@ class MetaService:
             return []
         return resp.json().get("data", [])
 
+    async def fetch_waba_phone_numbers(self, token: str, waba_id: str) -> list[dict]:
+        """Fetch registered phone numbers for a WABA."""
+        if token == "mock_sandbox_access_token_xyz123abc":
+            return [{
+                "id": "phone_number_id_991",
+                "display_phone_number": "+1 555-019-2834",
+                "verified_name": "Digiverse Corp",
+                "quality_rating": "High",
+                "status": "APPROVED"
+            }]
+        if not waba_id:
+            return []
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                f"{self.graph_base}/{waba_id}/phone_numbers",
+                params={
+                    "fields": "id,display_phone_number,verified_name,quality_rating,status",
+                    "access_token": token,
+                    "limit": 100,
+                },
+            )
+        if resp.status_code != 200:
+            logger.warning(f"Failed to fetch phone numbers for WABA {waba_id}: {resp.text}")
+            return []
+        return resp.json().get("data", [])
+
     async def fetch_instagram_accounts(self, token: str, page_id: str) -> Optional[dict]:
         """Fetch the Instagram Business Account linked to a Facebook Page."""
         if token == "mock_sandbox_access_token_xyz123abc" or token.startswith("mock_page_token_"):
@@ -313,6 +339,7 @@ class MetaService:
         whatsapp_accounts: list[dict],
         instagram_accounts: list[dict],
         lead_forms: list[dict],
+        whatsapp_phone_numbers: list[dict] = None,
     ) -> str:
         """Persist the Meta integration and all discovered assets to MySQL."""
         integration_id = str(uuid.uuid4())
@@ -427,6 +454,83 @@ class MetaService:
                     },
                 )
 
+            # Save WhatsApp Phone Numbers
+            if whatsapp_phone_numbers:
+                for phone in whatsapp_phone_numbers:
+                    db.execute(
+                        text("""
+                        INSERT INTO whatsapp_phone_numbers
+                            (phone_number_id, workspace_id, waba_id, display_name, 
+                             verified_name, phone_number, quality_rating, status)
+                        VALUES (:pid, :ws_id, :wid, :display_name, :verified_name, :num, :quality, :status)
+                        ON DUPLICATE KEY UPDATE
+                            display_name = VALUES(display_name),
+                            verified_name = VALUES(verified_name),
+                            phone_number = VALUES(phone_number),
+                            quality_rating = VALUES(quality_rating),
+                            status = VALUES(status)
+                        """),
+                        {
+                            "pid": phone.get("id"),
+                            "ws_id": workspace_id,
+                            "wid": phone.get("waba_id"),
+                            "display_name": phone.get("display_phone_number", ""),
+                            "verified_name": phone.get("verified_name") or "",
+                            "num": phone.get("display_phone_number", ""),
+                            "quality": phone.get("quality_rating", "High"),
+                            "status": phone.get("status", "Connected"),
+                        }
+                    )
+
+                # Auto-link if exactly 1 phone number exists
+                if len(whatsapp_phone_numbers) == 1:
+                    phone = whatsapp_phone_numbers[0]
+                    exist_check = db.execute(
+                        text("SELECT id FROM whatsapp_accounts WHERE tenant_id = :tenant_id"),
+                        {"tenant_id": workspace_id}
+                    ).scalar()
+                    
+                    waba_name = "WhatsApp Business Account"
+                    for waba in whatsapp_accounts:
+                        if waba.get("id") == phone.get("waba_id"):
+                            waba_name = waba.get("name", waba_name)
+                            break
+                    
+                    if exist_check:
+                        db.execute(
+                            text("""
+                            UPDATE whatsapp_accounts 
+                            SET business_name = :biz_name, waba_id = :waba_id, phone_number_id = :phone_id, 
+                                access_token = :token, display_phone_number = :phone_num, status = 'Connected'
+                            WHERE tenant_id = :tenant_id
+                            """),
+                            {
+                                "biz_name": waba_name,
+                                "waba_id": phone.get("waba_id"),
+                                "phone_id": phone.get("id"),
+                                "token": access_token,
+                                "phone_num": phone.get("display_phone_number", ""),
+                                "tenant_id": workspace_id
+                            }
+                        )
+                    else:
+                        db.execute(
+                            text("""
+                            INSERT INTO whatsapp_accounts (id, tenant_id, business_name, waba_id, phone_number_id, access_token, display_phone_number, status)
+                            VALUES (:id, :tenant_id, :biz_name, :waba_id, :phone_id, :token, :phone_num, 'Connected')
+                            """),
+                            {
+                                "id": str(uuid.uuid4()),
+                                "tenant_id": workspace_id,
+                                "biz_name": waba_name,
+                                "waba_id": phone.get("waba_id"),
+                                "phone_id": phone.get("id"),
+                                "token": access_token,
+                                "phone_num": phone.get("display_phone_number", "")
+                            }
+                        )
+            db.commit()
+
             # Save Instagram Business Accounts
             for ig in instagram_accounts:
                 if ig:
@@ -525,6 +629,28 @@ class MetaService:
                 for r in waba_result.fetchall()
             ]
 
+            # Fetch Phone Numbers
+            phone_result = db.execute(
+                text("SELECT phone_number_id, waba_id, display_name, phone_number, status FROM whatsapp_phone_numbers WHERE workspace_id = :ws_id"),
+                {"ws_id": workspace_id}
+            )
+            phone_numbers = [
+                {
+                    "id": r[0],
+                    "waba_id": r[1],
+                    "display_name": r[2],
+                    "phone_number": r[3],
+                    "status": r[4]
+                }
+                for r in phone_result.fetchall()
+            ]
+
+            # Fetch active account settings
+            active_wa = db.execute(
+                text("SELECT waba_id, phone_number_id, display_phone_number FROM whatsapp_accounts WHERE tenant_id = :ws_id LIMIT 1"),
+                {"ws_id": workspace_id}
+            ).mappings().first()
+
             # Fetch Instagram
             ig_result = db.execute(
                 text("SELECT instagram_id, username, followers, profile_picture, status FROM instagram_business_accounts WHERE workspace_id = :ws_id"),
@@ -552,6 +678,10 @@ class MetaService:
                     "whatsapp": {
                         "connected": len(waba_accounts) > 0,
                         "assets": waba_accounts,
+                        "phone_numbers": phone_numbers,
+                        "active_waba_id": active_wa["waba_id"] if active_wa else None,
+                        "active_phone_number_id": active_wa["phone_number_id"] if active_wa else None,
+                        "active_display_phone_number": active_wa["display_phone_number"] if active_wa else None,
                     },
                     "facebook_pages": {
                         "connected": len(pages) > 0,
@@ -617,11 +747,20 @@ class MetaService:
         # Fetch businesses and gather WhatsApp accounts for all businesses
         businesses = await self.fetch_businesses(token=access_token)
         whatsapp_accounts = []
+        whatsapp_phone_numbers = []
         for biz in businesses:
             biz_wabas = await self.fetch_whatsapp_accounts(
                 token=access_token, business_id=biz["id"]
             )
             whatsapp_accounts.extend(biz_wabas)
+            
+            for waba in biz_wabas:
+                pns = await self.fetch_waba_phone_numbers(
+                    token=access_token, waba_id=waba["id"]
+                )
+                for pn in pns:
+                    pn["waba_id"] = waba["id"]
+                whatsapp_phone_numbers.extend(pns)
 
         instagram_accounts = []
         lead_forms = []
@@ -659,6 +798,7 @@ class MetaService:
             whatsapp_accounts=whatsapp_accounts,
             instagram_accounts=instagram_accounts,
             lead_forms=lead_forms,
+            whatsapp_phone_numbers=whatsapp_phone_numbers,
         )
 
         return {

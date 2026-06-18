@@ -73,11 +73,20 @@ async def oauth_callback(
     ad_accounts = await meta_service.fetch_ad_accounts(token=access_token)
     
     whatsapp_accounts = []
+    whatsapp_phone_numbers = []
     for biz in businesses:
         biz_wabas = await meta_service.fetch_whatsapp_accounts(
             token=access_token, business_id=biz["id"]
         )
         whatsapp_accounts.extend(biz_wabas)
+        
+        for waba in biz_wabas:
+            pns = await meta_service.fetch_waba_phone_numbers(
+                token=access_token, waba_id=waba["id"]
+            )
+            for pn in pns:
+                pn["waba_id"] = waba["id"]
+            whatsapp_phone_numbers.extend(pns)
 
     # Fetch Instagram accounts from each page
     instagram_accounts = []
@@ -117,6 +126,7 @@ async def oauth_callback(
         whatsapp_accounts=whatsapp_accounts,
         instagram_accounts=instagram_accounts,
         lead_forms=lead_forms,
+        whatsapp_phone_numbers=whatsapp_phone_numbers,
     )
 
     return success_response(
@@ -162,6 +172,101 @@ async def disconnect_meta(
     tenant_id = request.state.tenant.id
     meta_service.disconnect(workspace_id=tenant_id)
     return success_response(message="Meta integration disconnected successfully")
+
+
+class SelectWhatsAppPayload(BaseModel):
+    waba_id: str
+    phone_number_id: str
+
+
+@router.post("/whatsapp/select")
+async def select_active_whatsapp(
+    request: Request,
+    payload: SelectWhatsAppPayload,
+    current_user: dict = Depends(get_current_user),
+    meta_service: MetaService = Depends(get_meta_service),
+):
+    """
+    Select the primary active WhatsApp Business Account/Phone Number for the tenant workspace.
+    """
+    tenant_id = request.state.tenant.id
+    from backend.app.core.database import get_db
+    from sqlalchemy import text
+    import uuid
+
+    with get_db() as db:
+        # Check if we have access token in meta_integrations
+        access_token = db.execute(
+            text("SELECT access_token FROM meta_integrations WHERE workspace_id = :ws_id AND status = 'Connected' LIMIT 1"),
+            {"ws_id": tenant_id}
+        ).scalar()
+
+        if not access_token:
+            from backend.app.core.config import get_settings
+            settings = get_settings()
+            is_sandbox = not settings.META_APP_ID or settings.META_APP_ID == "YOUR_META_APP_ID"
+            if is_sandbox:
+                access_token = "mock_sandbox_access_token_xyz123abc"
+            else:
+                from fastapi import HTTPException
+                raise HTTPException(status_code=400, detail="Meta integration not connected.")
+
+        # Fetch WABA name
+        waba_row = db.execute(
+            text("SELECT account_name FROM whatsapp_business_accounts WHERE waba_id = :wid AND workspace_id = :ws_id LIMIT 1"),
+            {"wid": payload.waba_id, "ws_id": tenant_id}
+        ).fetchone()
+        business_name = waba_row[0] if waba_row else "WhatsApp Business Account"
+
+        # Fetch display phone number
+        phone_row = db.execute(
+            text("SELECT display_name FROM whatsapp_phone_numbers WHERE phone_number_id = :pid AND workspace_id = :ws_id LIMIT 1"),
+            {"pid": payload.phone_number_id, "ws_id": tenant_id}
+        ).fetchone()
+        display_phone_number = phone_row[0] if phone_row else payload.phone_number_id
+
+        # Insert/update whatsapp_accounts
+        exist_check = db.execute(
+            text("SELECT id FROM whatsapp_accounts WHERE tenant_id = :tenant_id"),
+            {"tenant_id": tenant_id}
+        ).scalar()
+
+        if exist_check:
+            db.execute(
+                text("""
+                UPDATE whatsapp_accounts 
+                SET business_name = :biz_name, waba_id = :waba_id, phone_number_id = :phone_id, 
+                    access_token = :token, display_phone_number = :phone_num, status = 'Connected'
+                WHERE tenant_id = :tenant_id
+                """),
+                {
+                    "biz_name": business_name,
+                    "waba_id": payload.waba_id,
+                    "phone_id": payload.phone_number_id,
+                    "token": access_token,
+                    "phone_num": display_phone_number,
+                    "tenant_id": tenant_id
+                }
+            )
+        else:
+            db.execute(
+                text("""
+                INSERT INTO whatsapp_accounts (id, tenant_id, business_name, waba_id, phone_number_id, access_token, display_phone_number, status)
+                VALUES (:id, :tenant_id, :biz_name, :waba_id, :phone_id, :token, :phone_num, 'Connected')
+                """),
+                {
+                    "id": str(uuid.uuid4()),
+                    "tenant_id": tenant_id,
+                    "biz_name": business_name,
+                    "waba_id": payload.waba_id,
+                    "phone_id": payload.phone_number_id,
+                    "token": access_token,
+                    "phone_num": display_phone_number
+                }
+            )
+        db.commit()
+
+    return success_response(message="WhatsApp primary sender account configured successfully.")
 
 
 class MetaConfigPayload(BaseModel):
@@ -280,11 +385,20 @@ async def meta_callback(
     ad_accounts = await meta_service.fetch_ad_accounts(token=access_token)
     
     whatsapp_accounts = []
+    whatsapp_phone_numbers = []
     for biz in businesses:
         biz_wabas = await meta_service.fetch_whatsapp_accounts(
             token=access_token, business_id=biz["id"]
         )
         whatsapp_accounts.extend(biz_wabas)
+        
+        for waba in biz_wabas:
+            pns = await meta_service.fetch_waba_phone_numbers(
+                token=access_token, waba_id=waba["id"]
+            )
+            for pn in pns:
+                pn["waba_id"] = waba["id"]
+            whatsapp_phone_numbers.extend(pns)
 
     # Fetch Instagram accounts and lead forms from each page
     instagram_accounts = []
@@ -323,6 +437,7 @@ async def meta_callback(
         whatsapp_accounts=whatsapp_accounts,
         instagram_accounts=instagram_accounts,
         lead_forms=lead_forms,
+        whatsapp_phone_numbers=whatsapp_phone_numbers,
     )
 
     # Redirect the user back to the CRM integration hub on frontend

@@ -273,6 +273,28 @@ export default function MetaIntegrationHub() {
     }
   };
 
+  const handleSetActiveWhatsApp = async (wabaId, phoneNumberId) => {
+    try {
+      const resp = await fetch(`${API_BASE}/meta/whatsapp/select`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          waba_id: wabaId,
+          phone_number_id: phoneNumberId
+        })
+      });
+      const data = await resp.json();
+      if (resp.ok && data.success) {
+        addToast('WhatsApp active sender account updated!', 'success');
+        fetchStatus();
+      } else {
+        addToast(data.message || 'Failed to update WhatsApp configuration.', 'error');
+      }
+    } catch {
+      addToast('Network error while setting active WhatsApp account.', 'error');
+    }
+  };
+
   const isConnected = status?.connected || false;
 
   return (
@@ -470,7 +492,9 @@ export default function MetaIntegrationHub() {
           {META_PLATFORMS.map((platform) => {
             const platformData = status?.platforms?.[platform.key] || { connected: false, assets: [] };
             const Icon = platform.icon;
-            const assetCount = platformData.assets?.length || 0;
+            const assetCount = platform.key === 'whatsapp' && (platformData.phone_numbers || []).length > 0
+              ? (platformData.phone_numbers || []).length
+              : (platformData.assets?.length || 0);
             const platformConnected = platformData.connected && isConnected;
 
             return (
@@ -528,35 +552,75 @@ export default function MetaIntegrationHub() {
                         </span>
                       </div>
                       <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
-                        {platformData.assets.map((asset, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-slate-100 text-xs"
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                              <span className="text-[var(--color-foreground)] font-medium truncate">
-                                {asset.name || asset.username || asset.id}
-                                {asset.business_id && (
-                                  <span className="text-[9px] text-slate-400 font-normal ml-1.5">
-                                    (Biz: {asset.business_id})
+                        {platform.key === 'whatsapp' && (platformData.phone_numbers || []).length > 0 ? (
+                          (platformData.phone_numbers || []).map((phone, idx) => {
+                            const isActive = platformData.active_phone_number_id === phone.id;
+                            return (
+                              <div
+                                key={idx}
+                                className={`flex items-center justify-between p-2 rounded-lg border text-xs transition-colors ${
+                                  isActive
+                                    ? 'bg-emerald-50 border-emerald-250 text-emerald-900 font-semibold dark:bg-emerald-950/20 dark:border-emerald-800 dark:text-emerald-450'
+                                    : 'bg-slate-50 border-slate-100 text-[var(--color-foreground)] dark:bg-slate-900/50 dark:border-slate-800'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? 'bg-emerald-500 animate-pulse' : 'bg-slate-350 dark:bg-slate-700'}`} />
+                                  <span className="truncate">
+                                    {phone.display_name || phone.phone_number}
+                                    <span className="text-[9px] text-slate-400 font-normal ml-1.5">
+                                      (WABA: {phone.waba_id})
+                                    </span>
                                   </span>
+                                </div>
+                                {isActive ? (
+                                  <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full font-bold dark:bg-emerald-900/50 dark:text-emerald-300">
+                                    Active
+                                  </span>
+                                ) : (
+                                  <button
+                                    onClick={() => handleSetActiveWhatsApp(phone.waba_id, phone.id)}
+                                    className="text-[10px] text-blue-600 hover:text-blue-800 hover:underline font-bold dark:text-blue-400 dark:hover:text-blue-300"
+                                  >
+                                    Set Active
+                                  </button>
                                 )}
-                              </span>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          platformData.assets.map((asset, idx) => (
+                            <div
+                              key={idx}
+                              className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-slate-100 text-xs dark:bg-slate-900/50 dark:border-slate-800"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                                <span className="text-[var(--color-foreground)] font-medium truncate">
+                                  {asset.name || asset.username || asset.id}
+                                  {asset.business_id && (
+                                    <span className="text-[9px] text-slate-400 font-normal ml-1.5">
+                                      (Biz: {asset.business_id})
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                              {asset.followers != null && (
+                                <span className="text-[10px] text-[var(--color-muted-foreground)] flex items-center gap-1 shrink-0 ml-2">
+                                  <svg viewBox="0 0 24 24" className="w-3 h-3 fill-current inline mr-0.5 text-slate-400">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z" />
+                                  </svg>
+                                  {Number(asset.followers).toLocaleString()}
+                                </span>
+                              )}
+                              {asset.currency && (
+                                <span className="text-[10px] text-[var(--color-muted-foreground)] shrink-0 ml-2">
+                                  {asset.currency}
+                                </span>
+                              )}
                             </div>
-                            {asset.followers != null && (
-                              <span className="text-[10px] text-[var(--color-muted-foreground)] flex items-center gap-1 shrink-0 ml-2">
-                                <Users size={10} />
-                                {Number(asset.followers).toLocaleString()}
-                              </span>
-                            )}
-                            {asset.currency && (
-                              <span className="text-[10px] text-[var(--color-muted-foreground)] shrink-0 ml-2">
-                                {asset.currency}
-                              </span>
-                            )}
-                          </div>
-                        ))}
+                          ))
+                        )}
                       </div>
                     </div>
                   )}

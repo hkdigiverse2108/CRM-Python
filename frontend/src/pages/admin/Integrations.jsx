@@ -31,24 +31,6 @@ const initialIntegrations = [
     logs: []
   },
   {
-    id: 'whatsapp_cloud_api',
-    category: 'calling',
-    name: 'WhatsApp Cloud API',
-    description: 'Connect your WhatsApp Business account in a single click using Meta\'s Embedded Signup login flow. Access real-time messaging, automations, and sync template parameters.',
-    icon: MessageCircle,
-    color: 'bg-emerald-50 text-emerald-650 border-emerald-250',
-    status: 'Not Connected',
-    webhookStatus: 'Active',
-    isWhatsAppHub: true,
-    createdAt: '2026-06-13',
-    updatedAt: '2026-06-13',
-    lastSync: 'Never',
-    fields: [],
-    values: {},
-    customButtons: [],
-    logs: []
-  },
-  {
     id: 'shopify',
     category: 'ecommerce',
     name: 'Shopify Store',
@@ -920,14 +902,6 @@ export default function Integrations() {
                   >
                     <ExternalLink size={13} />
                     Open Meta Integration Hub
-                  </button>
-                ) : item.isWhatsAppHub ? (
-                  <button
-                    onClick={() => navigate('/admin/integrations/whatsapp')}
-                    className="btn-outline flex-1 py-1.5 px-3 text-xs justify-center gap-1.5 bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                  >
-                    <ExternalLink size={13} />
-                    Open WhatsApp Control Center
                   </button>
                 ) : item.isShopifyHub ? (
                   <button
