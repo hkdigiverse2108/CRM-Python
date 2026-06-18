@@ -44,25 +44,24 @@ async def _create_lead_if_not_exists(workspace_id: str, name: str, phone: str, b
         sql = text("SELECT lead_id FROM leads WHERE workspace_id = :ws_id AND phone_primary = :phone AND deleted_at IS NULL LIMIT 1")
         res = db.execute(sql, {"ws_id": workspace_id, "phone": phone}).scalar()
         if not res:
-            lead_repo = get_lead_repository()
-            new_lead = Lead(
-                id=str(uuid.uuid4()),
-                name=name,
-                email="",
-                phone=phone,
-                company="WhatsApp Contact",
-                source="WhatsApp",
-                status="new",
-                score=10,
-                assigned_to=None,
-                tenant_id=workspace_id,
-                notes=f"Auto-created from WhatsApp message: '{body}'",
-                value=0.0,
-                created_at=datetime.utcnow().replace(tzinfo=timezone.utc),
-                updated_at=datetime.utcnow().replace(tzinfo=timezone.utc),
+            lead_id = str(uuid.uuid4())
+            db.execute(
+                text("""
+                INSERT INTO leads (lead_id, workspace_id, full_name, phone_primary, company_name, lead_source, lead_status, lead_score, created_at, updated_at)
+                VALUES (:lead_id, :workspace_id, :name, :phone, 'WhatsApp Contact', 'WhatsApp', 'new', 10, NOW(), NOW())
+                """),
+                {
+                    "lead_id": lead_id,
+                    "workspace_id": workspace_id,
+                    "name": name,
+                    "phone": phone
+                }
             )
-            await lead_repo.create(new_lead)
+            db.commit()
             logger.info(f"Automatically created lead '{name}' for tenant '{workspace_id}' from WhatsApp.")
+            return lead_id
+        else:
+            return res
 
 
 @router.post("/whatsapp")
@@ -98,10 +97,17 @@ async def process_whatsapp_webhook(request: Request):
                         tenant_id = None
                         if phone_id:
                             with get_db() as db:
+                                # Try whatsapp_phone_numbers first
                                 tenant_id = db.execute(
-                                    text("SELECT tenant_id FROM whatsapp_accounts WHERE phone_number_id = :pid LIMIT 1"),
+                                    text("SELECT workspace_id FROM whatsapp_phone_numbers WHERE phone_number_id = :pid LIMIT 1"),
                                     {"pid": phone_id}
                                 ).scalar()
+                                if not tenant_id:
+                                    # Fallback: try whatsapp_accounts table
+                                    tenant_id = db.execute(
+                                        text("SELECT tenant_id FROM whatsapp_accounts WHERE phone_number_id = :pid LIMIT 1"),
+                                        {"pid": phone_id}
+                                    ).scalar()
                         
                         if not tenant_id:
                             logger.warning(f"No tenant registered for phone_number_id '{phone_id}'. Message dropped.")
@@ -117,38 +123,41 @@ async def process_whatsapp_webhook(request: Request):
                         
                         logger.info(f"[WHATSAPP MESSAGE] Tenant: {tenant_id}, Phone: {phone}, Text: {body}")
                         
+                        lead_id = await _create_lead_if_not_exists(
+                            workspace_id=tenant_id,
+                            name=sender_name,
+                            phone=phone,
+                            body=body
+                        )
+
                         # Save the incoming message in DB
                         with get_db() as db:
                             db.execute(
                                 text("""
-                                INSERT INTO lead_messages (id, workspace_id, lead_id, channel, message_type, message_body, sender, receiver, delivery_status)
-                                SELECT :id, :ws_id, l.lead_id, 'whatsapp', 'text', :body, 'user', :receiver, 'received'
-                                FROM leads l
-                                WHERE l.workspace_id = :ws_id AND l.phone_primary = :receiver AND l.deleted_at IS NULL
-                                LIMIT 1
+                                INSERT INTO lead_messages (id, workspace_id, lead_id, channel, message_type, message_body, sender, receiver, delivery_status, message_time, created_at)
+                                VALUES (:id, :ws_id, :lead_id, 'whatsapp', 'text', :body, 'user', :receiver, 'received', NOW(), NOW())
                                 """),
                                 {
                                     "id": wamid or str(uuid.uuid4()),
                                     "ws_id": tenant_id,
+                                    "lead_id": lead_id,
                                     "body": body,
                                     "receiver": phone
                                 }
                             )
                             db.commit()
                         
-                        await _create_lead_if_not_exists(
-                            workspace_id=tenant_id,
-                            name=sender_name,
-                            phone=phone,
-                            body=body
-                        )
-                        
                         # Run Chatbot flow execution engine
-                        with get_db() as db:
-                            await run_chatbot_flow_engine(tenant_id, phone, body, db)
+                        try:
+                            with get_db() as db:
+                                await run_chatbot_flow_engine(tenant_id, phone, body, db)
+                        except Exception as bot_err:
+                            logger.error(f"Chatbot flow engine error for lead {lead_id}: {bot_err}")
                         
                 elif "statuses" in value:
                     for status in value.get("statuses", []):
                         logger.info(f"[WHATSAPP STATUS UPDATE] ID: {status.get('id')}, Status: {status.get('status')}")
+                        
+    return {"status": "success"}
                         
     return {"status": "success"}
