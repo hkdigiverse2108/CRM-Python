@@ -633,7 +633,7 @@ async def process_webhook(
                                 )
                                 db.commit()
 
-                            # Run Chatbot Flow Engine for automated bot responses
+                            # Trigger Chatbot Flow Engine for automated responses
                             try:
                                 with get_db() as db:
                                     await run_chatbot_flow_engine(workspace_id, phone, body, db)
