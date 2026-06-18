@@ -54,7 +54,6 @@ def start_servers():
         "backend.app.main:app",
         "--host", app_host,
         "--port", str(app_port),
-        "--reload",
         "--log-level", "warning"
     ]
 

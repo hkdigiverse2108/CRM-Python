@@ -96,19 +96,15 @@ def create_app() -> FastAPI:
     app.add_middleware(TenantMiddleware)
 
     # 4. CORS Configuration (added LAST → runs FIRST)
-    # In development, allow ALL origins (compatible with credentials
+    # Allow ALL origins in both dev and production (compatible with credentials
     # by using allow_origin_regex instead of allow_origins=["*"]).
-    # This avoids issues with local proxies altering the Origin header.
     cors_kwargs = dict(
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
         expose_headers=["*"],
+        allow_origin_regex=r".*",
     )
-    if settings.is_development:
-        cors_kwargs["allow_origin_regex"] = r".*"
-    else:
-        cors_kwargs["allow_origins"] = settings.cors_origins
     app.add_middleware(CORSMiddleware, **cors_kwargs)
 
     # ── API Routes ──────────────────────────────────────────────────
