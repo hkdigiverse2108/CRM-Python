@@ -1875,35 +1875,91 @@ export function AppProvider({ children }) {
     }
   }, [token, tenantId]);
 
+  const [currentPath, setCurrentPath] = useState(window.location.pathname);
+
   useEffect(() => {
-    if (token) {
-      fetchInvoices();
-      fetchQuotes();
-      fetchPayments();
-      fetchLedger();
-      fetchExpenses();
-      fetchGstRecords();
-      fetchEmployees();
-      fetchLeaves();
-      fetchPayroll();
-      fetchAttendance();
-      fetchTasks();
-      fetchReminders();
-      fetchRoles();
-      fetchAuditLogs();
-      fetchContacts();
-      fetchClients();
-      fetchLetters();
-      fetchSubmissions();
-      fetchPayrollAdjustments();
-    }
-  }, [token, fetchInvoices, fetchQuotes, fetchPayments, fetchLedger, fetchExpenses, fetchGstRecords, fetchEmployees, fetchLeaves, fetchPayroll, fetchAttendance, fetchTasks, fetchReminders, fetchRoles, fetchAuditLogs, fetchContacts, fetchClients, fetchLetters, fetchSubmissions, fetchPayrollAdjustments]);
+    const handleLocationChange = () => {
+      setCurrentPath(window.location.pathname);
+    };
+
+    window.addEventListener('popstate', handleLocationChange);
+
+    const originalPushState = history.pushState;
+    const originalReplaceState = history.replaceState;
+
+    history.pushState = function(...args) {
+      originalPushState.apply(this, args);
+      handleLocationChange();
+    };
+
+    history.replaceState = function(...args) {
+      originalReplaceState.apply(this, args);
+      handleLocationChange();
+    };
+
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      history.pushState = originalPushState;
+      history.replaceState = originalReplaceState;
+    };
+  }, []);
+
   useEffect(() => {
     if (!token) return;
-    const leavesInterval = setInterval(fetchLeaves, 3000);
+
+    // Dynamically fetch resources matching the current route prefix to prevent API spamming
+    if (currentPath.startsWith('/finance/invoices')) {
+      fetchInvoices();
+    } else if (currentPath.startsWith('/finance/quotes')) {
+      fetchQuotes();
+    } else if (currentPath.startsWith('/finance/payments')) {
+      fetchPayments();
+    } else if (currentPath.startsWith('/finance/ledger')) {
+      fetchLedger();
+    } else if (currentPath.startsWith('/finance/expenses')) {
+      fetchExpenses();
+    } else if (currentPath.startsWith('/finance/gst')) {
+      fetchGstRecords();
+    } else if (currentPath.startsWith('/hrms/leaves')) {
+      fetchEmployees();
+      fetchLeaves();
+    } else if (currentPath.startsWith('/hrms/payroll')) {
+      fetchEmployees();
+      fetchPayroll();
+      fetchPayrollAdjustments();
+    } else if (currentPath.startsWith('/hrms/attendance')) {
+      fetchEmployees();
+      fetchAttendance();
+    } else if (currentPath.startsWith('/hrms/directory')) {
+      fetchEmployees();
+    } else if (currentPath.startsWith('/hrms/documents')) {
+      fetchEmployees();
+      fetchSubmissions();
+      fetchLetters();
+    } else if (currentPath.startsWith('/crm/contacts')) {
+      fetchContacts();
+    } else if (currentPath.startsWith('/crm/clients')) {
+      fetchClients();
+    } else if (currentPath.startsWith('/tasks')) {
+      fetchTasks();
+      fetchReminders();
+    } else if (currentPath.startsWith('/admin/users')) {
+      fetchRoles();
+    }
+  }, [currentPath, token, fetchInvoices, fetchQuotes, fetchPayments, fetchLedger, fetchExpenses, fetchGstRecords, fetchEmployees, fetchLeaves, fetchPayroll, fetchPayrollAdjustments, fetchAttendance, fetchSubmissions, fetchLetters, fetchContacts, fetchClients, fetchTasks, fetchReminders, fetchRoles]);
+  useEffect(() => {
+    if (!token) return;
+    
+    const leavesInterval = setInterval(() => {
+      if (window.location.pathname === '/hrms/leaves') {
+        fetchLeaves();
+      }
+    }, 3000);
 
     const handleFocus = () => {
-      fetchLeaves();
+      if (window.location.pathname === '/hrms/leaves') {
+        fetchLeaves();
+      }
     };
     window.addEventListener('focus', handleFocus);
 
