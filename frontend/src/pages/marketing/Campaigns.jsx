@@ -1,11 +1,81 @@
-import { useState } from 'react';
-import { useApp } from '@/context/AppContext';
+import { useState, useEffect, useCallback } from 'react';
+import { useApp, getTenantId } from '@/context/AppContext';
 import PageHeader from '@/components/ui/PageHeader';
+import { Loader2, RefreshCw } from 'lucide-react';
 
 export default function Campaigns() {
-  const { campaigns, setCampaigns, addCampaign, addToast } = useApp();
+  const { campaigns, setCampaigns, addCampaign, addToast, token, tenantId } = useApp();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showCreate, setShowCreate] = useState(false);
+
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+  const [metaAdAccounts, setMetaAdAccounts] = useState([]);
+  const [selectedAdAccount, setSelectedAdAccount] = useState('');
+  const [adInsights, setAdInsights] = useState([]);
+  const [loadingInsights, setLoadingInsights] = useState(false);
+  const [loadingAccounts, setLoadingAccounts] = useState(false);
+
+  const fetchAdAccounts = useCallback(async () => {
+    if (!token) return;
+    try {
+      setLoadingAccounts(true);
+      const resp = await fetch(`${API_BASE}/meta/status`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || getTenantId() || '96722',
+        }
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.success && data.data?.platforms?.meta_ads?.assets) {
+          const accounts = data.data.platforms.meta_ads.assets;
+          setMetaAdAccounts(accounts);
+          if (accounts.length > 0) {
+            setSelectedAdAccount(accounts[0].id);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching ad accounts:', err);
+    } finally {
+      setLoadingAccounts(false);
+    }
+  }, [token, tenantId]);
+
+  const fetchInsights = useCallback(async (accountId) => {
+    if (!accountId || !token) return;
+    try {
+      setLoadingInsights(true);
+      const resp = await fetch(`${API_BASE}/meta/ads/insights?ad_account_id=${accountId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || getTenantId() || '96722',
+        }
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.success) {
+          setAdInsights(data.data || []);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching ad insights:', err);
+    } finally {
+      setLoadingInsights(false);
+    }
+  }, [token, tenantId]);
+
+  useEffect(() => {
+    if (activeTab === 'meta-ads') {
+      fetchAdAccounts();
+    }
+  }, [activeTab, fetchAdAccounts]);
+
+  useEffect(() => {
+    if (selectedAdAccount) {
+      fetchInsights(selectedAdAccount);
+    }
+  }, [selectedAdAccount, fetchInsights]);
 
   const [newCamp, setNewCamp] = useState({
     id: '',
@@ -75,8 +145,9 @@ export default function Campaigns() {
         <PageHeader title="Campaign Center" subtitle="Create and manage marketing campaigns across channels" />
         <div className="flex items-center gap-3">
           <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl text-xs font-semibold">
-            <button onClick={() => { setActiveTab('dashboard'); addToast('Campaign dashboard active'); }} className={`px-4 py-1.5 rounded-lg transition-all ${activeTab === 'dashboard' ? 'bg-white dark:bg-slate-900 shadow-sm text-primary font-bold' : 'text-slate-500'}`}>Dashboard</button>
-            <button onClick={() => { setActiveTab('segments'); addToast('Audience segments active'); }} className={`px-4 py-1.5 rounded-lg transition-all ${activeTab === 'segments' ? 'bg-white dark:bg-slate-900 shadow-sm text-primary font-bold' : 'text-slate-500'}`}>Audience Segments</button>
+            <button onClick={() => { setActiveTab('dashboard'); }} className={`px-4 py-1.5 rounded-lg transition-all ${activeTab === 'dashboard' ? 'bg-white dark:bg-slate-900 shadow-sm text-primary font-bold' : 'text-slate-500'}`}>Dashboard</button>
+            <button onClick={() => { setActiveTab('segments'); }} className={`px-4 py-1.5 rounded-lg transition-all ${activeTab === 'segments' ? 'bg-white dark:bg-slate-900 shadow-sm text-primary font-bold' : 'text-slate-500'}`}>Audience Segments</button>
+            <button onClick={() => { setActiveTab('meta-ads'); }} className={`px-4 py-1.5 rounded-lg transition-all ${activeTab === 'meta-ads' ? 'bg-white dark:bg-slate-900 shadow-sm text-primary font-bold' : 'text-slate-500'}`}>Meta Ads Manager</button>
           </div>
           <button onClick={() => setShowCreate(true)} className="btn-primary py-1.5 px-3.5 text-xs rounded-xl flex items-center gap-1.5 shadow hover:opacity-90">
             <span className="material-symbols-outlined text-sm">add</span>
@@ -257,6 +328,133 @@ export default function Campaigns() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {activeTab === 'meta-ads' && (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Select Ad Account:</label>
+              {loadingAccounts ? (
+                <Loader2 className="animate-spin text-primary" size={16} />
+              ) : (
+                <select
+                  value={selectedAdAccount}
+                  onChange={(e) => setSelectedAdAccount(e.target.value)}
+                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-800 dark:text-white focus:outline-none"
+                >
+                  {metaAdAccounts.length === 0 ? (
+                    <option value="">No Ad Accounts Connected</option>
+                  ) : (
+                    metaAdAccounts.map((acc) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.name} ({acc.id})
+                      </option>
+                    ))
+                  )}
+                </select>
+              )}
+            </div>
+
+            <button
+              onClick={() => {
+                if (selectedAdAccount) fetchInsights(selectedAdAccount);
+              }}
+              disabled={loadingInsights}
+              className="btn-outline py-1.5 px-3 text-xs rounded-xl flex items-center gap-1.5"
+            >
+              {loadingInsights ? <Loader2 className="animate-spin" size={12} /> : <RefreshCw size={12} />}
+              Refresh Insights
+            </button>
+          </div>
+
+          {loadingInsights ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-3">
+              <Loader2 className="animate-spin text-primary" size={32} />
+              <p className="text-xs text-slate-400 font-medium">Fetching campaign insights from Meta Graph API...</p>
+            </div>
+          ) : adInsights.length === 0 ? (
+            <div className="glass-card p-10 text-center text-xs text-slate-400 font-semibold rounded-xl border border-slate-200 dark:border-slate-800">
+              No active campaigns or insights found in the last 30 days for this account.
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Aggregated stats */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="glass-card p-5 rounded-xl shadow-sm">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Total Spend</p>
+                  <p className="text-lg font-bold text-slate-800 dark:text-white">
+                    ₹{adInsights.reduce((sum, item) => sum + parseFloat(item.spend || 0), 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  </p>
+                </div>
+                <div className="glass-card p-5 rounded-xl shadow-sm">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Total Impressions</p>
+                  <p className="text-lg font-bold text-slate-800 dark:text-white">
+                    {adInsights.reduce((sum, item) => sum + parseInt(item.impressions || 0, 10), 0).toLocaleString()}
+                  </p>
+                </div>
+                <div className="glass-card p-5 rounded-xl shadow-sm">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Average CTR</p>
+                  <p className="text-lg font-bold text-slate-800 dark:text-white">
+                    {(adInsights.reduce((sum, item) => sum + parseFloat(item.ctr || 0), 0) / adInsights.length * 100).toFixed(2)}%
+                  </p>
+                </div>
+                <div className="glass-card p-5 rounded-xl shadow-sm">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Average CPC</p>
+                  <p className="text-lg font-bold text-slate-800 dark:text-white">
+                    ₹{(adInsights.reduce((sum, item) => sum + parseFloat(item.cpc || 0), 0) / adInsights.length).toFixed(2)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Table of campaigns */}
+              <div className="glass-card overflow-hidden rounded-xl border border-outline-variant">
+                <div className="px-6 py-4 border-b border-outline-variant bg-slate-50/50 dark:bg-slate-800/40">
+                  <h3 className="text-sm font-bold text-slate-800 dark:text-white">Facebook Campaign Performance</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left font-semibold text-xs">
+                    <thead className="bg-slate-50 dark:bg-slate-800/20 border-b border-outline-variant/60">
+                      <tr>
+                        <th className="px-6 py-3 text-slate-500 font-bold">Campaign Detail</th>
+                        <th className="px-6 py-3 text-slate-500 font-bold">Impressions</th>
+                        <th className="px-6 py-3 text-slate-500 font-bold">Clicks</th>
+                        <th className="px-6 py-3 text-slate-500 font-bold">CTR</th>
+                        <th className="px-6 py-3 text-slate-500 font-bold">CPC</th>
+                        <th className="px-6 py-3 text-slate-500 font-bold">Spend</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-outline-variant/30">
+                      {adInsights.map((camp, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50/30 dark:hover:bg-slate-800/20 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="font-bold text-slate-800 dark:text-white">{camp.campaign_name}</div>
+                            <div className="text-[10px] text-slate-400 font-mono mt-0.5">{camp.campaign_id}</div>
+                          </td>
+                          <td className="px-6 py-4 text-slate-700 dark:text-slate-300">
+                            {parseInt(camp.impressions || 0, 10).toLocaleString()}
+                          </td>
+                          <td className="px-6 py-4 text-slate-700 dark:text-slate-300">
+                            {parseInt(camp.clicks || 0, 10).toLocaleString()}
+                          </td>
+                          <td className="px-6 py-4 text-slate-700 dark:text-slate-300">
+                            {(parseFloat(camp.ctr || 0) * 100).toFixed(2)}%
+                          </td>
+                          <td className="px-6 py-4 text-slate-700 dark:text-slate-300">
+                            ₹{parseFloat(camp.cpc || 0).toFixed(2)}
+                          </td>
+                          <td className="px-6 py-4 font-bold text-slate-800 dark:text-white">
+                            ₹{parseFloat(camp.spend || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

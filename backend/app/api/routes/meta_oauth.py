@@ -407,7 +407,10 @@ async def _create_lead_if_not_exists(workspace_id: str, name: str, phone: str, e
 
 
 @meta_integration_router.post("/webhooks/meta")
-async def process_webhook(request: Request):
+async def process_webhook(
+    request: Request,
+    meta_service: MetaService = Depends(get_meta_service),
+):
     """
     Receive and process events from Facebook Page, Instagram, Lead Ads, and WhatsApp.
     """
@@ -424,110 +427,166 @@ async def process_webhook(request: Request):
     
     logger.info(f"Received Meta Webhook event payload safely: {payload}")
     
-    # ── PLACEHOLDER HANDLERS FOR WEBHOOK EVENTS ──────────────────────
+    # Extract event type and workspace
+    event_obj = payload.get("object", "unknown")
+    workspace_id = "rapidmodel_corp" # default fallback
     
-    # 1. Detect WhatsApp events
-    if payload.get("object") == "whatsapp_business_account":
-        for entry in payload.get("entry", []):
-            for change in entry.get("changes", []):
-                value = change.get("value", {})
-                field = change.get("field", "")
-                
-                # Check for messages
-                if "messages" in value:
-                    for msg in value.get("messages", []):
-                        phone = msg.get("from")
-                        phone_id = value.get("metadata", {}).get("phone_number_id")
-                        workspace_id = None
-                        if phone_id:
-                            with get_db() as db:
-                                workspace_id = db.execute(
-                                    text("SELECT workspace_id FROM whatsapp_phone_numbers WHERE phone_number_id = :pid LIMIT 1"),
-                                    {"pid": phone_id}
-                                ).scalar()
-                        if not workspace_id:
-                            workspace_id = "rapidmodel_corp"
+    # Log webhook as Pending
+    log_id = meta_service.log_webhook_event(
+        workspace_id=workspace_id,
+        event_type=event_obj,
+        payload=payload,
+        status="Pending"
+    )
+    
+    try:
+        # ── PLACEHOLDER HANDLERS FOR WEBHOOK EVENTS ──────────────────────
+        
+        # 1. Detect WhatsApp events
+        if event_obj == "whatsapp_business_account":
+            for entry in payload.get("entry", []):
+                for change in entry.get("changes", []):
+                    value = change.get("value", {})
+                    # Check for messages
+                    if "messages" in value:
+                        for msg in value.get("messages", []):
+                            phone = msg.get("from")
+                            phone_id = value.get("metadata", {}).get("phone_number_id")
+                            if phone_id:
+                                with get_db() as db:
+                                    ws_res = db.execute(
+                                        text("SELECT workspace_id FROM whatsapp_phone_numbers WHERE phone_number_id = :pid LIMIT 1"),
+                                        {"pid": phone_id}
+                                    ).scalar()
+                                    if ws_res:
+                                        workspace_id = ws_res
 
-                        body = ""
-                        if "text" in msg:
-                            body = msg.get("text", {}).get("body", "")
+                            body = ""
+                            if "text" in msg:
+                                body = msg.get("text", {}).get("body", "")
 
-                        logger.info(f"[WHATSAPP MESSAGE EVENT] ID: {msg.get('id')}, From: {phone}, Text: {body}")
+                            logger.info(f"[WHATSAPP MESSAGE EVENT] ID: {msg.get('id')}, From: {phone}, Text: {body}")
+                            
+                            await _create_lead_if_not_exists(
+                                workspace_id=workspace_id,
+                                name=f"WhatsApp Contact {phone}",
+                                phone=phone,
+                                email="",
+                                source="whatsapp",
+                                notes=f"Created via incoming WhatsApp message: '{body}'"
+                            )
+                    
+                    elif "statuses" in value:
+                        for status in value.get("statuses", []):
+                            logger.info(f"[WHATSAPP STATUS EVENT] ID: {status.get('id')}, Status: {status.get('status')}")
+
+        # 2. Detect Facebook Page events
+        elif event_obj == "page":
+            for entry in payload.get("entry", []):
+                for change in entry.get("changes", []):
+                    field = change.get("field", "")
+                    value = change.get("value", {})
+                    
+                    if field == "leadgen":
+                        lead_id = value.get("leadgen_id")
+                        form_id = value.get("form_id")
+                        page_id = value.get("page_id")
+                        logger.info(f"[FACEBOOK LEAD ADS EVENT] Lead ID: {lead_id}, Form ID: {form_id}, Page: {page_id}")
                         
+                        if page_id:
+                            with get_db() as db:
+                                ws_res = db.execute(
+                                    text("SELECT workspace_id FROM facebook_pages WHERE page_id = :pid LIMIT 1"),
+                                    {"pid": page_id}
+                                ).scalar()
+                                if ws_res:
+                                    workspace_id = ws_res
+
                         await _create_lead_if_not_exists(
                             workspace_id=workspace_id,
-                            name=f"WhatsApp Contact {phone}",
-                            phone=phone,
+                            name=f"Meta Ad Lead {lead_id}",
+                            phone=f"Ad-Phone-{lead_id}",
+                            email=f"ad-lead-{lead_id}@example.com",
+                            source="facebook_lead_forms",
+                            notes=f"Form ID: {form_id}, Leadgen ID: {lead_id}"
+                        )
+                    
+                    elif field == "feed":
+                        logger.info(f"[FACEBOOK PAGE FEED EVENT] Page change detected: {value.get('item')}, Verb: {value.get('verb')}")
+
+        # 3. Detect Instagram events
+        elif event_obj == "instagram":
+            for entry in payload.get("entry", []):
+                if "messaging" in entry:
+                    for msg in entry.get("messaging", []):
+                        sender_id = msg.get("sender", {}).get("id")
+                        logger.info(f"[INSTAGRAM MESSAGE EVENT] Sender: {sender_id}")
+                        await _create_lead_if_not_exists(
+                            workspace_id=workspace_id,
+                            name=f"Instagram User {sender_id}",
+                            phone=f"IG-Phone-{sender_id}",
                             email="",
-                            source="whatsapp",
-                            notes=f"Created via incoming WhatsApp message: '{body}'"
+                            source="instagram",
+                            notes=f"Created from direct message from Instagram user {sender_id}"
                         )
                 
-                # Check for status updates (sent, delivered, read)
-                elif "statuses" in value:
-                    for status in value.get("statuses", []):
-                        logger.info(f"[WHATSAPP STATUS EVENT] ID: {status.get('id')}, Status: {status.get('status')}")
+                for change in entry.get("changes", []):
+                    logger.info(f"[INSTAGRAM CHANGE EVENT] Field: {change.get('field')}")
 
-    # 2. Detect Facebook Page events (leads, feed, comments)
-    elif payload.get("object") == "page":
-        for entry in payload.get("entry", []):
-            for change in entry.get("changes", []):
-                field = change.get("field", "")
-                value = change.get("value", {})
+        # Update status to Success and associate correct workspace_id
+        meta_service.update_webhook_log_status(log_id, "Success")
+        
+        # update logged workspace_id if it changed
+        if workspace_id != "rapidmodel_corp":
+            with get_db() as db:
+                db.execute(
+                    text("UPDATE meta_webhook_logs SET workspace_id = :ws_id WHERE log_id = :log_id"),
+                    {"ws_id": workspace_id, "log_id": log_id}
+                )
+                db.commit()
                 
-                # Check for Facebook Lead Ads
-                if field == "leadgen":
-                    lead_id = value.get("leadgen_id")
-                    form_id = value.get("form_id")
-                    page_id = value.get("page_id")
-                    logger.info(f"[FACEBOOK LEAD ADS EVENT] Lead ID: {lead_id}, Form ID: {form_id}, Page: {page_id}")
-                    
-                    workspace_id = None
-                    if page_id:
-                        with get_db() as db:
-                            workspace_id = db.execute(
-                                text("SELECT workspace_id FROM facebook_pages WHERE page_id = :pid LIMIT 1"),
-                                {"pid": page_id}
-                            ).scalar()
-                    if not workspace_id:
-                        workspace_id = "rapidmodel_corp"
+    except Exception as e:
+        logger.error(f"Error processing webhook event: {str(e)}")
+        meta_service.update_webhook_log_status(log_id, "Failed", error_message=str(e))
+        return {"status": "error", "message": "Processing failed, logged for retry."}
 
-                    await _create_lead_if_not_exists(
-                        workspace_id=workspace_id,
-                        name=f"Meta Ad Lead {lead_id}",
-                        phone=f"Ad-Phone-{lead_id}",
-                        email=f"ad-lead-{lead_id}@example.com",
-                        source="facebook_lead_forms",
-                        notes=f"Form ID: {form_id}, Leadgen ID: {lead_id}"
-                    )
-                
-                # Check for Page feed events
-                elif field == "feed":
-                    logger.info(f"[FACEBOOK PAGE FEED EVENT] Page change detected: {value.get('item')}, Verb: {value.get('verb')}")
-
-    # 3. Detect Instagram events (messages, comments)
-    elif payload.get("object") == "instagram":
-        for entry in payload.get("entry", []):
-            # Check for Instagram messaging
-            if "messaging" in entry:
-                for msg in entry.get("messaging", []):
-                    sender_id = msg.get("sender", {}).get("id")
-                    logger.info(f"[INSTAGRAM MESSAGE EVENT] Sender: {sender_id}")
-                    # Auto-create lead
-                    await _create_lead_if_not_exists(
-                        workspace_id="rapidmodel_corp",
-                        name=f"Instagram User {sender_id}",
-                        phone=f"IG-Phone-{sender_id}",
-                        email="",
-                        source="instagram",
-                        notes=f"Created from direct message from Instagram user {sender_id}"
-                    )
-            
-            # Check for changes (comments, mentions)
-            for change in entry.get("changes", []):
-                logger.info(f"[INSTAGRAM CHANGE EVENT] Field: {change.get('field')}")
-                
     return {"status": "success"}
+
+
+@meta_integration_router.get("/api/meta/ads/insights")
+async def get_ad_insights(
+    request: Request,
+    ad_account_id: str,
+    current_user: dict = Depends(get_current_user),
+    meta_service: MetaService = Depends(get_meta_service),
+):
+    """
+    Fetch marketing insights (spend, CTR, CPC, impressions) for a specific Meta Ad Account.
+    """
+    tenant_id = request.state.tenant.id
+    
+    # Get user token for the workspace
+    from backend.app.core.database import get_db
+    from sqlalchemy import text
+    with get_db() as db:
+        token = db.execute(
+            text("SELECT access_token FROM meta_integrations WHERE workspace_id = :ws_id AND status = 'Connected' LIMIT 1"),
+            {"ws_id": tenant_id}
+        ).scalar()
+        
+    if not token:
+        from backend.app.core.config import get_settings
+        settings = get_settings()
+        is_sandbox = not settings.META_APP_ID or settings.META_APP_ID == "YOUR_META_APP_ID"
+        if is_sandbox:
+            token = "mock_sandbox_access_token_xyz123abc"
+        else:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=400, detail="Meta integration not active for this workspace.")
+
+    insights = await meta_service.fetch_ad_insights(token=token, ad_account_id=ad_account_id)
+    return success_response(data=insights, message="Ad insights fetched successfully")
+
 
 
 @meta_integration_router.post("/api/meta/sync")

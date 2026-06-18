@@ -708,6 +708,92 @@ class MetaService:
                 except Exception as e:
                     logger.error(f"Failed to automatically refresh token for workspace {workspace_id}: {e}")
 
+    async def fetch_ad_insights(self, token: str, ad_account_id: str) -> list[dict]:
+        """Fetch marketing insights (spend, impressions, clicks, CTR, CPC) for an ad account."""
+        if token == "mock_sandbox_access_token_xyz123abc":
+            return [
+                {
+                    "campaign_id": "camp_111",
+                    "campaign_name": "Summer Special Sale Ads",
+                    "spend": "12500.50",
+                    "impressions": "54200",
+                    "clicks": "1280",
+                    "ctr": "0.0236",
+                    "cpc": "9.76"
+                },
+                {
+                    "campaign_id": "camp_222",
+                    "campaign_name": "WhatsApp Onboarding LeadGen",
+                    "spend": "4500.00",
+                    "impressions": "18900",
+                    "clicks": "620",
+                    "ctr": "0.0328",
+                    "cpc": "7.25"
+                }
+            ]
+        # Real Facebook API call
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(
+                f"{self.graph_base}/{ad_account_id}/insights",
+                params={
+                    "level": "campaign",
+                    "fields": "campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc",
+                    "access_token": token,
+                    "date_preset": "last_30d"
+                },
+            )
+        if resp.status_code != 200:
+            logger.warning(f"Failed to fetch ad insights for {ad_account_id}: {resp.text}")
+            return []
+        return resp.json().get("data", [])
+
+    def log_webhook_event(self, workspace_id: Optional[str], event_type: str, payload: dict, status: str = "Success", error_message: str = None) -> str:
+        """Log incoming webhook events to database for audit and error handling."""
+        import json
+        log_id = str(uuid.uuid4())
+        payload_str = json.dumps(payload)
+        with get_db() as db:
+            db.execute(
+                text("""
+                INSERT INTO meta_webhook_logs (log_id, workspace_id, event_type, payload, status, error_message)
+                VALUES (:log_id, :ws_id, :event_type, :payload, :status, :error_message)
+                """),
+                {
+                    "log_id": log_id,
+                    "ws_id": workspace_id,
+                    "event_type": event_type,
+                    "payload": payload_str,
+                    "status": status,
+                    "error_message": error_message
+                }
+            )
+            db.commit()
+        return log_id
+
+    def update_webhook_log_status(self, log_id: str, status: str, error_message: str = None, increment_retry: bool = False):
+        """Update processing status of logged webhook."""
+        with get_db() as db:
+            if increment_retry:
+                db.execute(
+                    text("""
+                    UPDATE meta_webhook_logs
+                    SET status = :status, error_message = :err, retry_count = retry_count + 1
+                    WHERE log_id = :log_id
+                    """),
+                    {"status": status, "err": error_message, "log_id": log_id}
+                )
+            else:
+                db.execute(
+                    text("""
+                    UPDATE meta_webhook_logs
+                    SET status = :status, error_message = :err
+                    WHERE log_id = :log_id
+                    """),
+                    {"status": status, "err": error_message, "log_id": log_id}
+                )
+            db.commit()
+
+
 
 # Singleton
 _meta_service = MetaService()
