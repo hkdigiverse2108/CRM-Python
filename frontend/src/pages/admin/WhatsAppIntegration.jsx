@@ -21,6 +21,12 @@ export default function WhatsAppIntegration() {
   // Connection Status
   const [status, setStatus] = useState({ connected: false });
 
+  // Selection states for multiple WABA accounts or phone numbers
+  const [showSelectionModal, setShowSelectionModal] = useState(false);
+  const [selectionOptions, setSelectionOptions] = useState([]);
+  const [selectedOptionIndex, setSelectedOptionIndex] = useState(0);
+  const [selectionAccessToken, setSelectionAccessToken] = useState('');
+
   // Headers helper
   const getHeaders = useCallback(() => ({
     'Content-Type': 'application/json',
@@ -139,8 +145,15 @@ export default function WhatsAppIntegration() {
           
           const result = await resp.json();
           if (resp.ok && result.success) {
-            addToast('WhatsApp connected successfully!', 'success');
-            fetchStatus();
+            if (result.data?.requires_selection) {
+              setSelectionOptions(result.data.options || []);
+              setSelectionAccessToken(result.data.access_token || '');
+              setSelectedOptionIndex(0);
+              setShowSelectionModal(true);
+            } else {
+              addToast('WhatsApp connected successfully!', 'success');
+              fetchStatus();
+            }
           } else {
             addToast(result.message || 'Failed to complete connection', 'error');
           }
@@ -153,6 +166,37 @@ export default function WhatsAppIntegration() {
     };
     
     window.addEventListener('message', handleMessage);
+  };
+
+  const handleConfirmSelection = async () => {
+    const selected = selectionOptions[selectedOptionIndex];
+    if (!selected) return;
+
+    try {
+      setConnecting(true);
+      setShowSelectionModal(false);
+      const resp = await fetch(`${API_BASE}/integrations/whatsapp/connect`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          code: 'selected_saved',
+          waba_id: selected.waba_id,
+          phone_number_id: selected.phone_number_id,
+          access_token: selectionAccessToken
+        })
+      });
+      const result = await resp.json();
+      if (resp.ok && result.success) {
+        addToast('WhatsApp connected successfully with selected account!', 'success');
+        fetchStatus();
+      } else {
+        addToast(result.message || 'Failed to connect selected account', 'error');
+      }
+    } catch {
+      addToast('Network error while saving selection', 'error');
+    } finally {
+      setConnecting(false);
+    }
   };
 
   // Handle Disconnect
@@ -343,6 +387,70 @@ export default function WhatsAppIntegration() {
                     <span className="text-emerald-500 font-bold">Subscribed</span>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Multiple WhatsApp Accounts / Number Selection Modal */}
+      {showSelectionModal && (
+        <div className="modal-overlay" onClick={() => setShowSelectionModal(false)}>
+          <div className="modal-content w-full max-w-md p-6 bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl relative" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center pb-3 border-b border-slate-800 mb-4">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <MessageCircle size={18} className="text-emerald-500" />
+                Select WhatsApp Profile
+              </h3>
+              <button onClick={() => setShowSelectionModal(false)} className="text-slate-400 hover:text-white transition-colors">
+                <XCircle size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-xs text-slate-400">
+                Multiple WhatsApp Business Accounts or Phone Numbers were discovered. Please select the primary sender profile to link with this CRM workspace:
+              </p>
+
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                {selectionOptions.map((opt, idx) => (
+                  <div
+                    key={idx}
+                    onClick={() => setSelectedOptionIndex(idx)}
+                    className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col gap-1 ${
+                      selectedOptionIndex === idx
+                        ? 'border-emerald-500 bg-emerald-950/20'
+                        : 'border-slate-800 bg-slate-900/40 hover:bg-slate-900'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between text-xs font-semibold">
+                      <span className="text-white">{opt.display_phone_number}</span>
+                      <span className="text-[10px] text-slate-500">ID: {opt.phone_number_id}</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 flex justify-between">
+                      <span>WABA: {opt.waba_name}</span>
+                      <span>WABA ID: {opt.waba_id}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-800 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSelectionModal(false)}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 font-medium rounded-lg text-xs transition-colors border border-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmSelection}
+                  disabled={connecting}
+                  className="inline-flex items-center gap-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-colors shadow-lg shadow-emerald-500/10 disabled:opacity-60"
+                >
+                  {connecting && <Loader2 size={12} className="animate-spin" />}
+                  Confirm & Link
+                </button>
               </div>
             </div>
           </div>

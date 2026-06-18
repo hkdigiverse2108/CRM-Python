@@ -17,77 +17,12 @@ logger = logging.getLogger("whatsapp_integration")
 
 class ConnectPayload(BaseModel):
     code: str
+    waba_id: Optional[str] = None
+    phone_number_id: Optional[str] = None
+    access_token: Optional[str] = None
 
-@router.post("/connect")
-async def connect_whatsapp(
-    request: Request,
-    payload: ConnectPayload,
-    current_user: dict = Depends(get_current_user)
-):
-    tenant_id = request.state.tenant.id
-    settings = get_settings()
-    
-    # 1. Exchange authorization code
-    is_sandbox = payload.code.startswith("mock_") or not settings.META_APP_ID or settings.META_APP_ID == "YOUR_META_APP_ID"
-    
-    if is_sandbox:
-        access_token = "mock_whatsapp_access_token_123"
-        waba_id = "waba_991823749"
-        phone_number_id = "phone_number_id_991"
-        business_name = "Digiverse WhatsApp Sandbox"
-        display_phone_number = "+1 555-019-2834"
-    else:
-        # Real Meta API exchange
-        try:
-            async with httpx.AsyncClient(timeout=30) as client:
-                token_resp = await client.get(
-                    f"https://graph.facebook.com/{settings.META_GRAPH_API_VERSION}/oauth/access_token",
-                    params={
-                        "client_id": settings.META_APP_ID,
-                        "client_secret": settings.META_APP_SECRET,
-                        "code": payload.code
-                    }
-                )
-                if token_resp.status_code != 200:
-                    logger.error(f"WhatsApp token exchange failed: {token_resp.text}")
-                    raise HTTPException(status_code=400, detail="Failed to exchange authorization code with Meta.")
-                
-                token_data = token_resp.json()
-                access_token = token_data.get("access_token")
-                
-                # Fetch WABA accounts linked to this token
-                waba_resp = await client.get(
-                    f"https://graph.facebook.com/{settings.META_GRAPH_API_VERSION}/me/whatsapp_business_accounts",
-                    params={"access_token": access_token}
-                )
-                if waba_resp.status_code != 200 or not waba_resp.json().get("data"):
-                    logger.error(f"Failed to fetch WhatsApp Business Accounts: {waba_resp.text}")
-                    raise HTTPException(status_code=400, detail="No WhatsApp Business Account found linked to this Facebook login.")
-                
-                waba_info = waba_resp.json()["data"][0]
-                waba_id = waba_info["id"]
-                business_name = waba_info.get("name", "WhatsApp Business Account")
-                
-                # Fetch phone numbers linked to WABA
-                phone_resp = await client.get(
-                    f"https://graph.facebook.com/{settings.META_GRAPH_API_VERSION}/{waba_id}/phone_numbers",
-                    params={"access_token": access_token}
-                )
-                if phone_resp.status_code != 200 or not phone_resp.json().get("data"):
-                    logger.error(f"Failed to fetch WABA phone numbers: {phone_resp.text}")
-                    raise HTTPException(status_code=400, detail="No registered phone numbers found on the WhatsApp Business Account.")
-                
-                phone_info = phone_resp.json()["data"][0]
-                phone_number_id = phone_info["id"]
-                display_phone_number = phone_info.get("display_phone_number", "")
-                
-        except Exception as e:
-            logger.error(f"Meta Embedded Signup exchange exception: {str(e)}")
-            raise HTTPException(status_code=500, detail="Failed to connect with Meta APIs. Check logs.")
-
-    # 2. Save in database
+def save_whatsapp_connection(tenant_id: str, business_name: str, waba_id: str, phone_number_id: str, access_token: str, display_phone_number: str):
     with get_db() as db:
-        # Check if already exists for this tenant
         exist_check = db.execute(
             text("SELECT id FROM whatsapp_accounts WHERE tenant_id = :tenant_id"),
             {"tenant_id": tenant_id}
@@ -126,18 +61,166 @@ async def connect_whatsapp(
                     "phone_num": display_phone_number
                 }
             )
-            
         db.commit()
 
-    return success_response(
-        data={
-            "business_name": business_name,
-            "display_phone_number": display_phone_number,
-            "waba_id": waba_id,
-            "phone_number_id": phone_number_id
-        },
-        message="WhatsApp account connected successfully!"
-    )
+@router.post("/connect")
+async def connect_whatsapp(
+    request: Request,
+    payload: ConnectPayload,
+    current_user: dict = Depends(get_current_user)
+):
+    tenant_id = request.state.tenant.id
+    settings = get_settings()
+    
+    # Check if this is a direct save of a selected option
+    if payload.waba_id and payload.phone_number_id and payload.access_token:
+        access_token = payload.access_token
+        waba_id = payload.waba_id
+        phone_number_id = payload.phone_number_id
+        
+        business_name = "WhatsApp Business Account"
+        display_phone_number = phone_number_id
+        
+        # Try to fetch pretty names from Graph API
+        if not payload.access_token.startswith("mock_"):
+            try:
+                async with httpx.AsyncClient(timeout=15) as client:
+                    waba_resp = await client.get(
+                        f"https://graph.facebook.com/{settings.META_GRAPH_API_VERSION}/{waba_id}",
+                        params={"access_token": access_token}
+                    )
+                    if waba_resp.status_code == 200:
+                        business_name = waba_resp.json().get("name", business_name)
+                        
+                    phone_resp = await client.get(
+                        f"https://graph.facebook.com/{settings.META_GRAPH_API_VERSION}/{phone_number_id}",
+                        params={"access_token": access_token}
+                    )
+                    if phone_resp.status_code == 200:
+                        display_phone_number = phone_resp.json().get("display_phone_number", display_phone_number)
+            except Exception as e:
+                logger.warning(f"Failed to fetch pretty names: {e}")
+                
+        save_whatsapp_connection(tenant_id, business_name, waba_id, phone_number_id, access_token, display_phone_number)
+        return success_response(
+            data={
+                "requires_selection": False,
+                "business_name": business_name,
+                "display_phone_number": display_phone_number,
+                "waba_id": waba_id,
+                "phone_number_id": phone_number_id
+            },
+            message="WhatsApp account connected successfully!"
+        )
+
+    # 1. Exchange authorization code
+    is_sandbox = payload.code.startswith("mock_") or not settings.META_APP_ID or settings.META_APP_ID == "YOUR_META_APP_ID"
+    
+    if is_sandbox:
+        access_token = "mock_whatsapp_access_token_123"
+        waba_id = "waba_991823749"
+        phone_number_id = "phone_number_id_991"
+        business_name = "Digiverse WhatsApp Sandbox"
+        display_phone_number = "+1 555-019-2834"
+        
+        save_whatsapp_connection(tenant_id, business_name, waba_id, phone_number_id, access_token, display_phone_number)
+        return success_response(
+            data={
+                "requires_selection": False,
+                "business_name": business_name,
+                "display_phone_number": display_phone_number,
+                "waba_id": waba_id,
+                "phone_number_id": phone_number_id
+            },
+            message="WhatsApp account connected successfully!"
+        )
+    else:
+        # Real Meta API exchange
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                token_resp = await client.get(
+                    f"https://graph.facebook.com/{settings.META_GRAPH_API_VERSION}/oauth/access_token",
+                    params={
+                        "client_id": settings.META_APP_ID,
+                        "client_secret": settings.META_APP_SECRET,
+                        "code": payload.code
+                    }
+                )
+                if token_resp.status_code != 200:
+                    logger.error(f"WhatsApp token exchange failed: {token_resp.text}")
+                    raise HTTPException(status_code=400, detail="Failed to exchange authorization code with Meta.")
+                
+                token_data = token_resp.json()
+                access_token = token_data.get("access_token")
+                
+                # Fetch WABA accounts linked to this token
+                waba_resp = await client.get(
+                    f"https://graph.facebook.com/{settings.META_GRAPH_API_VERSION}/me/whatsapp_business_accounts",
+                    params={"access_token": access_token}
+                )
+                if waba_resp.status_code != 200 or not waba_resp.json().get("data"):
+                    logger.error(f"Failed to fetch WhatsApp Business Accounts: {waba_resp.text}")
+                    raise HTTPException(status_code=400, detail="No WhatsApp Business Account found linked to this Facebook login.")
+                
+                waba_list = waba_resp.json()["data"]
+                
+                options = []
+                for waba in waba_list:
+                    curr_waba_id = waba["id"]
+                    curr_waba_name = waba.get("name", "WhatsApp Business Account")
+                    
+                    phone_resp = await client.get(
+                        f"https://graph.facebook.com/{settings.META_GRAPH_API_VERSION}/{curr_waba_id}/phone_numbers",
+                        params={"access_token": access_token}
+                    )
+                    if phone_resp.status_code == 200:
+                        phone_data = phone_resp.json().get("data", [])
+                        for phone in phone_data:
+                            options.append({
+                                "waba_id": curr_waba_id,
+                                "waba_name": curr_waba_name,
+                                "phone_number_id": phone["id"],
+                                "display_phone_number": phone.get("display_phone_number", phone["id"])
+                            })
+                            
+                if not options:
+                    raise HTTPException(status_code=400, detail="No registered phone numbers found on any WhatsApp Business Account.")
+                
+                # If there are multiple options, return them to the frontend for selection
+                if len(options) > 1:
+                    return success_response(
+                        data={
+                            "requires_selection": True,
+                            "options": options,
+                            "access_token": access_token
+                        },
+                        message="Multiple phone numbers found. Please select one."
+                    )
+                
+                selected = options[0]
+                business_name = selected["waba_name"]
+                waba_id = selected["waba_id"]
+                phone_number_id = selected["phone_number_id"]
+                display_phone_number = selected["display_phone_number"]
+                
+                save_whatsapp_connection(tenant_id, business_name, waba_id, phone_number_id, access_token, display_phone_number)
+                
+                return success_response(
+                    data={
+                        "requires_selection": False,
+                        "business_name": business_name,
+                        "display_phone_number": display_phone_number,
+                        "waba_id": waba_id,
+                        "phone_number_id": phone_number_id
+                    },
+                    message="WhatsApp account connected successfully!"
+                )
+                
+        except HTTPException as he:
+            raise he
+        except Exception as e:
+            logger.error(f"Meta Embedded Signup exchange exception: {str(e)}")
+            raise HTTPException(status_code=500, detail="Failed to connect with Meta APIs. Check logs.")
 
 @router.get("/status")
 async def get_whatsapp_status(
