@@ -195,14 +195,14 @@ class MetaService:
         """Fetch all Meta Ad Accounts the user has access to."""
         if token == "mock_sandbox_access_token_xyz123abc":
             return [
-                {"id": "act_88201948", "name": "Digiverse Brand Campaign AD", "currency": "INR", "timezone_name": "Asia/Kolkata", "account_status": 1},
-                {"id": "act_22091842", "name": "AIO Retargeting AD", "currency": "USD", "timezone_name": "America/New_York", "account_status": 1}
+                {"id": "act_88201948", "name": "Digiverse Brand Campaign AD", "currency": "INR", "timezone_name": "Asia/Kolkata", "account_status": 1, "business": {"id": "biz_88201948", "name": "Digiverse Business Portfolio"}},
+                {"id": "act_22091842", "name": "AIO Retargeting AD", "currency": "USD", "timezone_name": "America/New_York", "account_status": 1, "business": {"id": "biz_999999", "name": "Other Business Portfolio"}}
             ]
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(
                 f"{self.graph_base}/me/adaccounts",
                 params={
-                    "fields": "id,name,account_id,currency,timezone_name,account_status",
+                    "fields": "id,name,account_id,currency,timezone_name,account_status,business",
                     "access_token": token,
                     "limit": 100,
                 },
@@ -386,17 +386,25 @@ class MetaService:
 
             # Save Ad Accounts
             for ad in ad_accounts:
+                ad_biz = ad.get("business", {})
+                ad_biz_id = ad_biz.get("id") or business_id or ""
                 db.execute(
                     text("""
                     INSERT IGNORE INTO meta_ad_accounts
                         (ad_account_id, workspace_id, business_id, account_name, 
                          currency, timezone, status)
                     VALUES (:aid, :ws_id, :biz_id, :name, :currency, :tz, 'Connected')
+                    ON DUPLICATE KEY UPDATE
+                        business_id = VALUES(business_id),
+                        account_name = VALUES(account_name),
+                        currency = VALUES(currency),
+                        timezone = VALUES(timezone),
+                        status = 'Connected'
                     """),
                     {
                         "aid": ad.get("id", ad.get("account_id", "")),
                         "ws_id": workspace_id,
-                        "biz_id": business_id or "",
+                        "biz_id": ad_biz_id,
                         "name": ad.get("name", ""),
                         "currency": ad.get("currency", "USD"),
                         "tz": ad.get("timezone_name", "UTC"),
@@ -499,21 +507,21 @@ class MetaService:
 
             # Fetch ad accounts
             ads_result = db.execute(
-                text("SELECT ad_account_id, account_name, currency, timezone, status FROM meta_ad_accounts WHERE workspace_id = :ws_id"),
+                text("SELECT ad_account_id, account_name, currency, timezone, status, business_id FROM meta_ad_accounts WHERE workspace_id = :ws_id"),
                 {"ws_id": workspace_id},
             )
             ad_accounts = [
-                {"id": r[0], "name": r[1], "currency": r[2], "timezone": r[3], "status": r[4]}
+                {"id": r[0], "name": r[1], "currency": r[2], "timezone": r[3], "status": r[4], "business_id": r[5]}
                 for r in ads_result.fetchall()
             ]
 
             # Fetch WABA
             waba_result = db.execute(
-                text("SELECT waba_id, account_name, status FROM whatsapp_business_accounts WHERE workspace_id = :ws_id"),
+                text("SELECT waba_id, account_name, status, business_id FROM whatsapp_business_accounts WHERE workspace_id = :ws_id"),
                 {"ws_id": workspace_id},
             )
             waba_accounts = [
-                {"id": r[0], "name": r[1], "status": r[2]}
+                {"id": r[0], "name": r[1], "status": r[2], "business_id": r[3]}
                 for r in waba_result.fetchall()
             ]
 
@@ -605,9 +613,15 @@ class MetaService:
         # Fetch all platform assets
         pages = await self.fetch_pages(token=access_token)
         ad_accounts = await self.fetch_ad_accounts(token=access_token)
-        whatsapp_accounts = await self.fetch_whatsapp_accounts(
-            token=access_token, business_id=business_id
-        )
+        
+        # Fetch businesses and gather WhatsApp accounts for all businesses
+        businesses = await self.fetch_businesses(token=access_token)
+        whatsapp_accounts = []
+        for biz in businesses:
+            biz_wabas = await self.fetch_whatsapp_accounts(
+                token=access_token, business_id=biz["id"]
+            )
+            whatsapp_accounts.extend(biz_wabas)
 
         instagram_accounts = []
         lead_forms = []

@@ -68,12 +68,16 @@ async def oauth_callback(
     business_id = businesses[0]["id"] if businesses else ""
     business_name = businesses[0]["name"] if businesses else ""
 
-    # Step 4: Fetch all platform assets in parallel
+    # Step 4: Fetch all platform assets
     pages = await meta_service.fetch_pages(token=access_token)
     ad_accounts = await meta_service.fetch_ad_accounts(token=access_token)
-    whatsapp_accounts = await meta_service.fetch_whatsapp_accounts(
-        token=access_token, business_id=business_id
-    )
+    
+    whatsapp_accounts = []
+    for biz in businesses:
+        biz_wabas = await meta_service.fetch_whatsapp_accounts(
+            token=access_token, business_id=biz["id"]
+        )
+        whatsapp_accounts.extend(biz_wabas)
 
     # Fetch Instagram accounts from each page
     instagram_accounts = []
@@ -271,12 +275,16 @@ async def meta_callback(
     business_id = businesses[0]["id"] if businesses else ""
     business_name = businesses[0]["name"] if businesses else ""
 
-    # Step 4: Fetch all platform assets in parallel
+    # Step 4: Fetch all platform assets
     pages = await meta_service.fetch_pages(token=access_token)
     ad_accounts = await meta_service.fetch_ad_accounts(token=access_token)
-    whatsapp_accounts = await meta_service.fetch_whatsapp_accounts(
-        token=access_token, business_id=business_id
-    )
+    
+    whatsapp_accounts = []
+    for biz in businesses:
+        biz_wabas = await meta_service.fetch_whatsapp_accounts(
+            token=access_token, business_id=biz["id"]
+        )
+        whatsapp_accounts.extend(biz_wabas)
 
     # Fetch Instagram accounts and lead forms from each page
     instagram_accounts = []

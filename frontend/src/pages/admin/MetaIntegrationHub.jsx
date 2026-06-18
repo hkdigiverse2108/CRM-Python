@@ -537,6 +537,11 @@ export default function MetaIntegrationHub() {
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
                               <span className="text-[var(--color-foreground)] font-medium truncate">
                                 {asset.name || asset.username || asset.id}
+                                {asset.business_id && (
+                                  <span className="text-[9px] text-slate-400 font-normal ml-1.5">
+                                    (Biz: {asset.business_id})
+                                  </span>
+                                )}
                               </span>
                             </div>
                             {asset.followers != null && (
