@@ -25,12 +25,9 @@ logger = get_logger("meta_service")
 
 META_SCOPES = [
     "public_profile",
-    "email",
     "pages_show_list",
     "pages_read_engagement",
     "pages_manage_metadata",
-    "ads_management",
-    "ads_read",
     "business_management",
     "whatsapp_business_management",
     "whatsapp_business_messaging"
