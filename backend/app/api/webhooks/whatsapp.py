@@ -1,3 +1,5 @@
+import os
+import httpx
 import logging
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -12,6 +14,110 @@ import uuid
 
 router = APIRouter()
 logger = logging.getLogger("whatsapp_webhook")
+
+async def get_whatsapp_media_url(media_id: str, tenant_id: str, db) -> str:
+    """Fetch, download and persist WhatsApp media attachment from Meta API."""
+    acc = db.execute(
+        text("SELECT access_token FROM whatsapp_accounts WHERE tenant_id = :tenant_id LIMIT 1"),
+        {"tenant_id": tenant_id}
+    ).mappings().first()
+    
+    if not acc or not acc["access_token"] or acc["access_token"].startswith("mock_"):
+        return f"https://api.dicebear.com/7.x/identicon/svg?seed={media_id}"
+        
+    access_token = acc["access_token"]
+    settings = get_settings()
+    
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            # 1. Fetch metadata
+            resp = await client.get(
+                f"https://graph.facebook.com/{settings.META_GRAPH_API_VERSION}/{media_id}",
+                headers={"Authorization": f"Bearer {access_token}"}
+            )
+            if resp.status_code != 200:
+                logger.error(f"Failed to fetch media details from Meta: {resp.text}")
+                return f"https://api.dicebear.com/7.x/identicon/svg?seed={media_id}"
+                
+            media_data = resp.json()
+            download_url = media_data.get("url")
+            mime_type = media_data.get("mime_type", "")
+            
+            if not download_url:
+                return f"https://api.dicebear.com/7.x/identicon/svg?seed={media_id}"
+                
+            # 2. Download raw content
+            media_resp = await client.get(
+                download_url,
+                headers={"Authorization": f"Bearer {access_token}"}
+            )
+            if media_resp.status_code != 200:
+                logger.error(f"Failed to download media content from Meta: {media_resp.text}")
+                return f"https://api.dicebear.com/7.x/identicon/svg?seed={media_id}"
+                
+            file_bytes = media_resp.content
+            
+            # 3. Check Cloudinary settings
+            workspace = db.execute(
+                text("""
+                    SELECT cloudinary_cloud_name, cloudinary_api_key, cloudinary_api_secret 
+                    FROM workspaces 
+                    WHERE workspace_id = :tenant_id 
+                    LIMIT 1
+                """),
+                {"tenant_id": tenant_id}
+            ).mappings().first()
+            
+            cloud_name = workspace.get("cloudinary_cloud_name") if workspace else None
+            api_key = workspace.get("cloudinary_api_key") if workspace else None
+            api_secret = workspace.get("cloudinary_api_secret") if workspace else None
+            
+            # Fallback to env
+            if not (cloud_name and api_key and api_secret):
+                cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME")
+                api_key = os.getenv("CLOUDINARY_API_KEY")
+                api_secret = os.getenv("CLOUDINARY_API_SECRET")
+                
+            # 4. Upload to Cloudinary if available
+            if cloud_name and api_key and api_secret:
+                import cloudinary
+                import cloudinary.uploader
+                cloudinary.config(
+                    cloud_name=cloud_name,
+                    api_key=api_key,
+                    api_secret=api_secret,
+                    secure=True
+                )
+                upload_result = cloudinary.uploader.upload(
+                    file_bytes,
+                    resource_type="auto",
+                    folder=f"crm_tenant_{tenant_id}"
+                )
+                return upload_result.get("secure_url")
+                
+            # 5. Local Fallback
+            os.makedirs("uploads", exist_ok=True)
+            ext = ".bin"
+            if "image/jpeg" in mime_type:
+                ext = ".jpg"
+            elif "image/png" in mime_type:
+                ext = ".png"
+            elif "application/pdf" in mime_type:
+                ext = ".pdf"
+            elif "image/" in mime_type:
+                ext = "." + mime_type.split("/")[-1]
+                
+            unique_filename = f"wa_recv_{media_id}{ext}"
+            file_path = os.path.join("uploads", unique_filename)
+            with open(file_path, "wb") as buffer:
+                buffer.write(file_bytes)
+                
+            return f"/uploads/{unique_filename}"
+            
+    except Exception as e:
+        logger.error(f"Error handling WhatsApp media download: {e}")
+        
+    return f"https://api.dicebear.com/7.x/identicon/svg?seed={media_id}"
 
 RECEIVED_WEBHOOKS = []
 
@@ -141,14 +247,15 @@ async def process_whatsapp_webhook(request: Request):
                             img_id = msg.get("image", {}).get("id")
                             caption = msg.get("image", {}).get("caption", "")
                             body = caption or "[Image]"
-                            # We construct a dynamic identicon URL using the image ID so we always have a valid image to render in the CRM
-                            attachment_url = f"https://api.dicebear.com/7.x/identicon/svg?seed={img_id}"
+                            with get_db() as db:
+                                attachment_url = await get_whatsapp_media_url(img_id, tenant_id, db)
                         elif "document" in msg:
                             msg_type = "document"
                             doc_id = msg.get("document", {}).get("id")
                             filename = msg.get("document", {}).get("filename", "document.pdf")
                             body = filename or "[File]"
-                            attachment_url = f"https://api.dicebear.com/7.x/identicon/svg?seed={doc_id}"
+                            with get_db() as db:
+                                attachment_url = await get_whatsapp_media_url(doc_id, tenant_id, db)
                             
                         sender_name = value.get("contacts", [{}])[0].get("profile", {}).get("name", f"WhatsApp User {phone}")
                         
