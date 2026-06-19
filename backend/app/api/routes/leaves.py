@@ -96,15 +96,70 @@ async def upload_leave_proof(
     if size > MAX_SIZE:
         raise HTTPException(status_code=400, detail="File size exceeds the 200MB limit.")
         
+    tenant_id = request.state.tenant.id
+    
+    # Check database for workspace-specific Cloudinary settings
+    from backend.app.core.database import get_db
+    from sqlalchemy import text
+    
+    with get_db() as db:
+        workspace = db.execute(
+            text("""
+                SELECT cloudinary_cloud_name, cloudinary_api_key, cloudinary_api_secret 
+                FROM workspaces 
+                WHERE workspace_id = :tenant_id 
+                LIMIT 1
+            """),
+            {"tenant_id": tenant_id}
+        ).mappings().first()
+        
+    cloud_name = workspace.get("cloudinary_cloud_name") if workspace else None
+    api_key = workspace.get("cloudinary_api_key") if workspace else None
+    api_secret = workspace.get("cloudinary_api_secret") if workspace else None
+    
+    # Fallback to global environment variables
+    if not (cloud_name and api_key and api_secret):
+        cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME")
+        api_key = os.getenv("CLOUDINARY_API_KEY")
+        api_secret = os.getenv("CLOUDINARY_API_SECRET")
+        
+    # If Cloudinary credentials are provided, upload to Cloudinary
+    if cloud_name and api_key and api_secret:
+        try:
+            import cloudinary
+            import cloudinary.uploader
+            cloudinary.config(
+                cloud_name=cloud_name,
+                api_key=api_key,
+                api_secret=api_secret,
+                secure=True
+            )
+            file.file.seek(0)
+            file_bytes = await file.read()
+            upload_result = cloudinary.uploader.upload(
+                file_bytes,
+                resource_type="auto",
+                folder=f"crm_tenant_{tenant_id}"
+            )
+            full_url = upload_result.get("secure_url")
+            return success_response(
+                data={"url": full_url, "filename": file.filename},
+                message="File uploaded to Cloudinary successfully",
+            )
+        except Exception as e:
+            # Fall back silently to local storage
+            pass
+
     os.makedirs("uploads", exist_ok=True)
     file_ext = os.path.splitext(file.filename)[1]
     unique_filename = f"{uuid.uuid4()}{file_ext}"
     file_path = os.path.join("uploads", unique_filename)
     
+    file.file.seek(0)
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
     return success_response(
         data={"url": f"/uploads/{unique_filename}", "filename": file.filename},
-        message="File uploaded successfully",
+        message="File uploaded locally successfully",
     )
