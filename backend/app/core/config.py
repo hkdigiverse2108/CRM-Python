@@ -54,6 +54,7 @@ class Settings(BaseSettings):
 
     # ── Meta OAuth Integration ───────────────────────────────────
     META_APP_ID: str = ""
+    META_CONFIG_ID: str = ""
     META_APP_SECRET: str = ""
     META_REDIRECT_URI: str = "http://localhost:8000/api/auth/meta/callback"
     META_GRAPH_API_VERSION: str = "v20.0"

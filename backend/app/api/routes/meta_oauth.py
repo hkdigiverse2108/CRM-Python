@@ -111,7 +111,7 @@ async def oauth_callback(
         lead_forms.extend(forms)
 
     # Step 5: Persist everything to database
-    scopes = ",".join(META_SCOPES)
+    scopes = await meta_service.fetch_granted_permissions(access_token)
 
     integration_id = meta_service.save_integration(
         workspace_id=tenant_id,
@@ -422,7 +422,7 @@ async def meta_callback(
         lead_forms.extend(forms)
 
     # Step 5: Save everything to database according to tenant_id and user_id
-    scopes = ",".join(META_SCOPES)
+    scopes = await meta_service.fetch_granted_permissions(access_token)
 
     integration_id = meta_service.save_integration(
         workspace_id=tenant_id,

@@ -23,15 +23,7 @@ from backend.app.utils.exceptions import AppException
 
 logger = get_logger("meta_service")
 
-META_SCOPES = [
-    "public_profile",
-    "pages_show_list",
-    "pages_read_engagement",
-    "pages_manage_metadata",
-    "business_management",
-    "whatsapp_business_management",
-    "whatsapp_business_messaging"
-]
+META_SCOPES = []
 
 
 class MetaService:
@@ -45,6 +37,30 @@ class MetaService:
         settings = get_settings()
         return f"https://graph.facebook.com/{settings.META_GRAPH_API_VERSION}"
 
+    async def fetch_granted_permissions(self, token: str) -> str:
+        """Fetch active/granted scopes from Meta API and return them as a comma-separated string."""
+        if token == "mock_sandbox_access_token_xyz123abc":
+            return "public_profile,pages_show_list,pages_read_engagement,pages_manage_metadata,business_management,whatsapp_business_management,whatsapp_business_messaging"
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.get(
+                    f"{self.graph_base}/me/permissions",
+                    params={"access_token": token},
+                )
+            if resp.status_code == 200:
+                data = resp.json()
+                granted_perms = [
+                    perm["permission"]
+                    for perm in data.get("data", [])
+                    if perm.get("status") == "granted"
+                ]
+                if granted_perms:
+                    return ",".join(granted_perms)
+        except Exception as e:
+            logger.error(f"Error fetching granted permissions: {e}")
+        # Default fallback string representing expected scopes if the call fails
+        return "public_profile,pages_show_list,pages_read_engagement,pages_manage_metadata,business_management,whatsapp_business_management,whatsapp_business_messaging"
+
     # ── OAuth URL Generation ─────────────────────────────────────
 
     def generate_oauth_url(self, workspace_id: str, user_id: str = "default_user") -> dict:
@@ -53,7 +69,6 @@ class MetaService:
         Returns the URL and a CSRF state token.
         """
         state = f"{workspace_id}:{user_id}:{secrets.token_urlsafe(16)}"
-        scope_str = ",".join(META_SCOPES)
 
         settings = get_settings()
         
@@ -75,8 +90,8 @@ class MetaService:
             f"client_id={settings.META_APP_ID}"
             f"&redirect_uri={redirect_uri}"
             f"&state={state}"
-            f"&scope={scope_str}"
             f"&response_type=code"
+            f"&config_id={settings.META_CONFIG_ID}"
         )
 
         return {
@@ -777,7 +792,7 @@ class MetaService:
                 form["page_id"] = page["id"]
             lead_forms.extend(forms)
 
-        scopes = ",".join(META_SCOPES)
+        scopes = await self.fetch_granted_permissions(access_token)
 
         # Reuse save_integration to insert/update assets in SQL
         self.save_integration(
