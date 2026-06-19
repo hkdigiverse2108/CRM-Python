@@ -19,19 +19,22 @@ export default function WhatsApp() {
   const [messages, setMessages] = useState([]);
   const messagesContainerRef = useRef(null);
 
-  // Auto scroll to bottom of chat thread when messages array or active chat changes
-  useEffect(() => {
+  const scrollToBottom = useCallback(() => {
     if (messagesContainerRef.current) {
       const container = messagesContainerRef.current;
-      // Scroll immediately
       container.scrollTop = container.scrollHeight;
-      // Scroll again after browser paint completes
-      const timeoutId = setTimeout(() => {
-        container.scrollTop = container.scrollHeight;
-      }, 80);
-      return () => clearTimeout(timeoutId);
+      // Fire multiple times to account for dynamic height calculations/rendering
+      setTimeout(() => { container.scrollTop = container.scrollHeight; }, 30);
+      setTimeout(() => { container.scrollTop = container.scrollHeight; }, 100);
+      setTimeout(() => { container.scrollTop = container.scrollHeight; }, 250);
     }
-  }, [messages, activeChatId]);
+  }, []);
+
+  // Auto scroll to bottom of chat thread when messages array or active chat changes
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, activeChatId, scrollToBottom]);
+
 
 
   const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
@@ -431,7 +434,7 @@ export default function WhatsApp() {
                   ) : (
                     <button 
                       onClick={handleReturnToBot}
-                      className="flex items-center gap-1 px-4 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-750 text-white transition-all font-bold text-xs shadow-sm"
+                      className="flex items-center gap-1 px-4 py-1.5 rounded-lg bg-[#00a884] hover:bg-[#008f70] text-white transition-all font-bold text-xs shadow-sm"
                     >
                       <span className="material-symbols-outlined text-[15px]">smart_toy</span>
                       <span>Return to Bot</span>

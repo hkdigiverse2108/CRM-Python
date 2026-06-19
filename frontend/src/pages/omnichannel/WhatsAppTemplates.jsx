@@ -12,6 +12,8 @@ export default function Templates() {
   const [templateName, setTemplateName] = useState('');
   const [category, setCategory] = useState('Marketing');
   const [headerFormat, setHeaderFormat] = useState('None');
+  const [headerText, setHeaderText] = useState('');
+  const [headerImageUrl, setHeaderImageUrl] = useState('');
   const [language, setLanguage] = useState('English (en)');
   const [bodyText, setBodyText] = useState('');
   const [footerText, setFooterText] = useState('');
@@ -46,7 +48,9 @@ export default function Templates() {
       language: 'EN',
       status: 'Approved',
       body: bodyText || '[Empty Body Text]',
-      vars: (bodyText.match(/\{\{\d\}\}/g) || []).length
+      vars: (bodyText.match(/\{\{\d\}\}/g) || []).length,
+      hasHeaderImage: headerFormat === 'Image',
+      headerText: headerFormat === 'Text' ? headerText : null
     };
 
     setTemplates([newT, ...templates]);
@@ -54,9 +58,22 @@ export default function Templates() {
     // Reset form
     setTemplateName('');
     setBodyText('');
+    setHeaderText('');
+    setHeaderImageUrl('');
+    setHeaderFormat('None');
     setFooterText('');
     setButtonText('');
     addToast('Template created and submitted to Meta!', 'success');
+  };
+
+  // Helper to format body text with variable placeholders for a realistic preview
+  const getPreviewBodyText = () => {
+    if (!bodyText) return '[Empty Body Text]';
+    return bodyText
+      .replace(/\{\{1\}\}/g, 'John')
+      .replace(/\{\{2\}\}/g, 'AIO Solutions')
+      .replace(/\{\{3\}\}/g, 'tomorrow')
+      .replace(/\{\{\d\}\}/g, '[Variable]');
   };
 
   return (
@@ -94,7 +111,7 @@ export default function Templates() {
               <div className="flex justify-between items-start">
                 <div>
                   <h3 className="font-bold text-sm text-slate-800 dark:text-white">{t.name}</h3>
-                  <span className="text-[10px] text-slate-450 font-bold uppercase tracking-wider block mt-0.5">
+                  <span className="text-[10px] text-slate-455 font-bold uppercase tracking-wider block mt-0.5">
                     {t.category} · {t.language}
                   </span>
                 </div>
@@ -111,10 +128,13 @@ export default function Templates() {
               {/* Template Body Frame Preview */}
               <div className="border border-slate-200 dark:border-slate-800/80 rounded-xl p-3 bg-slate-50/50 dark:bg-slate-900/40 text-xs font-medium text-slate-650 dark:text-slate-350 min-h-[90px] flex flex-col justify-between shadow-inner">
                 {t.hasHeaderImage && (
-                  <div className="mb-2 bg-slate-100 dark:bg-slate-800 rounded-lg p-3 text-center border border-dashed border-slate-300 dark:border-slate-700 text-slate-400 font-bold text-[10px] flex flex-col items-center justify-center">
+                  <div className="mb-2 bg-slate-100 dark:bg-slate-850 rounded-lg p-3 text-center border border-dashed border-slate-300 dark:border-slate-700 text-slate-400 font-bold text-[10px] flex flex-col items-center justify-center">
                     <span className="material-symbols-outlined text-base mb-1">image</span>
                     HEADER IMAGE
                   </div>
+                )}
+                {t.headerText && (
+                  <p className="font-bold text-slate-900 dark:text-white border-b border-slate-200/50 pb-1 mb-1.5">{t.headerText}</p>
                 )}
                 <p className="whitespace-pre-wrap leading-relaxed">{t.body}</p>
                 <div className="text-[9px] text-slate-400 border-t border-slate-200/50 dark:border-slate-800/50 pt-1.5 mt-2 flex items-center justify-between">
@@ -126,9 +146,9 @@ export default function Templates() {
             <div className="flex justify-between items-center pt-3 border-t border-slate-100 dark:border-slate-800/50 mt-4 text-[10px] text-slate-450 font-bold uppercase">
               <span>{t.vars} variables</span>
               <div className="flex items-center gap-2">
-                <button onClick={() => addToast(`Previewing ${t.name}`)} className="text-xs text-indigo-500 hover:underline font-bold">Copy ID</button>
+                <button onClick={() => addToast(`Copied ID for ${t.name}`)} className="text-xs text-emerald-600 hover:text-emerald-700 hover:underline font-bold">Copy ID</button>
                 <span className="text-slate-300">|</span>
-                <button onClick={() => setTemplates(templates.filter(x => x.id !== t.id))} className="text-xs text-red-500 hover:text-red-600 font-bold">Delete</button>
+                <button onClick={() => setTemplates(templates.filter(x => x.id !== t.id))} className="text-xs text-red-500 hover:text-red-650 font-bold">Delete</button>
               </div>
             </div>
           </div>
@@ -154,7 +174,7 @@ export default function Templates() {
               {/* Template Mode Tabs */}
               <div className="space-y-1">
                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-450 block">Template Mode:</label>
-                <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl w-max">
+                <div className="flex bg-slate-100 dark:bg-slate-805 p-1 rounded-xl w-max">
                   {['Meta Review Mode', 'Local Custom Mode'].map(mode => (
                     <button
                       key={mode}
@@ -162,7 +182,7 @@ export default function Templates() {
                       onClick={() => setTemplateMode(mode)}
                       className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
                         templateMode === mode 
-                          ? 'bg-emerald-600 text-white shadow' 
+                          ? 'bg-[#00a884] text-white shadow' 
                           : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'
                       }`}
                     >
@@ -226,6 +246,33 @@ export default function Templates() {
                   </select>
                 </div>
 
+                {headerFormat === 'Text' && (
+                  <div className="col-span-2">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-450 block mb-1">Header Text *</label>
+                    <input
+                      type="text"
+                      value={headerText}
+                      onChange={e => setHeaderText(e.target.value)}
+                      placeholder="e.g. Order Confirmation"
+                      className="input-field text-xs"
+                      required
+                    />
+                  </div>
+                )}
+
+                {headerFormat === 'Image' && (
+                  <div className="col-span-2">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-450 block mb-1">Header Image URL (Optional)</label>
+                    <input
+                      type="text"
+                      value={headerImageUrl}
+                      onChange={e => setHeaderImageUrl(e.target.value)}
+                      placeholder="e.g. https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500"
+                      className="input-field text-xs"
+                    />
+                  </div>
+                )}
+
                 <div className="col-span-2">
                   <label className="text-[10px] font-bold uppercase tracking-wider text-slate-450 block mb-1">Body Message Content *</label>
                   <textarea
@@ -273,7 +320,7 @@ export default function Templates() {
                 </button>
                 <button
                   type="submit"
-                  className="btn-primary bg-emerald-600 hover:bg-emerald-700 text-white w-full justify-center py-2 text-xs font-bold"
+                  className="btn-primary bg-[#00a884] hover:bg-[#008f70] text-white w-full justify-center py-2 text-xs font-bold border-none"
                 >
                   Submit to Meta
                 </button>
@@ -281,16 +328,16 @@ export default function Templates() {
             </form>
 
             {/* Right Column: Live Message Preview Mobile Phone */}
-            <div className="w-full lg:w-[380px] bg-slate-50 dark:bg-slate-950 p-6 flex flex-col items-center justify-center min-h-[400px]">
+            <div className="w-full lg:w-[380px] bg-slate-50 dark:bg-slate-950 p-6 flex flex-col items-center justify-center min-h-[400px] shrink-0">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-4 block">Live Message Preview</span>
               
               {/* Phone Mockup Frame */}
-              <div className="w-[260px] h-[460px] bg-slate-900 rounded-[36px] p-2.5 shadow-2xl border-4 border-slate-850 relative flex flex-col overflow-hidden">
+              <div className="w-[260px] h-[460px] bg-slate-900 rounded-[36px] p-2.5 shadow-2xl border-4 border-slate-800 relative flex flex-col overflow-hidden">
                 
                 {/* Phone Notch/Header */}
-                <div className="h-6 bg-slate-955 flex items-center justify-between px-4 text-white text-[9px] font-semibold shrink-0">
+                <div className="h-6 bg-slate-900 flex items-center justify-between px-4 text-white text-[9px] font-semibold shrink-0 relative z-20">
                   <span>9:41</span>
-                  <div className="w-16 h-3.5 bg-black rounded-full absolute left-1/2 -translate-x-1/2 top-1.5"></div>
+                  <div className="w-16 h-3.5 bg-black rounded-full absolute left-1/2 -translate-x-1/2 top-1"></div>
                   <div className="flex items-center gap-1">
                     <span className="material-symbols-outlined text-[10px]">signal_cellular_alt</span>
                     <span className="material-symbols-outlined text-[10px]">wifi</span>
@@ -299,12 +346,12 @@ export default function Templates() {
                 </div>
 
                 {/* WhatsApp Chat Room Header */}
-                <div className="bg-[#005c4b] text-white p-2.5 flex items-center gap-2 shrink-0">
-                  <div className="w-7 h-7 rounded-full bg-slate-200/20 flex items-center justify-center font-bold text-[10px]">
+                <div className="bg-[#005c4b] text-white p-2.5 flex items-center gap-2 shrink-0 z-10">
+                  <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center font-bold text-[10px]">
                     WA
                   </div>
-                  <div>
-                    <p className="font-bold text-[10px] truncate max-w-[120px]">{templateName || 'my_template_name'}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-[10px] truncate">{templateName || 'my_template_name'}</p>
                     <span className="text-[8px] text-white/80 block">Template Preview</span>
                   </div>
                 </div>
@@ -319,30 +366,40 @@ export default function Templates() {
                   }}
                 >
                   {/* Message Bubble Card */}
-                  <div className="bg-white rounded-lg rounded-tl-none p-2 shadow-sm text-[10px] max-w-[90%] relative space-y-1 text-slate-800">
+                  <div className="bg-white rounded-lg rounded-tl-none p-2.5 shadow-sm text-[10px] max-w-[90%] relative space-y-1.5 text-slate-800">
                     
                     {headerFormat === 'Image' && (
-                      <div className="bg-slate-100 dark:bg-slate-800 rounded-lg p-4 text-center border border-dashed border-slate-300 dark:border-slate-700 text-slate-400 font-bold text-[8px] flex flex-col items-center justify-center">
-                        <span className="material-symbols-outlined text-sm mb-0.5">image</span>
-                        HEADER IMAGE
+                      <div className="mb-2 max-w-full rounded overflow-hidden border border-slate-150 shadow-sm bg-slate-100 flex items-center justify-center min-h-[80px]">
+                        {headerImageUrl ? (
+                          <img className="w-full max-h-[110px] object-cover" src={headerImageUrl} alt="Header Preview" />
+                        ) : (
+                          <div className="p-3 text-center text-slate-400 font-bold text-[8px] flex flex-col items-center justify-center">
+                            <span className="material-symbols-outlined text-sm mb-0.5">image</span>
+                            HEADER IMAGE PREVIEW
+                          </div>
+                        )}
                       </div>
+                    )}
+
+                    {headerFormat === 'Text' && headerText && (
+                      <p className="font-extrabold text-[11px] text-slate-900 border-b border-slate-100 pb-1 mb-1">{headerText}</p>
                     )}
                     
                     <p className="whitespace-pre-wrap leading-relaxed pr-6 font-medium">
-                      {bodyText || '[Empty Body Text]'}
+                      {getPreviewBodyText()}
                     </p>
                     
                     {footerText && (
-                      <p className="text-[8px] text-slate-400">{footerText}</p>
+                      <p className="text-[8px] text-slate-400/90 italic font-medium">{footerText}</p>
                     )}
 
-                    <div className="text-right text-[7px] text-slate-400">
+                    <div className="text-right text-[7px] text-slate-400 select-none">
                       9:41 AM
                     </div>
 
                     {/* Button action */}
                     {buttonText && (
-                      <div className="border-t border-slate-100 pt-1.5 mt-1 text-center">
+                      <div className="border-t border-slate-100 pt-1.5 mt-1.5 text-center">
                         <button type="button" className="text-emerald-600 text-[8px] font-bold flex items-center justify-center gap-1 w-full hover:bg-slate-50 py-1 rounded">
                           <span className="material-symbols-outlined text-[10px]">open_in_new</span>
                           {buttonText}
