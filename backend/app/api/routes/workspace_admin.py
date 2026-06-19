@@ -984,3 +984,49 @@ async def update_workspace_settings(
     return success_response(message="Workspace settings updated successfully")
 
 
+class CloudinarySettingsPayload(BaseModel):
+    cloud_name: Optional[str] = Field(None, max_length=255)
+    api_key: Optional[str] = Field(None, max_length=255)
+    api_secret: Optional[str] = Field(None, max_length=255)
+
+@router.get("/cloudinary")
+async def get_cloudinary_settings(current_user: dict = Depends(get_current_user)):
+    workspace_id = current_user.get("tenant_id") or current_user.get("workspace_id")
+    with get_db() as db:
+        row = db.execute(text("""
+            SELECT cloudinary_cloud_name, cloudinary_api_key, cloudinary_api_secret 
+            FROM workspaces WHERE workspace_id = :ws_id
+        """), {"ws_id": workspace_id}).mappings().first()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail="Workspace not found.")
+            
+        return success_response(data={
+            "cloud_name": row["cloudinary_cloud_name"],
+            "api_key": row["cloudinary_api_key"],
+            "api_secret": row["cloudinary_api_secret"]
+        })
+
+@router.post("/cloudinary")
+async def update_cloudinary_settings(
+    payload: CloudinarySettingsPayload,
+    current_user: dict = Depends(require_workspace_admin)
+):
+    workspace_id = current_user.get("tenant_id") or current_user.get("workspace_id")
+    with get_db() as db:
+        db.execute(text("""
+            UPDATE workspaces 
+            SET cloudinary_cloud_name = :cloud_name, 
+                cloudinary_api_key = :api_key, 
+                cloudinary_api_secret = :api_secret
+            WHERE workspace_id = :ws_id
+        """), {
+            "cloud_name": payload.cloud_name,
+            "api_key": payload.api_key,
+            "api_secret": payload.api_secret,
+            "ws_id": workspace_id
+        })
+        db.commit()
+    return success_response(message="Cloudinary settings updated successfully.")
+
+

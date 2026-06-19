@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { getStatusColor } from '@/lib/utils';
@@ -632,11 +632,32 @@ const initialIntegrations = [
     values: {},
     customButtons: ['Test Email'],
     logs: []
+  },
+  {
+    id: 'cloudinary',
+    category: 'websites',
+    name: 'Cloudinary Storage',
+    description: 'Store and serve media files, documents, and chat attachments globally with Cloudinary.',
+    icon: Database,
+    color: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+    status: 'Not Connected',
+    webhookStatus: 'N/A',
+    createdAt: '2026-06-19',
+    updatedAt: '2026-06-19',
+    lastSync: 'Never',
+    fields: [
+      { key: 'cloudinaryCloudName', label: 'Cloud Name', type: 'text', placeholder: 'Enter Cloudinary Cloud Name' },
+      { key: 'cloudinaryApiKey', label: 'API Key', type: 'text', placeholder: 'Enter Cloudinary API Key' },
+      { key: 'cloudinaryApiSecret', label: 'API Secret', type: 'password', placeholder: 'Enter Cloudinary API Secret' }
+    ],
+    values: {},
+    customButtons: ['Connect Cloudinary'],
+    logs: []
   }
 ];
 
 export default function Integrations() {
-  const { addToast } = useApp();
+  const { addToast, token, tenantId } = useApp();
   const navigate = useNavigate();
   const [integrations, setIntegrations] = useState(initialIntegrations);
   const [activeConfig, setActiveConfig] = useState(null);
@@ -646,6 +667,44 @@ export default function Integrations() {
   const [showLogs, setShowLogs] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+
+  useEffect(() => {
+    const fetchCloudinary = async () => {
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'}/admin/cloudinary`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'X-Tenant-ID': tenantId || '96722'
+          }
+        });
+        if (res.ok) {
+          const result = await res.json();
+          if (result.success && result.data) {
+            setIntegrations(prev => prev.map(item => {
+              if (item.id === 'cloudinary') {
+                const hasCreds = !!(result.data.cloud_name && result.data.api_key && result.data.api_secret);
+                return {
+                  ...item,
+                  status: hasCreds ? 'Connected' : 'Not Connected',
+                  values: {
+                    cloudinaryCloudName: result.data.cloud_name || '',
+                    cloudinaryApiKey: result.data.api_key || '',
+                    cloudinaryApiSecret: result.data.api_secret ? '••••••••••••••••••••••••' : ''
+                  }
+                };
+              }
+              return item;
+            }));
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching Cloudinary settings:', err);
+      }
+    };
+    if (token) {
+      fetchCloudinary();
+    }
+  }, [token, tenantId]);
 
   const categories = [
     { id: 'all', label: 'All Platforms' },
@@ -680,8 +739,36 @@ export default function Integrations() {
     addToast(`Copied ${label} to clipboard!`);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+    if (activeConfig.id === 'cloudinary') {
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'}/admin/cloudinary`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'X-Tenant-ID': tenantId || '96722'
+          },
+          body: JSON.stringify({
+            cloud_name: formValues.cloudinaryCloudName || null,
+            api_key: formValues.cloudinaryApiKey || null,
+            api_secret: formValues.cloudinaryApiSecret && !formValues.cloudinaryApiSecret.includes('•') ? formValues.cloudinaryApiSecret : null
+          })
+        });
+        
+        if (!res.ok) {
+          addToast('Failed to save Cloudinary settings to server', 'error');
+          return;
+        }
+      } catch (err) {
+        console.error(err);
+        addToast('Network error saving Cloudinary settings', 'error');
+        return;
+      }
+    }
+
     setIntegrations(prev => prev.map(item => {
       if (item.id === activeConfig.id) {
         return {
