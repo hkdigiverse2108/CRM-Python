@@ -39,6 +39,19 @@ export default function WhatsApp() {
   const { addToast, token, tenantId } = useApp();
   const navigate = useNavigate();
 
+  const formatTime = (timeStr) => {
+    if (!timeStr) return '';
+    // Keep standard formatted strings as is (for optimistic local rendering)
+    if (timeStr.includes(' AM') || timeStr.includes(' PM')) return timeStr;
+    try {
+      const date = new Date(timeStr);
+      if (isNaN(date.getTime())) return timeStr;
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+      return timeStr;
+    }
+  };
+
   const [message, setMessage] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -451,7 +464,7 @@ export default function WhatsApp() {
                             </span>
                           )}
                         </div>
-                        <span className="text-slate-400 font-medium text-[10px] shrink-0">{chat.time}</span>
+                        <span className="text-slate-400 font-medium text-[10px] shrink-0">{formatTime(chat.time)}</span>
                       </div>
                       
                       <div className="flex items-center gap-1 text-slate-400 dark:text-slate-500 text-[11px] truncate">
@@ -620,9 +633,9 @@ export default function WhatsApp() {
                               </a>
                             </div>
                           )}
-                          <p className="pr-10 whitespace-pre-wrap">{msg.text}</p>
+                          <p className="pr-10 pb-1.5 whitespace-pre-wrap">{msg.text}</p>
                           <div className="absolute bottom-1 right-2 text-[9px] text-slate-400 select-none">
-                            {msg.time}
+                            {formatTime(msg.time)}
                           </div>
                         </div>
                       </div>
@@ -674,7 +687,7 @@ export default function WhatsApp() {
                             </a>
                           </div>
                         )}
-                        <p className="pr-12 whitespace-pre-wrap">{msg.text}</p>
+                        <p className="pr-12 pb-1.5 whitespace-pre-wrap">{msg.text}</p>
                         
                         {msg.isLockerMenu && (
                           <div className="mt-3 flex flex-wrap gap-1.5 pb-1">
@@ -683,8 +696,8 @@ export default function WhatsApp() {
                           </div>
                         )}
 
-                        <div className="absolute bottom-1 right-2 flex items-center gap-1 text-[9px] text-slate-450 select-none">
-                          <span>{msg.time}</span>
+                        <div className="absolute bottom-1 right-2 flex items-center gap-1 text-[9px] text-slate-455 select-none">
+                          <span>{formatTime(msg.time)}</span>
                           <span className="material-symbols-outlined text-[12px] text-sky-555 font-bold">done_all</span>
                         </div>
                       </div>

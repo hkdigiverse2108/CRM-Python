@@ -326,7 +326,7 @@ async def get_conversations(
                 "email": r[3] or "",
                 "score": r[4] or 50,
                 "lastMessage": r[5],
-                "time": r[6].strftime("%I:%M %p") if r[6] else "",
+                "time": r[6].isoformat() + "Z" if r[6] else "",
                 "unread": unread_count,
                 "avatar": f"https://api.dicebear.com/7.x/adventurer/svg?seed={r[1]}",
                 "botHandled": bot_handled,
@@ -372,7 +372,7 @@ async def get_messages(
             messages.append({
                 "sender": sender_type,
                 "text": r[1],
-                "time": r[2].strftime("%I:%M %p") if r[2] else "",
+                "time": r[2].isoformat() + "Z" if r[2] else "",
                 "status": r[3],
                 "image": r[5] if r[4] == 'image' else None,
                 "file": r[5] if r[4] == 'document' else None
