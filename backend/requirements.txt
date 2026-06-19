@@ -32,3 +32,6 @@ pytest-asyncio==1.0.0
 
 # Logging
 structlog==25.3.0
+
+# Third-party Integrations
+cloudinary==1.41.0
