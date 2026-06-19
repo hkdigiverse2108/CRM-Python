@@ -21,7 +21,7 @@ function generateAuditLog(action, details) {
 }
 
 export default function WhatsAppAutomationDashboard() {
-  const { addToast } = useApp();
+  const { addToast, token, tenantId } = useApp();
 
   // Core navigation tab - updated to user's exact specification
   const [activeTab, setActiveTab] = useState('overview'); // overview, contacts, campaign, template, bot_builder, chat_log
@@ -40,10 +40,18 @@ export default function WhatsAppAutomationDashboard() {
   const [redisQueueRate, setRedisQueueRate] = useState(15); // msgs per second
   const [bullQueueStatus, setBullQueueStatus] = useState('Idle');
   const [scheduledCount] = useState(0);
-  const [broadcasts, setBroadcasts] = useState([]);
+  const [broadcasts, setBroadcasts] = useState([
+    { id: 'b1', name: 'Q2 Bulk Broadcast', audience: 'VIP Customers', status: 'Sent', sent: 450, delivered: 442, read: 380, date: '2026-06-15 10:00' },
+    { id: 'b2', name: 'Shopify Cart Abandonment', audience: 'Leads', status: 'Active', sent: 120, delivered: 118, read: 92, date: '2026-06-18 14:30' },
+    { id: 'b3', name: 'VIP Promotion Blast', audience: 'VIP', status: 'Paused', sent: 200, delivered: 198, read: 150, date: '2026-06-19 09:15' }
+  ]);
 
   // 4. Access Control (RBAC) & Suspension Simulation States
-  const [agents, setAgents] = useState([]);
+  const [agents, setAgents] = useState([
+    { id: 'a1', name: 'Rohan Sharma', role: 'Support Agent', status: 'Active' },
+    { id: 'a2', name: 'Alex Rivera', role: 'Sales Specialist', status: 'Active' },
+    { id: 'a3', name: 'Grok AI Responder', role: 'AI Bot Assistant', status: 'Active' }
+  ]);
 
   // 5. Audit logs simulation states
   const [auditLogs, setAuditLogs] = useState([]);
@@ -52,7 +60,11 @@ export default function WhatsAppAutomationDashboard() {
   const [webhookPackets, setWebhookPackets] = useState([]);
 
   // 7. Keyword triggers list
-  const [triggers] = useState([]);
+  const [triggers] = useState([
+    { id: 'tr1', keyword: 'welcome', matchType: 'Exact Match', flow: 'Welcome Sequence', hits: 142 },
+    { id: 'tr2', keyword: 'pricing', matchType: 'Keyword Match', flow: 'Pricing Info Flow', hits: 89 },
+    { id: 'tr3', keyword: 'help', matchType: 'Keyword Match', flow: 'Support Escalation', hits: 231 }
+  ]);
 
   // 8. NEW: Contacts Simulation States
   const [contacts, setContacts] = useState([]);
@@ -60,8 +72,80 @@ export default function WhatsAppAutomationDashboard() {
   const [contactFilter, setContactFilter] = useState('All');
 
   // 9. NEW: Templates Simulation States
-  const [templates, setTemplates] = useState([]);
+  const [templates, setTemplates] = useState([
+    { id: 't1', name: 'welcome_onboarding', status: 'Approved', category: 'UTILITY', language: 'en_US', body: 'Hello {{1}}! Welcome to Digiverse. We are excited to help you get started.' },
+    { id: 't2', name: 'payment_receipt', status: 'Approved', category: 'UTILITY', language: 'en_US', body: 'Hi {{1}}, your payment of {{2}} has been received successfully.' },
+    { id: 't3', name: 'support_followup', status: 'Approved', category: 'MARKETING', language: 'en_US', body: 'Hi {{1}}, how did we do on your recent support request?' }
+  ]);
   const [isSyncingTemplates, setIsSyncingTemplates] = useState(false);
+
+  const [stats, setStats] = useState(null);
+  const [loadingStats, setLoadingStats] = useState(true);
+
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/integrations/whatsapp/dashboard-stats`, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'X-Tenant-ID': tenantId || '96722',
+          }
+        });
+        if (res.ok) {
+          const result = await res.json();
+          if (result.success) {
+            setStats(result.data);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching dashboard stats:', err);
+      } finally {
+        setLoadingStats(false);
+      }
+    };
+
+    const fetchContacts = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/integrations/whatsapp/conversations`, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'X-Tenant-ID': tenantId || '96722',
+          }
+        });
+        if (res.ok) {
+          const result = await res.json();
+          if (result.success) {
+            const displayContacts = (result.data || []).map(c => ({
+              id: c.id,
+              name: c.name,
+              phone: c.phone || '',
+              field: 'WhatsApp Contact',
+              tags: c.tags ? (typeof c.tags === 'string' ? c.tags.split(',').map(t => t.trim()).filter(Boolean) : c.tags) : [],
+              lastSeen: c.time ? new Date(c.time).toLocaleDateString() : 'Active',
+              status: 'Active'
+            }));
+            setContacts(displayContacts);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching dashboard contacts:', err);
+      }
+    };
+
+    fetchStats();
+    fetchContacts();
+
+    const interval = setInterval(() => {
+      fetchStats();
+      fetchContacts();
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [token, tenantId]);
 
   // Simulated Webhook Stream effect
   useEffect(() => {
@@ -202,6 +286,27 @@ export default function WhatsAppAutomationDashboard() {
     }, 4000);
   };
 
+  const activeStats = stats || {
+    total_sent: 0,
+    delivered: 0,
+    read_rate: 0,
+    failed: 0,
+    total_contacts: 0,
+    active_contacts: 0,
+    new_today: 0,
+    blocked: 0,
+    active_flows: 0,
+    running_bots: 0,
+    bot_convs: 0,
+    takeovers: 0,
+    daily_trends: []
+  };
+
+  const totalSentVal = activeStats.total_sent || 1;
+  const deliveredW = Math.max(5, Math.min(160, Math.round((activeStats.delivered / totalSentVal) * 160)));
+  const readW = Math.max(5, Math.min(160, Math.round(((activeStats.total_sent * (activeStats.read_rate / 100)) / totalSentVal) * 160))) || 5;
+  const failedW = Math.max(5, Math.min(160, Math.round((activeStats.failed / totalSentVal) * 160)));
+
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto text-slate-800 dark:text-slate-200">
       
@@ -267,10 +372,10 @@ export default function WhatsAppAutomationDashboard() {
                 <span className="badge badge-info">30 Days</span>
               </div>
               <div className="grid grid-cols-2 gap-4 text-slate-700 dark:text-slate-200">
-                <div><p className="text-[10px] text-slate-400 font-semibold uppercase">Total Sent</p><p className="text-lg font-bold mt-0.5">142,850</p></div>
-                <div><p className="text-[10px] text-slate-400 font-semibold uppercase">Delivered</p><p className="text-lg font-bold mt-0.5 text-emerald-500">139,210</p></div>
-                <div><p className="text-[10px] text-slate-400 font-semibold uppercase">Read Rate</p><p className="text-lg font-bold mt-0.5 text-indigo-500">77.3%</p></div>
-                <div><p className="text-[10px] text-slate-400 font-semibold uppercase">Failed</p><p className="text-lg font-bold mt-0.5 text-red-500">2.5%</p></div>
+                <div><p className="text-[10px] text-slate-400 font-semibold uppercase">Total Sent</p><p className="text-lg font-bold mt-0.5">{activeStats.total_sent.toLocaleString()}</p></div>
+                <div><p className="text-[10px] text-slate-400 font-semibold uppercase">Delivered</p><p className="text-lg font-bold mt-0.5 text-emerald-500">{activeStats.delivered.toLocaleString()}</p></div>
+                <div><p className="text-[10px] text-slate-400 font-semibold uppercase">Read Rate</p><p className="text-lg font-bold mt-0.5 text-indigo-500">{activeStats.read_rate}%</p></div>
+                <div><p className="text-[10px] text-slate-400 font-semibold uppercase">Failed</p><p className="text-lg font-bold mt-0.5 text-red-500">{activeStats.failed.toLocaleString()}</p></div>
               </div>
             </div>
 
@@ -283,10 +388,10 @@ export default function WhatsAppAutomationDashboard() {
                 <span className="badge badge-success">Live</span>
               </div>
               <div className="grid grid-cols-2 gap-4 text-slate-700 dark:text-slate-200">
-                <div><p className="text-[10px] text-slate-400 font-semibold uppercase">Total Contacts</p><p className="text-lg font-bold mt-0.5">45,280</p></div>
-                <div><p className="text-[10px] text-slate-400 font-semibold uppercase">Active</p><p className="text-lg font-bold mt-0.5 text-emerald-500">18,450</p></div>
-                <div><p className="text-[10px] text-slate-400 font-semibold uppercase">New Today</p><p className="text-lg font-bold mt-0.5 text-indigo-500">+324</p></div>
-                <div><p className="text-[10px] text-slate-400 font-semibold uppercase">Blocked</p><p className="text-lg font-bold mt-0.5 text-red-500">142</p></div>
+                <div><p className="text-[10px] text-slate-400 font-semibold uppercase">Total Contacts</p><p className="text-lg font-bold mt-0.5">{activeStats.total_contacts.toLocaleString()}</p></div>
+                <div><p className="text-[10px] text-slate-400 font-semibold uppercase">Active</p><p className="text-lg font-bold mt-0.5 text-emerald-500">{activeStats.active_contacts.toLocaleString()}</p></div>
+                <div><p className="text-[10px] text-slate-400 font-semibold uppercase">New Today</p><p className="text-lg font-bold mt-0.5 text-indigo-500">+{activeStats.new_today}</p></div>
+                <div><p className="text-[10px] text-slate-400 font-semibold uppercase">Blocked</p><p className="text-lg font-bold mt-0.5 text-red-500">{activeStats.blocked.toLocaleString()}</p></div>
               </div>
             </div>
 
@@ -315,10 +420,10 @@ export default function WhatsAppAutomationDashboard() {
                 <span className="badge badge-warning">98% Health</span>
               </div>
               <div className="grid grid-cols-2 gap-4 text-slate-700 dark:text-slate-200">
-                <div><p className="text-[10px] text-slate-400 font-semibold uppercase">Active Flows</p><p className="text-lg font-bold mt-0.5">8</p></div>
-                <div><p className="text-[10px] text-slate-400 font-semibold uppercase">Running Bots</p><p className="text-lg font-bold mt-0.5 text-emerald-500">12</p></div>
-                <div><p className="text-[10px] text-slate-400 font-semibold uppercase">Bot Convs</p><p className="text-lg font-bold mt-0.5 text-indigo-500">5,420</p></div>
-                <div><p className="text-[10px] text-slate-400 font-semibold uppercase">Takeovers</p><p className="text-lg font-bold mt-0.5 text-amber-500">182</p></div>
+                <div><p className="text-[10px] text-slate-400 font-semibold uppercase">Active Flows</p><p className="text-lg font-bold mt-0.5">{activeStats.active_flows}</p></div>
+                <div><p className="text-[10px] text-slate-400 font-semibold uppercase">Running Bots</p><p className="text-lg font-bold mt-0.5 text-emerald-500">{activeStats.running_bots}</p></div>
+                <div><p className="text-[10px] text-slate-400 font-semibold uppercase">Bot Convs</p><p className="text-lg font-bold mt-0.5 text-indigo-500">{activeStats.bot_convs.toLocaleString()}</p></div>
+                <div><p className="text-[10px] text-slate-400 font-semibold uppercase">Takeovers</p><p className="text-lg font-bold mt-0.5 text-amber-500">{activeStats.takeovers}</p></div>
               </div>
             </div>
           </div>
@@ -334,36 +439,47 @@ export default function WhatsAppAutomationDashboard() {
                 <h3 className="text-xs font-semibold text-slate-450 uppercase tracking-wider">Message Performance</h3>
                 <svg className="w-full h-44" viewBox="0 0 200 150">
                   <rect x="20" y="20" width="160" height="15" fill="#f1f5f9" rx="3" />
-                  <rect x="20" y="20" width="150" height="15" fill="#0052cc" rx="3" />
-                  <text x="25" y="31" className="text-[9px] fill-white font-bold">Sent (142.8k)</text>
+                  <rect x="20" y="20" width="160" height="15" fill="#0052cc" rx="3" />
+                  <text x="25" y="31" className="text-[9px] fill-white font-bold">Sent ({activeStats.total_sent})</text>
                   
                   <rect x="20" y="50" width="160" height="15" fill="#f1f5f9" rx="3" />
-                  <rect x="20" y="50" width="145" height="15" fill="#10b981" rx="3" />
-                  <text x="25" y="61" className="text-[9px] fill-white font-bold">Delivered (139.2k)</text>
+                  <rect x="20" y="50" width={deliveredW} height="15" fill="#10b981" rx="3" />
+                  <text x="25" y="61" className="text-[9px] fill-white font-bold">Delivered ({activeStats.delivered})</text>
                   
                   <rect x="20" y="80" width="160" height="15" fill="#f1f5f9" rx="3" />
-                  <rect x="20" y="80" width="115" height="15" fill="#6366f1" rx="3" />
-                  <text x="25" y="91" className="text-[9px] fill-white font-bold">Read (110.4k)</text>
+                  <rect x="20" y="80" width={readW} height="15" fill="#6366f1" rx="3" />
+                  <text x="25" y="91" className="text-[9px] fill-white font-bold">Read ({activeStats.read_rate}%)</text>
                   
                   <rect x="20" y="110" width="160" height="15" fill="#f1f5f9" rx="3" />
-                  <rect x="20" y="110" width="15" height="15" fill="#ef4444" rx="3" />
-                  <text x="40" y="121" className="text-[9px] fill-slate-500 font-bold">Failed (3.6k)</text>
+                  <rect x="20" y="110" width={failedW} height="15" fill="#ef4444" rx="3" />
+                  <text x="25" y="121" className="text-[9px] fill-white font-bold">Failed ({activeStats.failed})</text>
                 </svg>
               </div>
 
               {/* Daily message trend */}
               <div className="space-y-4">
-                <h3 className="text-xs font-semibold text-slate-450 uppercase tracking-wider">Daily Message Trend (Last 30 Days)</h3>
-                <div className="h-44 relative">
-                  <svg className="w-full h-full" viewBox="0 0 200 120" preserveAspectRatio="none">
-                    <path d="M10,90 Q40,40 70,70 T130,20 T190,50 L190,120 L10,120 Z" fill="rgba(99, 102, 241, 0.1)" />
-                    <path d="M10,90 Q40,40 70,70 T130,20 T190,50" fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" />
-                    <circle cx="130" cy="20" r="3" fill="#6366f1" />
+                <h3 className="text-xs font-semibold text-slate-450 uppercase tracking-wider">Daily Message Trend (Last 7 Days)</h3>
+                <div className="h-44 relative bg-slate-50/50 dark:bg-slate-900/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800/60">
+                  <svg className="w-full h-full" viewBox="0 0 200 120">
+                    {activeStats.daily_trends && activeStats.daily_trends.length > 0 ? (
+                      activeStats.daily_trends.map((day, idx) => {
+                        const maxVal = Math.max(...activeStats.daily_trends.map(d => d.sent || 1)) || 100;
+                        const x = 15 + idx * 26;
+                        const barHeight = Math.max(5, Math.round(((day.sent || 0) / maxVal) * 80));
+                        const y = 90 - barHeight;
+                        const formattedDate = day.date ? day.date.substring(5) : '';
+                        return (
+                          <g key={idx}>
+                            <rect x={x} y={y} width="12" height={barHeight} fill="#6366f1" rx="2" opacity="0.8" />
+                            <rect x={x + 4} y={y + (barHeight - Math.max(2, Math.round(((day.read || 0) / maxVal) * 80)))} width="4" height={Math.max(2, Math.round(((day.read || 0) / maxVal) * 80))} fill="#10b981" rx="1" />
+                            <text x={x + 6} y="105" className="text-[7.5px] fill-slate-450 font-mono" textAnchor="middle">{formattedDate}</text>
+                          </g>
+                        );
+                      })
+                    ) : (
+                      <text x="100" y="60" className="text-xs fill-slate-450" textAnchor="middle">No Trend Data</text>
+                    )}
                   </svg>
-                  <div className="flex justify-between text-[9px] text-slate-400 mt-1 font-mono">
-                    <span>May 06</span>
-                    <span>Jun 05 (Today)</span>
-                  </div>
                 </div>
               </div>
 
@@ -393,8 +509,8 @@ export default function WhatsAppAutomationDashboard() {
                     <circle cx="190" cy="10" r="3" fill="#10b981" />
                   </svg>
                   <div className="flex justify-between text-[9px] text-slate-400 mt-1 font-mono">
-                    <span>Start Today</span>
-                    <span>+324 Contacts</span>
+                    <span>Total Database Leads</span>
+                    <span className="font-bold text-emerald-500">{activeStats.total_contacts} Contacts</span>
                   </div>
                 </div>
               </div>

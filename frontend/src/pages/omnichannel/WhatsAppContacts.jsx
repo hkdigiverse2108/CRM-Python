@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { Search, Phone, Mail, Building2, Plus, X, Edit, Trash2, Tag, Zap, MessageSquare, Users } from 'lucide-react';
 import PageHeader from '@/components/ui/PageHeader';
 
 export default function Contacts() {
-  const { contacts, addContact, updateContact, deleteContact, addToast } = useApp();
+  const { addContact, updateContact, deleteContact, addToast, token, tenantId } = useApp();
   const [search, setSearch] = useState('');
   const [showAddContact, setShowAddContact] = useState(false);
   const [showEditContact, setShowEditContact] = useState(false);
@@ -15,6 +15,36 @@ export default function Contacts() {
   const [selectedSourceFilter, setSelectedSourceFilter] = useState('All Sources');
   const [selectedSegmentFilter, setSelectedSegmentFilter] = useState('All Segments');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('All Statuses');
+
+  const [dbContacts, setDbContacts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+
+  useEffect(() => {
+    const fetchWAContacts = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/integrations/whatsapp/conversations`, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'X-Tenant-ID': tenantId || '96722',
+          }
+        });
+        if (res.ok) {
+          const result = await res.json();
+          if (result.success) {
+            setDbContacts(result.data || []);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching WhatsApp contacts:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchWAContacts();
+  }, [token, tenantId]);
 
   const [newContact, setNewContact] = useState({
     name: '',
@@ -120,19 +150,17 @@ export default function Contacts() {
     }
   };
 
-  // Setup sample elements if contact list is empty, with same details as screenshot
-  const displayContacts = contacts.length > 0 ? contacts.map(c => ({
-    ...c,
-    engagement: c.engagement || 50,
-    source: c.source || 'Direct',
-    status: c.status || 'Active',
-    tags: Array.isArray(c.tags) ? c.tags : ['call_followup']
-  })) : [
-    { id: 'CFA939', name: 'Contact from Phone Call', avatar: 'CO', phone: '7862017545', email: '-', engagement: 38, source: 'Direct', tags: ['call_followup'], status: 'Active' },
-    { id: '4ECFFD', name: 'Harikrushn', avatar: 'HA', phone: '918780564463', email: '-', engagement: 88, source: 'Direct', tags: [], status: 'Active' },
-    { id: '8061D9', name: 'Amit Suvagia', avatar: 'AM', phone: '919978838133', email: '-', engagement: 70, source: 'Direct', tags: [], status: 'Active' },
-    { id: '57921F', name: 'Rishi Ginoya', avatar: 'RI', phone: '919624954426', email: '-', engagement: 88, source: 'Direct', tags: [], status: 'Active' },
-  ];
+  const displayContacts = dbContacts.map(c => ({
+    id: c.id,
+    name: c.name,
+    avatar: c.name.split(' ').map(n => n.charAt(0)).join('').toUpperCase().slice(0, 2),
+    phone: c.phone || '',
+    email: c.email || '-',
+    engagement: c.score || 50,
+    source: 'WhatsApp',
+    tags: c.tags ? (typeof c.tags === 'string' ? c.tags.split(',').map(t => t.trim()).filter(Boolean) : c.tags) : [],
+    status: 'Active'
+  }));
 
   const filtered = displayContacts.filter(c => {
     const matchesSearch = (c.name || '').toLowerCase().includes(search.toLowerCase()) ||

@@ -520,4 +520,44 @@ async def run_chatbot_flow_engine(tenant_id: str, phone: str, text_body: str, db
                 "now": now
             }
         )
+
+    # 6. Real-time mapping of gathered flow variables to CRM lead columns
+    try:
+        email_val = variables.get("user_email") or variables.get("email")
+        company_val = variables.get("company") or variables.get("company_name")
+        name_val = variables.get("name") or variables.get("full_name")
+        notes_val = variables.get("project_desc") or variables.get("notes") or variables.get("requirements")
+        
+        update_parts = []
+        params = {"lead_id": lead_id, "workspace_id": tenant_id}
+        
+        if email_val:
+            update_parts.append("email = :email")
+            params["email"] = email_val
+        if company_val:
+            update_parts.append("company_name = :company")
+            params["company"] = company_val
+        if name_val and name_val != lead_name:
+            update_parts.append("full_name = :name")
+            params["name"] = name_val
+            
+        if update_parts:
+            update_parts.append("updated_at = NOW()")
+            sql_update_lead = f"UPDATE leads SET {', '.join(update_parts)} WHERE lead_id = :lead_id AND workspace_id = :workspace_id"
+            db.execute(text(sql_update_lead), params)
+            
+        if notes_val:
+            # Check if this note was already added to prevent duplicate notes
+            note_exists = db.execute(
+                text("SELECT id FROM lead_notes WHERE lead_id = :lead_id AND note = :note LIMIT 1"),
+                {"lead_id": lead_id, "note": notes_val}
+            ).scalar()
+            if not note_exists:
+                db.execute(
+                    text("INSERT INTO lead_notes (id, workspace_id, lead_id, note) VALUES (:id, :workspace_id, :lead_id, :note)"),
+                    {"id": uuid_uuid4(), "workspace_id": tenant_id, "lead_id": lead_id, "note": notes_val}
+                )
+    except Exception as update_err:
+        logger.error(f"Failed to auto-update lead columns from chatbot variables: {update_err}")
+
     db.commit()
