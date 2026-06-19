@@ -53,6 +53,7 @@ export default function WhatsApp() {
   };
 
   const [message, setMessage] = useState('');
+  const [pendingAttachment, setPendingAttachment] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('All'); // All, Unread, Bots, AI, Waiting
@@ -173,28 +174,50 @@ export default function WhatsApp() {
   };
 
   const handleSend = async () => {
-    if (!message.trim() || !activeChatId) return;
+    if (!message.trim() && !pendingAttachment) return;
+    if (!activeChatId) return;
+
+    let sendBody = { message: message.trim() };
+    if (pendingAttachment) {
+      if (pendingAttachment.isImage) {
+        sendBody.imageUrl = pendingAttachment.url;
+      } else {
+        sendBody.fileUrl = pendingAttachment.url;
+      }
+    }
 
     // Optimistically prepend local chat preview
     const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const newMsg = { sender: 'agent', text: message, time: timeNow };
-    setMessages(prev => [...prev, newMsg]);
+    const localMsg = { 
+      sender: 'agent', 
+      text: message.trim() || (pendingAttachment.isImage ? '[Image]' : '[File]'), 
+      time: timeNow 
+    };
+    if (pendingAttachment) {
+      if (pendingAttachment.isImage) localMsg.image = pendingAttachment.url;
+      else localMsg.file = pendingAttachment.url;
+    }
+    setMessages(prev => [...prev, localMsg]);
 
-    const bodyText = message;
     setMessage('');
+    const prevPending = pendingAttachment;
+    setPendingAttachment(null);
 
     try {
       const res = await fetch(`${API_BASE}/integrations/whatsapp/conversations/${activeChatId}/send`, {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify({ message: bodyText })
+        body: JSON.stringify(sendBody)
       });
       if (res.ok) {
         fetchMessages(activeChatId);
       } else {
+        // Restore attachment on failure so the user doesn't lose it
+        setPendingAttachment(prevPending);
         addToast('Failed to send message', 'error');
       }
     } catch {
+      setPendingAttachment(prevPending);
       addToast('Network error sending message', 'error');
     }
   };
@@ -223,22 +246,12 @@ export default function WhatsApp() {
         if (result.success && result.data?.url) {
           const url = result.data.url;
           const isImage = file.type.startsWith('image/');
-          
-          // Send immediately
-          const sendBody = isImage ? { imageUrl: url } : { fileUrl: url };
-          
-          const sendRes = await fetch(`${API_BASE}/integrations/whatsapp/conversations/${activeChatId}/send`, {
-            method: 'POST',
-            headers: getHeaders(),
-            body: JSON.stringify(sendBody)
+          setPendingAttachment({
+            url,
+            name: file.name,
+            isImage
           });
-          
-          if (sendRes.ok) {
-            addToast('Attachment sent successfully', 'success');
-            fetchMessages(activeChatId);
-          } else {
-            addToast('Failed to send attachment link', 'error');
-          }
+          addToast('Attachment ready to send. Press enter or click send.', 'success');
         } else {
           addToast('Upload failed', 'error');
         }
@@ -731,6 +744,27 @@ export default function WhatsApp() {
                     <span className="material-symbols-outlined text-[14px]">note_add</span> Templates
                   </button>
                 </div>
+                {pendingAttachment && (
+                  <div className="mb-2.5 p-2.5 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 rounded-xl flex items-center justify-between text-xs transition-all">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="material-symbols-outlined text-emerald-600 shrink-0">
+                        {pendingAttachment.isImage ? 'image' : 'description'}
+                      </span>
+                      <span className="font-semibold text-slate-700 dark:text-slate-200 truncate max-w-[220px]">
+                        {pendingAttachment.name}
+                      </span>
+                      <span className="text-[9px] text-emerald-700 dark:text-emerald-400 bg-emerald-100/50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0">
+                        Ready to send
+                      </span>
+                    </div>
+                    <button 
+                      onClick={() => setPendingAttachment(null)}
+                      className="text-slate-400 hover:text-rose-600 p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0"
+                    >
+                      <span className="material-symbols-outlined text-[16px] block">close</span>
+                    </button>
+                  </div>
+                )}
                 <div className="flex items-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 gap-2 shadow-inner relative">
                   <div ref={emojiPickerRef}>
                     <button 
