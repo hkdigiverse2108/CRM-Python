@@ -57,6 +57,29 @@ async def get_whatsapp_media_url(media_id: str, tenant_id: str, db) -> str:
                 
             file_bytes = media_resp.content
             
+            # Determine extension & resource type
+            ext = ".bin"
+            if "image/jpeg" in mime_type:
+                ext = ".jpg"
+            elif "image/png" in mime_type:
+                ext = ".png"
+            elif "application/pdf" in mime_type:
+                ext = ".pdf"
+            elif "image/" in mime_type:
+                ext = "." + mime_type.split("/")[-1]
+            elif "video/" in mime_type:
+                ext = "." + mime_type.split("/")[-1]
+            elif "audio/" in mime_type:
+                ext = "." + mime_type.split("/")[-1]
+                
+            res_type = "auto"
+            if "image" in mime_type:
+                res_type = "image"
+            elif "video" in mime_type:
+                res_type = "video"
+            else:
+                res_type = "raw"
+            
             # 3. Check Cloudinary settings
             workspace = db.execute(
                 text("""
@@ -88,25 +111,22 @@ async def get_whatsapp_media_url(media_id: str, tenant_id: str, db) -> str:
                     api_secret=api_secret,
                     secure=True
                 )
+                
+                upload_params = {
+                    "resource_type": res_type,
+                    "folder": f"crm_tenant_{tenant_id}"
+                }
+                if res_type == "raw":
+                    upload_params["public_id"] = f"wa_recv_{media_id}{ext}"
+                    
                 upload_result = cloudinary.uploader.upload(
                     file_bytes,
-                    resource_type="auto",
-                    folder=f"crm_tenant_{tenant_id}"
+                    **upload_params
                 )
                 return upload_result.get("secure_url")
                 
             # 5. Local Fallback
             os.makedirs("uploads", exist_ok=True)
-            ext = ".bin"
-            if "image/jpeg" in mime_type:
-                ext = ".jpg"
-            elif "image/png" in mime_type:
-                ext = ".png"
-            elif "application/pdf" in mime_type:
-                ext = ".pdf"
-            elif "image/" in mime_type:
-                ext = "." + mime_type.split("/")[-1]
-                
             unique_filename = f"wa_recv_{media_id}{ext}"
             file_path = os.path.join("uploads", unique_filename)
             with open(file_path, "wb") as buffer:

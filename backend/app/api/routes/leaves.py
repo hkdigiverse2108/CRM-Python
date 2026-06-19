@@ -136,10 +136,31 @@ async def upload_leave_proof(
             )
             file.file.seek(0)
             file_bytes = await file.read()
+            
+            # Determine resource type and public_id
+            content_type = file.content_type or ""
+            file_ext = os.path.splitext(file.filename)[1] if file.filename else ""
+            
+            res_type = "auto"
+            if "image" in content_type or file_ext.lower() in [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"]:
+                res_type = "image"
+            elif "video" in content_type or file_ext.lower() in [".mp4", ".mov", ".avi", ".mkv"]:
+                res_type = "video"
+            else:
+                res_type = "raw"
+                
+            upload_params = {
+                "resource_type": res_type,
+                "folder": f"crm_tenant_{tenant_id}"
+            }
+            if res_type == "raw" and file.filename:
+                # generate a unique public_id with the correct extension
+                import uuid
+                upload_params["public_id"] = f"doc_{uuid.uuid4().hex}{file_ext}"
+                
             upload_result = cloudinary.uploader.upload(
                 file_bytes,
-                resource_type="auto",
-                folder=f"crm_tenant_{tenant_id}"
+                **upload_params
             )
             full_url = upload_result.get("secure_url")
             return success_response(
