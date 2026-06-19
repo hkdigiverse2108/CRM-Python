@@ -329,7 +329,7 @@ async def get_conversations(
                     diff_utc = abs((datetime.utcnow() - last_msg_time).total_seconds())
                     diff_local = abs((datetime.now() - last_msg_time).total_seconds())
                     diff = min(diff_utc, diff_local)
-                is_online = diff < 300  # 5 minutes
+                is_online = diff < 60  # 1 minute (60 seconds)
             
             conversations.append({
                 "id": r[0],
