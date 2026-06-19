@@ -68,6 +68,7 @@ export default function WhatsApp() {
   const [activeFilter, setActiveFilter] = useState('All'); // All, Unread, Bots, AI, Waiting
   const [showDetails, setShowDetails] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   // Emoji picker & File upload state/refs
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -306,6 +307,31 @@ export default function WhatsApp() {
       }
     } catch {
       addToast('Network error returning to bot', 'error');
+    }
+  };
+
+  const handleClearChat = async () => {
+    setShowMoreMenu(false);
+    if (!activeChatId) return;
+    if (!window.confirm("Are you sure you want to permanently delete all messages in this chat? This action cannot be undone.")) {
+      return;
+    }
+    
+    try {
+      const res = await fetch(`${API_BASE}/integrations/whatsapp/conversations/${activeChatId}/clear`, {
+        method: 'DELETE',
+        headers: getHeaders()
+      });
+      if (res.ok) {
+        addToast("Chat history cleared successfully.", "success");
+        setMessages([]);
+        setActiveChatId(''); // Reset active chat
+        fetchConversations();
+      } else {
+        addToast("Failed to clear chat history.", "error");
+      }
+    } catch {
+      addToast("Network error clearing chat history.", "error");
     }
   };
 
@@ -594,13 +620,29 @@ export default function WhatsApp() {
                   >
                     <span className="material-symbols-outlined text-[18px]">info</span>
                   </button>
-                  <button 
-                    onClick={() => addToast('More options')}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                    title="More Options"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">more_vert</span>
-                  </button>
+                  <div className="relative">
+                    <button 
+                      onClick={() => setShowMoreMenu(!showMoreMenu)}
+                      className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                      title="More Options"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">more_vert</span>
+                    </button>
+                    {showMoreMenu && (
+                      <>
+                        <div className="fixed inset-0 z-30" onClick={() => setShowMoreMenu(false)} />
+                        <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl py-1.5 z-40 animate-[slideUp_150ms_ease]">
+                          <button
+                            onClick={handleClearChat}
+                            className="w-full flex items-center gap-2.5 px-4 py-2 text-left text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">delete_sweep</span>
+                            <span>Clear Chat History</span>
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </header>
 

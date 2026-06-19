@@ -528,6 +528,39 @@ async def get_messages(
         return success_response(data=messages)
 
 
+@router.delete("/conversations/{lead_id}/clear")
+async def clear_conversation_messages(
+    lead_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    tenant_id = request.state.tenant.id
+    with get_db() as db:
+        # Check if lead exists
+        lead_exists = db.execute(
+            text("SELECT lead_id FROM leads WHERE workspace_id = :ws_id AND lead_id = :lead_id AND deleted_at IS NULL LIMIT 1"),
+            {"ws_id": tenant_id, "lead_id": lead_id}
+        ).scalar()
+        
+        if not lead_exists:
+            raise HTTPException(status_code=404, detail="Lead/conversation not found.")
+            
+        # Hard delete all messages for this lead on the whatsapp channel
+        db.execute(
+            text("DELETE FROM lead_messages WHERE workspace_id = :ws_id AND lead_id = :lead_id AND channel = 'whatsapp'"),
+            {"ws_id": tenant_id, "lead_id": lead_id}
+        )
+        
+        # Reset active chatbot conversation state
+        db.execute(
+            text("DELETE FROM lead_conversation_states WHERE workspace_id = :ws_id AND lead_id = :lead_id"),
+            {"ws_id": tenant_id, "lead_id": lead_id}
+        )
+        
+        db.commit()
+        return success_response(message="Chat history cleared successfully.")
+
+
 
 class SendWhatsAppPayload(BaseModel):
     message: Optional[str] = None
