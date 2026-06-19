@@ -493,11 +493,30 @@ async def send_whatsapp_message(
     
     is_sandbox = not wa_acc or wa_acc["access_token"].startswith("mock_")
     
-    body_to_send = payload.message or ""
+    # Build correct payload for Meta Graph API
+    meta_json = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": to_phone
+    }
+    
     if payload.imageUrl:
-        body_to_send = body_to_send or "[Image]"
+        meta_json["type"] = "image"
+        meta_json["image"] = {"link": payload.imageUrl}
+        if payload.message:
+            meta_json["image"]["caption"] = payload.message
     elif payload.fileUrl:
-        body_to_send = body_to_send or "[File]"
+        meta_json["type"] = "document"
+        filename = payload.fileUrl.split("/")[-1]
+        meta_json["document"] = {
+            "link": payload.fileUrl,
+            "filename": filename
+        }
+        if payload.message:
+            meta_json["document"]["caption"] = payload.message
+    else:
+        meta_json["type"] = "text"
+        meta_json["text"] = {"body": payload.message or ""}
 
     if not is_sandbox:
         try:
@@ -512,13 +531,7 @@ async def send_whatsapp_message(
                         "Authorization": f"Bearer {token}",
                         "Content-Type": "application/json"
                     },
-                    json={
-                        "messaging_product": "whatsapp",
-                        "recipient_type": "individual",
-                        "to": to_phone,
-                        "type": "text",
-                        "text": {"body": body_to_send}
-                    }
+                    json=meta_json
                 )
                 if resp.status_code != 200:
                     logger.error(f"Failed to send real WhatsApp message: {resp.text}")
