@@ -2,6 +2,39 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp, getTenantId } from '@/context/AppContext';
 import { useNavigate } from 'react-router-dom';
 
+const emojiCategories = [
+  {
+    icon: '😊',
+    name: 'Smileys',
+    emojis: ['😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😗','😙','😚','😋','😛','😝','😜','🤪','🤨','🧐','🤓','😎','🥸','🤩','🥳','😏','😒','😞','😔','😟','😕','🙁','☹️','😣','😖','😫','😩','🥺','😢','😭','😤','😠','😡','🤬','🤯','😳','🥵','🥶','😱','😨','😰','😥','😓','🤗','🤔','🤭','🤫','🤥','😶','😐','😑','😬','🙄','😯','😦','😧','😮','😲','🥱','😴','🤤','😪','😵','🤐','🥴','🤢','🤮','🤧','😷','🤒','🤕','🤑','🤠']
+  },
+  {
+    icon: '👋',
+    name: 'People',
+    emojis: ['👋','🤚','🖐️','✋','🖖','👌','🤌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','🖕','👇','☝️','👍','👎','✊','👊','🤛','🤜','👏','🙌','👐','🤲','🤝','🙏','✍️','💅','🤳','💪','🦾','👂','🦻','👃','🧠','🫀','🫁','🦷','🦴','👀','👁️']
+  },
+  {
+    icon: '❤️',
+    name: 'Hearts',
+    emojis: ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❤️‍🔥','❤️‍🩹','❣️','💕','💞','💓','💗','💖','💘','💝','💟','🌟','⭐','✨','⚡','💥','🔥','🌈','☀️','🌤️','⛅','🌥️','☁️','🌧️','⛈️','🌩️','❄️','💨','💧','💦','💤','💬','💭']
+  },
+  {
+    icon: '🐱',
+    name: 'Animals',
+    emojis: ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐽','🐸','🐵','🙊','🙉','🙈','🐒','🐔','🐧','🐦','🐤','🐣','🐥','🦆','🦢','🦅','🦉','🦤','🦩','🐢','🐍','🦎','🐙','🦑','🦞','🦀','🐠','🐟','🐬','🐳','🐋','🦈','🐊','🐅','🐆','🦓','🦍','🦧','🐘','🦛','🦏','🐪','🐫','🦒','🦘','🐃','🐂','🐄','🐎','🐖','🐏','🐑','🐐','🦌','🐕','🐈','🐓','🦃','🐇','🦝','🦡','🦦','🦫','🦥','🐿️','🦔']
+  },
+  {
+    icon: '🍔',
+    name: 'Food',
+    emojis: ['🍏','🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🍈','🍒','🍑','🥭','🍍','🥥','🥝','🍅','🍆','🥑','🥦','🥬','🥒','🌶️','🫑','🧅','🧄','🥔','🥕','🌽','🍔','🍟','🍕','🌭','🥪','🌮','🌯','🍳','🥘','🍲','🥣','🥗','🍿','バター','🍱','🍘','🍙','🍚','🍛','🍜','🍝','🍣','🍤','🍩','🍪','🎂','🍰','🧁','🥧','🍫','🍬','🍭','🍮','🍯','🥛','☕','🍵','🍶','🍷','🍸','🍹','🍺','🍻','🥂','🥃','🥤']
+  },
+  {
+    icon: '🚗',
+    name: 'Travel',
+    emojis: ['🚗','🚕','🚙','🚌','🚎','🏎️','🚓','🚑','🚒','🚐','🛻','🚚','🚛','🚜','🛵','🏍️','🛺','🚲','🛹','🛼','🚨','🛑','🚧','⚓','⛵','🛶','🚤','🛳️','⛴️','🛥️','🚢','✈️','🛩️','🛫','🛬','🪂','🚁','🚟','🚠','🚡','🛰️','🚀','🛸','🛎️','🧳','⌛','⏳','⌚','⏰','⏱️','⏲️','🕰️','🌡️','☀️','🪐','⭐','🌟','🌠','🌌','☁️','⛅','⛈️','🌪️','🌫️','🌬️','🌀','🌈','☂️','☔','⚡','❄️','☃️','⛄','☄️','🔥','💧','🌊']
+  }
+];
+
 export default function WhatsApp() {
   const { addToast, token, tenantId } = useApp();
   const navigate = useNavigate();
@@ -12,6 +45,22 @@ export default function WhatsApp() {
   const [activeFilter, setActiveFilter] = useState('All'); // All, Unread, Bots, AI, Waiting
   const [showDetails, setShowDetails] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Emoji picker & File upload state/refs
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [activeEmojiCategory, setActiveEmojiCategory] = useState(0);
+  const fileInputRef = useRef(null);
+  const emojiPickerRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target)) {
+        setShowEmojiPicker(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Inbox Data
   const [conversations, setConversations] = useState([]);
@@ -134,6 +183,58 @@ export default function WhatsApp() {
       }
     } catch {
       addToast('Network error sending message', 'error');
+    }
+  };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeChatId) return;
+
+    addToast('Uploading attachment...', 'info');
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch(`${API_BASE}/integrations/whatsapp/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || getTenantId() || '96722',
+        },
+        body: formData
+      });
+
+      if (res.ok) {
+        const result = await res.json();
+        if (result.success && result.data?.url) {
+          const url = result.data.url;
+          const isImage = file.type.startsWith('image/');
+          
+          // Send immediately
+          const sendBody = isImage ? { imageUrl: url } : { fileUrl: url };
+          
+          const sendRes = await fetch(`${API_BASE}/integrations/whatsapp/conversations/${activeChatId}/send`, {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify(sendBody)
+          });
+          
+          if (sendRes.ok) {
+            addToast('Attachment sent successfully', 'success');
+            fetchMessages(activeChatId);
+          } else {
+            addToast('Failed to send attachment link', 'error');
+          }
+        } else {
+          addToast('Upload failed', 'error');
+        }
+      } else {
+        addToast('Server error uploading file', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      addToast('Network error uploading file', 'error');
     }
   };
 
@@ -497,7 +598,26 @@ export default function WhatsApp() {
                           </div>
                           {msg.image && (
                             <div className="mb-2 max-w-full rounded-lg overflow-hidden border border-slate-100 shadow-sm">
-                              <img className="w-full max-h-[300px] object-cover cursor-pointer hover:opacity-90" src={msg.image} alt="Upload" onClick={() => addToast('Opening full scale image')}/>
+                              <img className="w-full max-h-[300px] object-cover cursor-pointer hover:opacity-90" src={msg.image} alt="Upload" onClick={() => window.open(msg.image, '_blank')}/>
+                            </div>
+                          )}
+                          {msg.file && (
+                            <div className="mb-2 max-w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3 flex items-center gap-3">
+                              <span className="material-symbols-outlined text-[24px] text-emerald-600">description</span>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-semibold truncate text-slate-850 dark:text-slate-200">
+                                  {msg.file.split('/').pop()}
+                                </p>
+                                <p className="text-[10px] text-slate-400">Document File</p>
+                              </div>
+                              <a 
+                                href={msg.file} 
+                                target="_blank" 
+                                rel="noreferrer" 
+                                className="w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-350 dark:bg-slate-700 dark:hover:bg-slate-600 flex items-center justify-center text-slate-700 dark:text-slate-200 shrink-0 transition-colors"
+                              >
+                                <span className="material-symbols-outlined text-[18px]">download</span>
+                              </a>
                             </div>
                           )}
                           <p className="pr-10 whitespace-pre-wrap">{msg.text}</p>
@@ -532,7 +652,26 @@ export default function WhatsApp() {
                         )}
                         {msg.image && (
                           <div className={`mb-2 max-w-full rounded-lg overflow-hidden border shadow-sm ${isBot ? 'border-indigo-150' : 'border-emerald-100'}`}>
-                            <img className="w-full max-h-[300px] object-cover cursor-pointer hover:opacity-90" src={msg.image} alt="Upload" onClick={() => addToast('Opening full scale image')}/>
+                            <img className="w-full max-h-[300px] object-cover cursor-pointer hover:opacity-90" src={msg.image} alt="Upload" onClick={() => window.open(msg.image, '_blank')}/>
+                          </div>
+                        )}
+                        {msg.file && (
+                          <div className={`mb-2 max-w-full rounded-lg p-3 flex items-center gap-3 border shadow-sm ${isBot ? 'bg-indigo-100/55 border-indigo-200' : 'bg-emerald-100/10 border-emerald-250/30'}`}>
+                            <span className="material-symbols-outlined text-[24px] text-emerald-600">description</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold truncate text-slate-850 dark:text-slate-200">
+                                {msg.file.split('/').pop()}
+                              </p>
+                              <p className="text-[10px] text-slate-400">Document File</p>
+                            </div>
+                            <a 
+                              href={msg.file} 
+                              target="_blank" 
+                              rel="noreferrer" 
+                              className="w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-350 dark:bg-slate-700 dark:hover:bg-slate-600 flex items-center justify-center text-slate-700 dark:text-slate-200 shrink-0 transition-colors"
+                            >
+                              <span className="material-symbols-outlined text-[18px]">download</span>
+                            </a>
                           </div>
                         )}
                         <p className="pr-12 whitespace-pre-wrap">{msg.text}</p>
@@ -579,13 +718,60 @@ export default function WhatsApp() {
                     <span className="material-symbols-outlined text-[14px]">note_add</span> Templates
                   </button>
                 </div>
-                <div className="flex items-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 gap-2 shadow-inner">
-                  <button className="w-8 h-8 flex items-center justify-center text-slate-450 hover:text-emerald-600 transition-colors" title="Emoji selector" onClick={() => addToast('Emoji selector opened')}>
-                    <span className="material-symbols-outlined text-[20px]">sentiment_satisfied</span>
-                  </button>
-                  <button className="w-8 h-8 flex items-center justify-center text-slate-450 hover:text-emerald-600 transition-colors" title="Attach file" onClick={() => addToast('Attachment selector opened')}>
+                <div className="flex items-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 gap-2 shadow-inner relative">
+                  <div ref={emojiPickerRef}>
+                    <button 
+                      className={`w-8 h-8 flex items-center justify-center transition-colors ${showEmojiPicker ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20' : 'text-slate-450 hover:text-emerald-600'}`}
+                      title="Emoji selector" 
+                      onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                    >
+                      <span className="material-symbols-outlined text-[20px]">sentiment_satisfied</span>
+                    </button>
+                    {showEmojiPicker && (
+                      <div className="absolute bottom-full mb-2 left-0 w-72 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden flex flex-col h-64">
+                        {/* Categories tabs */}
+                        <div className="flex border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-1.5 gap-1 shrink-0 overflow-x-auto no-scrollbar">
+                          {emojiCategories.map((cat, idx) => (
+                            <button
+                              key={cat.name}
+                              onClick={() => setActiveEmojiCategory(idx)}
+                              className={`p-1.5 rounded-lg text-sm transition-colors flex-1 text-center ${activeEmojiCategory === idx ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 font-bold' : 'hover:bg-slate-150 dark:hover:bg-slate-750'}`}
+                              title={cat.name}
+                            >
+                              {cat.icon}
+                            </button>
+                          ))}
+                        </div>
+                        {/* Emojis grid */}
+                        <div className="flex-1 p-2 overflow-y-auto grid grid-cols-8 gap-1.5 content-start">
+                          {emojiCategories[activeEmojiCategory].emojis.map((emoji, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => {
+                                setMessage(prev => prev + emoji);
+                              }}
+                              className="w-7 h-7 flex items-center justify-center text-lg hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors"
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <button 
+                    className="w-8 h-8 flex items-center justify-center text-slate-450 hover:text-emerald-600 transition-colors" 
+                    title="Attach file" 
+                    onClick={() => fileInputRef.current?.click()}
+                  >
                     <span className="material-symbols-outlined text-[20px]">attach_file</span>
                   </button>
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    className="hidden" 
+                    onChange={handleFileChange} 
+                  />
                   <input 
                     type="text" 
                     value={message} 

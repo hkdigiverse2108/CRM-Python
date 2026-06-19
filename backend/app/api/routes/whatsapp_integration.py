@@ -359,7 +359,7 @@ async def get_messages(
         db.commit()
 
         query = text("""
-            SELECT sender, message_body, message_time, delivery_status
+            SELECT sender, message_body, message_time, delivery_status, message_type, attachment_url
             FROM lead_messages
             WHERE workspace_id = :ws_id AND lead_id = :lead_id AND channel = 'whatsapp'
             ORDER BY message_time ASC
@@ -373,7 +373,9 @@ async def get_messages(
                 "sender": sender_type,
                 "text": r[1],
                 "time": r[2].strftime("%I:%M %p") if r[2] else "",
-                "status": r[3]
+                "status": r[3],
+                "image": r[5] if r[4] == 'image' else None,
+                "file": r[5] if r[4] == 'document' else None
             })
             
         return success_response(data=messages)
@@ -381,7 +383,37 @@ async def get_messages(
 
 
 class SendWhatsAppPayload(BaseModel):
-    message: str
+    message: Optional[str] = None
+    imageUrl: Optional[str] = None
+    fileUrl: Optional[str] = None
+
+
+from fastapi import UploadFile, File
+import shutil
+import os
+
+@router.post("/upload")
+async def upload_whatsapp_file(
+    request: Request,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    os.makedirs("uploads", exist_ok=True)
+    file_ext = os.path.splitext(file.filename)[1]
+    unique_filename = f"wa_{uuid.uuid4().hex}{file_ext}"
+    file_path = os.path.join("uploads", unique_filename)
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    base_url = str(request.base_url)
+    if base_url.endswith("/api/"):
+        base_url = base_url[:-4]
+    elif base_url.endswith("/"):
+        base_url = base_url[:-1]
+        
+    full_url = f"{base_url}/uploads/{unique_filename}"
+    return success_response(data={"url": full_url})
 
 
 @router.post("/conversations/{lead_id}/send")
@@ -413,6 +445,12 @@ async def send_whatsapp_message(
     
     is_sandbox = not wa_acc or wa_acc["access_token"].startswith("mock_")
     
+    body_to_send = payload.message or ""
+    if payload.imageUrl:
+        body_to_send = body_to_send or "[Image]"
+    elif payload.fileUrl:
+        body_to_send = body_to_send or "[File]"
+
     if not is_sandbox:
         try:
             settings = get_settings()
@@ -431,7 +469,7 @@ async def send_whatsapp_message(
                         "recipient_type": "individual",
                         "to": to_phone,
                         "type": "text",
-                        "text": {"body": payload.message}
+                        "text": {"body": body_to_send}
                     }
                 )
                 if resp.status_code != 200:
@@ -441,18 +479,33 @@ async def send_whatsapp_message(
             
     # Save the outgoing agent message in DB
     import uuid
+    msg_type = 'text'
+    body = payload.message or ''
+    attachment = None
+    
+    if payload.imageUrl:
+        msg_type = 'image'
+        attachment = payload.imageUrl
+        body = body or "[Image]"
+    elif payload.fileUrl:
+        msg_type = 'document'
+        attachment = payload.fileUrl
+        body = body or "[File]"
+
     with get_db() as db:
         db.execute(
             text("""
-            INSERT INTO lead_messages (id, workspace_id, lead_id, channel, message_type, message_body, sender, receiver, delivery_status)
-            VALUES (:id, :ws_id, :lead_id, 'whatsapp', 'text', :body, 'agent', :receiver, 'sent')
+            INSERT INTO lead_messages (id, workspace_id, lead_id, channel, message_type, message_body, sender, receiver, delivery_status, attachment_url)
+            VALUES (:id, :ws_id, :lead_id, 'whatsapp', :msg_type, :body, 'agent', :receiver, 'sent', :attachment)
             """),
             {
                 "id": str(uuid.uuid4()),
                 "ws_id": tenant_id,
                 "lead_id": lead_id,
-                "body": payload.message,
-                "receiver": to_phone
+                "msg_type": msg_type,
+                "body": body,
+                "receiver": to_phone,
+                "attachment": attachment
             }
         )
         # Update or insert conversation state status to 'human'

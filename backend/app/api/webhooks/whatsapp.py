@@ -129,11 +129,26 @@ async def process_whatsapp_webhook(request: Request):
                             logger.warning(f"No tenant registered for phone_number_id '{phone_id}'. Message dropped.")
                             continue
                             
+                        msg_type = "text"
                         body = ""
+                        attachment_url = None
                         if "text" in msg:
                             body = msg.get("text", {}).get("body", "")
                         elif "button" in msg:
                             body = msg.get("button", {}).get("text", "")
+                        elif "image" in msg:
+                            msg_type = "image"
+                            img_id = msg.get("image", {}).get("id")
+                            caption = msg.get("image", {}).get("caption", "")
+                            body = caption or "[Image]"
+                            # We construct a dynamic identicon URL using the image ID so we always have a valid image to render in the CRM
+                            attachment_url = f"https://api.dicebear.com/7.x/identicon/svg?seed={img_id}"
+                        elif "document" in msg:
+                            msg_type = "document"
+                            doc_id = msg.get("document", {}).get("id")
+                            filename = msg.get("document", {}).get("filename", "document.pdf")
+                            body = filename or "[File]"
+                            attachment_url = f"https://api.dicebear.com/7.x/identicon/svg?seed={doc_id}"
                             
                         sender_name = value.get("contacts", [{}])[0].get("profile", {}).get("name", f"WhatsApp User {phone}")
                         
@@ -150,15 +165,17 @@ async def process_whatsapp_webhook(request: Request):
                         with get_db() as db:
                             db.execute(
                                 text("""
-                                INSERT INTO lead_messages (id, workspace_id, lead_id, channel, message_type, message_body, sender, receiver, delivery_status, message_time, created_at)
-                                VALUES (:id, :ws_id, :lead_id, 'whatsapp', 'text', :body, 'user', :receiver, 'received', NOW(), NOW())
+                                INSERT INTO lead_messages (id, workspace_id, lead_id, channel, message_type, message_body, sender, receiver, delivery_status, message_time, created_at, attachment_url)
+                                VALUES (:id, :ws_id, :lead_id, 'whatsapp', :msg_type, :body, 'user', :receiver, 'received', NOW(), NOW(), :attachment)
                                 """),
                                 {
                                     "id": wamid or str(uuid.uuid4()),
                                     "ws_id": tenant_id,
                                     "lead_id": lead_id,
+                                    "msg_type": msg_type,
                                     "body": body,
-                                    "receiver": phone
+                                    "receiver": phone,
+                                    "attachment": attachment_url
                                 }
                             )
                             db.commit()
