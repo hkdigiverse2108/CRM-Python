@@ -166,7 +166,7 @@ export default function WhatsApp() {
     return () => clearInterval(interval);
   }, [activeChatId, fetchMessages]);
 
-  const activeChat = conversations.find(c => c.id === activeChatId) || conversations[0];
+  const activeChat = conversations.find(c => c.id === activeChatId);
 
   const selectConversation = (id) => {
     setActiveChatId(id);

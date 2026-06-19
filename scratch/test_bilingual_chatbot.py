@@ -1,0 +1,59 @@
+import asyncio
+import os
+import sys
+from sqlalchemy import text
+from dotenv import load_dotenv
+
+sys.path.append("c:/CRM")
+load_dotenv("c:/CRM/.env")
+
+from backend.app.core.database import get_db
+from backend.app.services.chatbot_service import run_chatbot_flow_engine
+
+async def simulate_conversation():
+    tenant_id = "96722"
+    phone = "918780564463"
+    
+    # We will simulate a series of messages from the user:
+    # 1. "hello" (to trigger the flow)
+    # 2. "2" (to select Gujarati)
+    # 3. "1" (to select Custom Software Dev)
+    # 4. "We need a new CRM mobile app" (to describe project)
+    # 5. "contact@hkdigiverse.com" (to specify business email)
+    
+    steps = [
+        "hello",
+        "2",
+        "1",
+        "We need a new CRM mobile app",
+        "contact@hkdigiverse.com"
+    ]
+    
+    print("=== Simulating Bilingual Chatbot Conversation ===")
+    
+    for idx, msg in enumerate(steps, 1):
+        print(f"\n--- User Step {idx}: Send message '{msg}' ---")
+        with get_db() as db:
+            # Let's inspect current state before processing
+            state = db.execute(
+                text("SELECT current_node_id, flow_variables, status FROM lead_conversation_states WHERE workspace_id = :ws_id LIMIT 1"),
+                {"ws_id": tenant_id}
+            ).mappings().first()
+            if state:
+                print(f"Current State before msg: Node ID: {state['current_node_id']}, Status: {state['status']}, Variables: {state['flow_variables']}")
+            else:
+                print("Current State before msg: No active conversation state")
+
+            await run_chatbot_flow_engine(tenant_id, phone, msg, db)
+            
+            # Print outgoing messages logged for this user
+            msgs = db.execute(
+                text("SELECT message_body, sender, created_at FROM lead_messages WHERE workspace_id = :ws_id ORDER BY created_at DESC LIMIT 3"),
+                {"ws_id": tenant_id}
+            ).mappings().all()
+            print("Recent logged messages:")
+            for m in reversed(msgs):
+                print(f"  [{m['sender'].upper()}] {m['message_body']}")
+
+if __name__ == "__main__":
+    asyncio.run(simulate_conversation())

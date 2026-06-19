@@ -205,7 +205,7 @@ export default function BotBuilder() {
   // 1. Core State
   const [flowsList, setFlowsList] = useState([]);
   const [activeFlowId, setActiveFlowId] = useState('');
-  const [flowName, setFlowName] = useState('Chab Chabba Chab Water Park');
+  const [flowName, setFlowName] = useState('HK Digiverse LLP IT Services');
   const [flowDesc, setFlowDesc] = useState('Primary offline flow responder');
   const [triggerType, setTriggerType] = useState('keyword'); // keyword, any
   const [keywords, setKeywords] = useState('hello, hi, start');
@@ -306,7 +306,7 @@ export default function BotBuilder() {
       message: { message: { text: 'Welcome! How can we assist you today?' } },
       question: { message: { text: 'What is your preferred date? (YYYY-MM-DD)' }, variable: 'preferred_date' },
       condition: { condition: { variable: 'preferred_date', operator: 'exists', value: '' } },
-      ai: { aiPrompt: 'You are an assistant for Chab Chabba Chab Water Park. Provide ticket prices: Adult: 999, Child: 599. If customer is satisfied, say FINISHED.' },
+      ai: { aiPrompt: 'You are an assistant for HK Digiverse LLP. We offer custom software development, cloud migration, and cybersecurity consulting. If customer is satisfied, say FINISHED.' },
       delay: { delaySeconds: 5 },
       handoff: {}
     };
