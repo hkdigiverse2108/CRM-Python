@@ -61,6 +61,29 @@ export default function WhatsApp() {
     return str;
   };
 
+  const getDateLabel = (timeStr) => {
+    if (!timeStr) return '';
+    try {
+      const date = new Date(timeStr);
+      if (isNaN(date.getTime())) return '';
+      
+      const today = new Date();
+      const yesterday = new Date();
+      yesterday.setDate(today.getDate() - 1);
+      
+      if (date.toDateString() === today.toDateString()) {
+        return 'Today';
+      } else if (date.toDateString() === yesterday.toDateString()) {
+        return 'Yesterday';
+      } else {
+        return date.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
+      }
+    } catch (e) {
+      return '';
+    }
+  };
+
+
   const [message, setMessage] = useState('');
   const [pendingAttachment, setPendingAttachment] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -91,6 +114,8 @@ export default function WhatsApp() {
   const [activeChatId, setActiveChatId] = useState('');
   const [messages, setMessages] = useState([]);
   const messagesContainerRef = useRef(null);
+  const isNearBottom = useRef(true);
+  const prevActiveChatId = useRef('');
 
   const scrollToBottom = useCallback(() => {
     if (messagesContainerRef.current) {
@@ -103,9 +128,24 @@ export default function WhatsApp() {
     }
   }, []);
 
+  const handleScroll = () => {
+    if (messagesContainerRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+      // If we are within 100px of the bottom, keep auto-scrolling
+      const atBottom = scrollHeight - scrollTop - clientHeight < 100;
+      isNearBottom.current = atBottom;
+    }
+  };
+
   // Auto scroll to bottom of chat thread when messages array or active chat changes
   useEffect(() => {
-    scrollToBottom();
+    if (activeChatId !== prevActiveChatId.current) {
+      prevActiveChatId.current = activeChatId;
+      isNearBottom.current = true;
+      scrollToBottom();
+    } else if (isNearBottom.current) {
+      scrollToBottom();
+    }
   }, [messages, activeChatId, scrollToBottom]);
 
 
@@ -197,11 +237,11 @@ export default function WhatsApp() {
     }
 
     // Optimistically prepend local chat preview
-    const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    isNearBottom.current = true;
     const localMsg = { 
       sender: 'agent', 
       text: message.trim() || (pendingAttachment.isImage ? '[Image]' : '[File]'), 
-      time: timeNow 
+      time: new Date().toISOString()
     };
     if (pendingAttachment) {
       if (pendingAttachment.isImage) localMsg.image = pendingAttachment.url;
@@ -649,6 +689,7 @@ export default function WhatsApp() {
               {/* Chat Thread stream with classic sand background */}
               <div 
                 ref={messagesContainerRef}
+                onScroll={handleScroll}
                 className="flex-1 overflow-y-auto p-6 space-y-4 relative"
                 style={{
                   backgroundColor: '#efeae2',
@@ -656,139 +697,150 @@ export default function WhatsApp() {
                   backgroundSize: '15px 15px'
                 }}
               >
-                {messages.map((msg, idx) => {
-                  if (msg.sender === 'system') {
+                {(() => {
+                  let lastDateLabel = null;
+                  return messages.map((msg, idx) => {
+                    const msgDateLabel = msg.time ? getDateLabel(msg.time) : '';
+                    const showDivider = msgDateLabel && msgDateLabel !== lastDateLabel;
+                    if (showDivider) {
+                      lastDateLabel = msgDateLabel;
+                    }
+
+                    const isOutgoing = msg.sender === 'agent' || msg.sender === 'bot';
+
                     return (
-                      <div key={idx} className="flex justify-center">
-                        <span className="bg-[#f0ebd8] dark:bg-slate-800/95 border border-slate-200/50 dark:border-slate-700/50 text-slate-750 dark:text-slate-300 px-3 py-1.5 rounded-lg text-[10px] font-semibold flex items-center gap-1.5 shadow-sm">
-                          <span className="material-symbols-outlined text-[14px]">info</span>
-                          {msg.text}
-                        </span>
-                      </div>
-                    );
-                  }
-
-                  const isOutgoing = msg.sender === 'agent' || msg.sender === 'bot';
-
-                  if (!isOutgoing) {
-                    // Incoming (left-aligned)
-                    return (
-                      <div key={idx} className="flex flex-col items-start gap-1 max-w-[80%]">
-                        <div className="bg-white text-slate-800 pt-2.5 px-3 pb-5.5 rounded-xl rounded-tl-none shadow-sm text-[13px] leading-relaxed relative min-w-[130px]">
-                          <div className="text-[11px] font-bold text-emerald-600 flex items-center gap-1 mb-1">
-                            <span className="material-symbols-outlined text-[12px]">bolt</span>
-                            {activeChat.name}
-                          </div>
-                          {msg.image && (
-                            <div className="mb-2 max-w-full rounded-lg overflow-hidden border border-slate-100 shadow-sm">
-                              <img className="w-full max-h-[300px] object-cover cursor-pointer hover:opacity-90" src={msg.image} alt="Upload" onClick={() => window.open(msg.image, '_blank')}/>
-                            </div>
-                          )}
-                          {msg.file && (
-                            <div className="mb-2 max-w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3 flex items-center gap-3">
-                              <span className="material-symbols-outlined text-[24px] text-emerald-600">description</span>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-semibold truncate text-slate-850 dark:text-slate-200">
-                                  {msg.file.split('/').pop()}
-                                </p>
-                                <p className="text-[10px] text-slate-400">Document File</p>
-                              </div>
-                              <a 
-                                href={msg.file} 
-                                target="_blank" 
-                                rel="noreferrer" 
-                                className="w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-350 dark:bg-slate-700 dark:hover:bg-slate-600 flex items-center justify-center text-slate-700 dark:text-slate-200 shrink-0 transition-colors"
-                              >
-                                <span className="material-symbols-outlined text-[18px]">download</span>
-                              </a>
-                            </div>
-                          )}
-                          <p className="pr-10 pb-1.5 whitespace-pre-wrap">{msg.text}</p>
-                          <div className="absolute bottom-1 right-2 text-[9px] text-slate-400 select-none">
-                            {formatTime(msg.time)}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  // Outgoing (right-aligned)
-                  const isBot = msg.sender === 'bot';
-                  return (
-                    <div key={idx} className="flex flex-col items-end gap-1 max-w-[80%] ml-auto">
-                      <div className={`text-slate-800 pt-2.5 px-3 pb-5.5 rounded-xl rounded-tr-none shadow-sm text-[13px] leading-relaxed relative min-w-[130px] ${
-                        isBot 
-                          ? 'bg-indigo-50 dark:bg-indigo-950/45 border border-indigo-200/60 dark:border-indigo-850/50' 
-                          : 'bg-[#d1fae5] dark:bg-emerald-950/30'
-                      }`}>
-                        {isBot && (
-                          <div className="text-[10px] font-extrabold text-indigo-650 dark:text-indigo-400 flex items-center gap-1.5 mb-1.5 border-b border-indigo-100 dark:border-indigo-900/50 pb-0.5 select-none">
-                            <span className="material-symbols-outlined text-[13px]">smart_toy</span>
-                            <span>AI Responder</span>
+                      <div key={idx} className="w-full flex flex-col gap-1">
+                        {showDivider && (
+                          <div className="flex justify-center my-3 select-none">
+                            <span className="bg-white/90 dark:bg-slate-800/90 text-slate-500 dark:text-slate-400 px-3.5 py-1 rounded-md text-[11px] font-bold shadow-sm uppercase tracking-wider border border-slate-200/50 dark:border-slate-700/50">
+                              {msgDateLabel}
+                            </span>
                           </div>
                         )}
-                        {!isBot && (
-                          <div className="text-[10px] font-extrabold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5 mb-1.5 border-b border-emerald-100 dark:border-emerald-900/50 pb-0.5 select-none">
-                            <span className="material-symbols-outlined text-[13px]">person</span>
-                            <span>Agent Reply</span>
-                          </div>
-                        )}
-                        {msg.image && (
-                          <div className={`mb-2 max-w-full rounded-lg overflow-hidden border shadow-sm ${isBot ? 'border-indigo-150' : 'border-emerald-100'}`}>
-                            <img className="w-full max-h-[300px] object-cover cursor-pointer hover:opacity-90" src={msg.image} alt="Upload" onClick={() => window.open(msg.image, '_blank')}/>
-                          </div>
-                        )}
-                        {msg.file && (
-                          <div className={`mb-2 max-w-full rounded-lg p-3 flex items-center gap-3 border shadow-sm ${isBot ? 'bg-indigo-100/55 border-indigo-200' : 'bg-emerald-100/10 border-emerald-250/30'}`}>
-                            <span className="material-symbols-outlined text-[24px] text-emerald-600">description</span>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-semibold truncate text-slate-850 dark:text-slate-200">
-                                {msg.file.split('/').pop()}
-                              </p>
-                              <p className="text-[10px] text-slate-400">Document File</p>
-                            </div>
-                            <a 
-                              href={msg.file} 
-                              target="_blank" 
-                              rel="noreferrer" 
-                              className="w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-350 dark:bg-slate-700 dark:hover:bg-slate-600 flex items-center justify-center text-slate-700 dark:text-slate-200 shrink-0 transition-colors"
-                            >
-                              <span className="material-symbols-outlined text-[18px]">download</span>
-                            </a>
-                          </div>
-                        )}
-                        <p className="pr-12 pb-1.5 whitespace-pre-wrap">{msg.text}</p>
                         
-                        {msg.isLockerMenu && (
-                          <div className="mt-3 flex flex-wrap gap-1.5 pb-1">
-                            <button className="bg-white text-emerald-700 font-bold text-[10px] px-2.5 py-1.5 rounded-lg shadow-sm hover:bg-slate-50 transition-colors" onClick={() => addToast('Selected: View Locker Prices')}>View Locker Details</button>
-                            <button className="bg-emerald-600 text-white font-bold text-[10px] px-2.5 py-1.5 rounded-lg shadow-sm hover:bg-emerald-700 transition-colors" onClick={() => addToast('Selected: Contact Support')}>Contact Staff</button>
+                        {msg.sender === 'system' ? (
+                          <div className="flex justify-center">
+                            <span className="bg-[#f0ebd8] dark:bg-slate-800/95 border border-slate-200/50 dark:border-slate-700/50 text-slate-750 dark:text-slate-300 px-3 py-1.5 rounded-lg text-[10px] font-semibold flex items-center gap-1.5 shadow-sm">
+                              <span className="material-symbols-outlined text-[14px]">info</span>
+                              {msg.text}
+                            </span>
+                          </div>
+                        ) : !isOutgoing ? (
+                          // Incoming (left-aligned)
+                          <div className="flex flex-col items-start gap-1 max-w-[80%]">
+                            <div className="bg-white text-slate-800 pt-2.5 px-3 pb-5.5 rounded-xl rounded-tl-none shadow-sm text-[13px] leading-relaxed relative min-w-[130px]">
+                              <div className="text-[11px] font-bold text-emerald-600 flex items-center gap-1 mb-1">
+                                <span className="material-symbols-outlined text-[12px]">bolt</span>
+                                {activeChat.name}
+                              </div>
+                              {msg.image && (
+                                <div className="mb-2 max-w-full rounded-lg overflow-hidden border border-slate-100 shadow-sm">
+                                  <img className="w-full max-h-[300px] object-cover cursor-pointer hover:opacity-90" src={msg.image} alt="Upload" onClick={() => window.open(msg.image, '_blank')}/>
+                                </div>
+                              )}
+                              {msg.file && (
+                                <div className="mb-2 max-w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3 flex items-center gap-3">
+                                  <span className="material-symbols-outlined text-[24px] text-emerald-600">description</span>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-semibold truncate text-slate-850 dark:text-slate-200">
+                                      {msg.file.split('/').pop()}
+                                    </p>
+                                    <p className="text-[10px] text-slate-400">Document File</p>
+                                  </div>
+                                  <a 
+                                    href={msg.file} 
+                                    target="_blank" 
+                                    rel="noreferrer" 
+                                    className="w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-350 dark:bg-slate-700 dark:hover:bg-slate-600 flex items-center justify-center text-slate-700 dark:text-slate-200 shrink-0 transition-colors"
+                                  >
+                                    <span className="material-symbols-outlined text-[18px]">download</span>
+                                  </a>
+                                </div>
+                              )}
+                              <p className="pr-10 pb-1.5 whitespace-pre-wrap">{msg.text}</p>
+                              <div className="absolute bottom-1 right-2 text-[9px] text-slate-400 select-none">
+                                {formatTime(msg.time)}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          // Outgoing (right-aligned)
+                          <div className="flex flex-col items-end gap-1 max-w-[80%] ml-auto">
+                            <div className={`text-slate-800 pt-2.5 px-3 pb-5.5 rounded-xl rounded-tr-none shadow-sm text-[13px] leading-relaxed relative min-w-[130px] ${
+                              msg.sender === 'bot' 
+                                ? 'bg-indigo-50 dark:bg-indigo-950/45 border border-indigo-200/60 dark:border-indigo-850/50' 
+                                : 'bg-[#d1fae5] dark:bg-emerald-950/30'
+                            }`}>
+                              {msg.sender === 'bot' && (
+                                <div className="text-[10px] font-extrabold text-indigo-650 dark:text-indigo-400 flex items-center gap-1.5 mb-1.5 border-b border-indigo-100 dark:border-indigo-900/50 pb-0.5 select-none">
+                                  <span className="material-symbols-outlined text-[13px]">smart_toy</span>
+                                  <span>AI Responder</span>
+                                </div>
+                              )}
+                              {msg.sender !== 'bot' && (
+                                <div className="text-[10px] font-extrabold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5 mb-1.5 border-b border-emerald-100 dark:border-emerald-900/50 pb-0.5 select-none">
+                                  <span className="material-symbols-outlined text-[13px]">person</span>
+                                  <span>Agent Reply</span>
+                                </div>
+                              )}
+                              {msg.image && (
+                                <div className={`mb-2 max-w-full rounded-lg overflow-hidden border shadow-sm ${msg.sender === 'bot' ? 'border-indigo-150' : 'border-emerald-100'}`}>
+                                  <img className="w-full max-h-[300px] object-cover cursor-pointer hover:opacity-90" src={msg.image} alt="Upload" onClick={() => window.open(msg.image, '_blank')}/>
+                                </div>
+                              )}
+                              {msg.file && (
+                                <div className={`mb-2 max-w-full rounded-lg p-3 flex items-center gap-3 border shadow-sm ${msg.sender === 'bot' ? 'bg-indigo-100/55 border-indigo-200' : 'bg-emerald-100/10 border-emerald-250/30'}`}>
+                                  <span className="material-symbols-outlined text-[24px] text-emerald-600">description</span>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-semibold truncate text-slate-850 dark:text-slate-200">
+                                      {msg.file.split('/').pop()}
+                                    </p>
+                                    <p className="text-[10px] text-slate-400">Document File</p>
+                                  </div>
+                                  <a 
+                                    href={msg.file} 
+                                    target="_blank" 
+                                    rel="noreferrer" 
+                                    className="w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-350 dark:bg-slate-700 dark:hover:bg-slate-600 flex items-center justify-center text-slate-700 dark:text-slate-200 shrink-0 transition-colors"
+                                  >
+                                    <span className="material-symbols-outlined text-[18px]">download</span>
+                                  </a>
+                                </div>
+                              )}
+                              <p className="pr-12 pb-1.5 whitespace-pre-wrap">{msg.text}</p>
+                              
+                              {msg.isLockerMenu && (
+                                <div className="mt-3 flex flex-wrap gap-1.5 pb-1">
+                                  <button className="bg-white text-emerald-700 font-bold text-[10px] px-2.5 py-1.5 rounded-lg shadow-sm hover:bg-slate-50 transition-colors" onClick={() => addToast('Selected: View Locker Prices')}>View Locker Details</button>
+                                  <button className="bg-emerald-600 text-white font-bold text-[10px] px-2.5 py-1.5 rounded-lg shadow-sm hover:bg-emerald-700 transition-colors" onClick={() => addToast('Selected: Contact Support')}>Contact Staff</button>
+                                </div>
+                              )}
+
+                              <div className="absolute bottom-1 right-2 flex items-center gap-1 text-[9px] text-slate-400 select-none">
+                                <span>{formatTime(msg.time)}</span>
+                                {msg.status === 'read' ? (
+                                  <span className="material-symbols-outlined text-[12px] text-sky-500 font-bold" title="Read">done_all</span>
+                                ) : msg.status === 'delivered' ? (
+                                  <span className="material-symbols-outlined text-[12px] text-slate-400 font-bold" title="Delivered">done_all</span>
+                                ) : (
+                                  <span className="material-symbols-outlined text-[12px] text-slate-400" title="Sent">done</span>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         )}
-
-                        <div className="absolute bottom-1 right-2 flex items-center gap-1 text-[9px] text-slate-400 select-none">
-                          <span>{formatTime(msg.time)}</span>
-                          {msg.status === 'read' ? (
-                            <span className="material-symbols-outlined text-[12px] text-sky-500 font-bold" title="Read">done_all</span>
-                          ) : msg.status === 'delivered' ? (
-                            <span className="material-symbols-outlined text-[12px] text-slate-400 font-bold" title="Delivered">done_all</span>
-                          ) : (
-                            <span className="material-symbols-outlined text-[12px] text-slate-400" title="Sent">done</span>
-                          )}
-                        </div>
                       </div>
-                    </div>
-                  );
-
-                })}
+                    );
+                  });
+                })()}
               </div>
 
               {/* Floating scroll to bottom arrow */}
               <div className="absolute bottom-24 right-6 z-20">
                 <button 
                   onClick={() => {
-                    const el = document.querySelector('.overflow-y-auto');
-                    if (el) el.scrollTop = el.scrollHeight;
+                    isNearBottom.current = true;
+                    scrollToBottom();
                   }}
                   className="w-9 h-9 rounded-full bg-white dark:bg-slate-800 text-slate-650 hover:text-slate-800 dark:text-slate-350 shadow-md border border-slate-200 dark:border-slate-700 flex items-center justify-center transition-all hover:scale-105"
                   title="Scroll to bottom"
