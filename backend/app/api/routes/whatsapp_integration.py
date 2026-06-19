@@ -319,6 +319,18 @@ async def get_conversations(
             is_waiting = conv_status == 'human'
             unread_count = r[10] if len(r) > 10 else 0
             
+            # Calculate online status dynamically (online if active in the last 5 minutes)
+            is_online = False
+            last_msg_time = r[6]
+            if last_msg_time:
+                if last_msg_time.tzinfo:
+                    diff = abs((datetime.now(last_msg_time.tzinfo) - last_msg_time).total_seconds())
+                else:
+                    diff_utc = abs((datetime.utcnow() - last_msg_time).total_seconds())
+                    diff_local = abs((datetime.now() - last_msg_time).total_seconds())
+                    diff = min(diff_utc, diff_local)
+                is_online = diff < 300  # 5 minutes
+            
             conversations.append({
                 "id": r[0],
                 "name": r[1],
@@ -333,7 +345,7 @@ async def get_conversations(
                 "waiting": is_waiting,
                 "assignedTo": "Gajera Prince Laxmanbhai" if not bot_handled else "AI Bot",
                 "lastAssignedTime": "Just now",
-                "online": True
+                "online": is_online
             })
             
         return success_response(data=conversations)
