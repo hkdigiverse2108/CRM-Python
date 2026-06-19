@@ -41,15 +41,24 @@ export default function WhatsApp() {
 
   const formatTime = (timeStr) => {
     if (!timeStr) return '';
-    // Keep standard formatted strings as is (for optimistic local rendering)
-    if (timeStr.includes(' AM') || timeStr.includes(' PM')) return timeStr;
+    const str = String(timeStr).trim();
+    if (str.includes(' AM') || str.includes(' PM')) return str;
     try {
-      const date = new Date(timeStr);
-      if (isNaN(date.getTime())) return timeStr;
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } catch (e) {
-      return timeStr;
+      const date = new Date(str);
+      if (!isNaN(date.getTime())) {
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      }
+    } catch (e) {}
+    // Fallback: Parse ISO manually (T[HH]:[MM])
+    const match = str.match(/T(\d{2}):(\d{2})/);
+    if (match) {
+      let h = parseInt(match[1], 10);
+      const m = match[2];
+      const suffix = h >= 12 ? 'PM' : 'AM';
+      h = h % 12 || 12;
+      return `${String(h).padStart(2, '0')}:${m} ${suffix}`;
     }
+    return str;
   };
 
   const [message, setMessage] = useState('');
@@ -623,7 +632,7 @@ export default function WhatsApp() {
                     // Incoming (left-aligned)
                     return (
                       <div key={idx} className="flex flex-col items-start gap-1 max-w-[80%]">
-                        <div className="bg-white text-slate-800 p-2.5 rounded-xl rounded-tl-none shadow-sm text-[13px] leading-relaxed relative min-w-[120px]">
+                        <div className="bg-white text-slate-800 pt-2.5 px-3 pb-5.5 rounded-xl rounded-tl-none shadow-sm text-[13px] leading-relaxed relative min-w-[130px]">
                           <div className="text-[11px] font-bold text-emerald-600 flex items-center gap-1 mb-1">
                             <span className="material-symbols-outlined text-[12px]">bolt</span>
                             {activeChat.name}
@@ -665,7 +674,7 @@ export default function WhatsApp() {
                   const isBot = msg.sender === 'bot';
                   return (
                     <div key={idx} className="flex flex-col items-end gap-1 max-w-[80%] ml-auto">
-                      <div className={`text-slate-800 p-2.5 rounded-xl rounded-tr-none shadow-sm text-[13px] leading-relaxed relative min-w-[120px] ${
+                      <div className={`text-slate-800 pt-2.5 px-3 pb-5.5 rounded-xl rounded-tr-none shadow-sm text-[13px] leading-relaxed relative min-w-[130px] ${
                         isBot 
                           ? 'bg-indigo-50 dark:bg-indigo-950/45 border border-indigo-200/60 dark:border-indigo-850/50' 
                           : 'bg-[#d1fae5] dark:bg-emerald-950/30'
