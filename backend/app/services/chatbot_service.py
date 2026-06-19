@@ -113,29 +113,62 @@ async def send_whatsapp_message_via_api(tenant_id: str, to_phone: str, msg_paylo
     if not phone_id or not access_token or access_token.startswith("mock_"):
         # Sandbox / Mock Mode
         logger.info(f"[MOCK WHATSAPP SEND] To: {to_phone}, Payload: {msg_payload}")
-        return
-        
-    # Real Meta API Call
-    import httpx
+    else:
+        # Real Meta API Call
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.post(
+                    f"https://graph.facebook.com/{settings.META_GRAPH_API_VERSION}/{phone_id}/messages",
+                    headers={
+                        "Authorization": f"Bearer {access_token}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "messaging_product": "whatsapp",
+                        "recipient_type": "individual",
+                        "to": to_phone,
+                        **msg_payload
+                    }
+                )
+                if resp.status_code != 200:
+                    logger.error(f"Meta API Send message error: {resp.text}")
+        except Exception as e:
+            logger.error(f"Error calling Meta API to send message: {e}")
+
+    # Centralized DB logging for outgoing bot replies
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(
-                f"https://graph.facebook.com/{settings.META_GRAPH_API_VERSION}/{phone_id}/messages",
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "messaging_product": "whatsapp",
-                    "recipient_type": "individual",
-                    "to": to_phone,
-                    **msg_payload
-                }
-            )
-            if resp.status_code != 200:
-                logger.error(f"Meta API Send message error: {resp.text}")
-    except Exception as e:
-        logger.error(f"Error calling Meta API to send message: {e}")
+        with get_db() as db:
+            lead_id = db.execute(
+                text("SELECT lead_id FROM leads WHERE workspace_id = :ws_id AND phone_primary = :phone AND deleted_at IS NULL LIMIT 1"),
+                {"ws_id": tenant_id, "phone": to_phone}
+            ).scalar()
+            
+            if lead_id:
+                body = ""
+                if msg_payload.get("type") == "text":
+                    body = msg_payload.get("text", {}).get("body", "")
+                elif msg_payload.get("type") == "image":
+                    caption = msg_payload.get("image", {}).get("caption", "")
+                    link = msg_payload.get("image", {}).get("link", "")
+                    body = f"[Image Link: {link}] {caption}" if link else caption
+                    
+                db.execute(
+                    text("""
+                    INSERT INTO lead_messages (id, workspace_id, lead_id, channel, message_type, message_body, sender, receiver, delivery_status, message_time, created_at)
+                    VALUES (:id, :ws_id, :lead_id, 'whatsapp', 'text', :body, 'bot', :receiver, 'sent', NOW(), NOW())
+                    """),
+                    {
+                        "id": f"wamid.OUT_{uuid_uuid4()}",
+                        "ws_id": tenant_id,
+                        "lead_id": lead_id,
+                        "body": body,
+                        "receiver": to_phone
+                    }
+                )
+                db.commit()
+    except Exception as db_err:
+        logger.error(f"Failed to log outgoing chatbot message in DB: {db_err}")
 
 async def evaluate_flow_node(
     tenant_id: str, 
@@ -186,21 +219,6 @@ async def evaluate_flow_node(
             }
             
         await send_whatsapp_message_via_api(tenant_id, phone, msg_payload)
-        
-        # Save outbound message in DB
-        db.execute(
-            text("""
-            INSERT INTO lead_messages (id, workspace_id, lead_id, channel, message_type, message_body, sender, receiver, delivery_status)
-            VALUES (:id, :ws_id, :lead_id, 'whatsapp', 'text', :body, 'bot', :receiver, 'sent')
-            """),
-            {
-                "id": str(uuid_uuid4()),
-                "ws_id": tenant_id,
-                "lead_id": lead_id,
-                "body": f"[Image Link: {media_url}] {body_text}" if media_url else body_text,
-                "receiver": phone
-            }
-        )
         
         # Move to next node connected by edge
         next_node = db.execute(

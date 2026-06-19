@@ -282,7 +282,17 @@ async def get_conversations(
         # Get all leads that have messages in lead_messages on the 'whatsapp' channel
         query = text("""
             SELECT l.lead_id, l.full_name AS name, l.phone_primary, l.email, l.lead_score AS score,
-                   lm.message_body, lm.message_time, lm.sender, lm.delivery_status
+                   lm.message_body, lm.message_time, lm.sender, lm.delivery_status,
+                   cs.status AS conversation_status,
+                   (
+                       SELECT COUNT(*) 
+                       FROM lead_messages lm_unread 
+                       WHERE lm_unread.lead_id = l.lead_id 
+                         AND lm_unread.workspace_id = :ws_id 
+                         AND lm_unread.channel = 'whatsapp'
+                         AND lm_unread.sender = 'user' 
+                         AND lm_unread.is_read = 0
+                   ) AS unread_count
             FROM leads l
             JOIN (
                 SELECT lm1.lead_id, lm1.message_body, lm1.message_time, lm1.sender, lm1.delivery_status
@@ -294,6 +304,7 @@ async def get_conversations(
                     GROUP BY lead_id
                 ) lm2 ON lm1.lead_id = lm2.lead_id AND lm1.message_time = lm2.max_time
             ) lm ON l.lead_id = lm.lead_id
+            LEFT JOIN lead_conversation_states cs ON l.lead_id = cs.lead_id
             WHERE l.workspace_id = :ws_id AND l.deleted_at IS NULL
             ORDER BY lm.message_time DESC
         """)
@@ -302,6 +313,12 @@ async def get_conversations(
         
         conversations = []
         for r in rows:
+            # If conversation status in DB is 'human', botHandled is False and waiting is True
+            conv_status = r[9] if len(r) > 9 else None
+            bot_handled = conv_status != 'human' if conv_status is not None else r[7] == 'bot'
+            is_waiting = conv_status == 'human'
+            unread_count = r[10] if len(r) > 10 else 0
+            
             conversations.append({
                 "id": r[0],
                 "name": r[1],
@@ -310,10 +327,11 @@ async def get_conversations(
                 "score": r[4] or 50,
                 "lastMessage": r[5],
                 "time": r[6].strftime("%I:%M %p") if r[6] else "",
-                "unread": 0,
+                "unread": unread_count,
                 "avatar": f"https://api.dicebear.com/7.x/adventurer/svg?seed={r[1]}",
-                "botHandled": r[7] == 'bot',
-                "assignedTo": "Gajera Prince Laxmanbhai" if r[7] != 'bot' else "AI Bot",
+                "botHandled": bot_handled,
+                "waiting": is_waiting,
+                "assignedTo": "Gajera Prince Laxmanbhai" if not bot_handled else "AI Bot",
                 "lastAssignedTime": "Just now",
                 "online": True
             })
@@ -329,6 +347,17 @@ async def get_messages(
 ):
     tenant_id = request.state.tenant.id
     with get_db() as db:
+        # Mark incoming messages from this lead as read
+        db.execute(
+            text("""
+            UPDATE lead_messages 
+            SET is_read = 1 
+            WHERE workspace_id = :ws_id AND lead_id = :lead_id AND channel = 'whatsapp' AND sender = 'user' AND is_read = 0
+            """),
+            {"ws_id": tenant_id, "lead_id": lead_id}
+        )
+        db.commit()
+
         query = text("""
             SELECT sender, message_body, message_time, delivery_status
             FROM lead_messages
@@ -348,6 +377,7 @@ async def get_messages(
             })
             
         return success_response(data=messages)
+
 
 
 class SendWhatsAppPayload(BaseModel):
@@ -425,9 +455,59 @@ async def send_whatsapp_message(
                 "receiver": to_phone
             }
         )
+        # Update or insert conversation state status to 'human'
+        db.execute(
+            text("""
+            INSERT INTO lead_conversation_states (lead_id, workspace_id, status, last_message_at)
+            VALUES (:lead_id, :ws_id, 'human', NOW())
+            ON DUPLICATE KEY UPDATE status = 'human', last_message_at = NOW()
+            """),
+            {"lead_id": lead_id, "ws_id": tenant_id}
+        )
         db.commit()
         
     return success_response(message="Message sent successfully.")
+
+
+@router.post("/conversations/{lead_id}/takeover")
+async def takeover_conversation(
+    lead_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    tenant_id = request.state.tenant.id
+    with get_db() as db:
+        db.execute(
+            text("""
+            INSERT INTO lead_conversation_states (lead_id, workspace_id, status, last_message_at)
+            VALUES (:lead_id, :ws_id, 'human', NOW())
+            ON DUPLICATE KEY UPDATE status = 'human', last_message_at = NOW()
+            """),
+            {"lead_id": lead_id, "ws_id": tenant_id}
+        )
+        db.commit()
+    return success_response(message="Conversation taken over by agent.")
+
+
+@router.post("/conversations/{lead_id}/return-to-bot")
+async def return_to_bot(
+    lead_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    tenant_id = request.state.tenant.id
+    with get_db() as db:
+        db.execute(
+            text("""
+            INSERT INTO lead_conversation_states (lead_id, workspace_id, current_flow_id, current_node_id, status, last_message_at)
+            VALUES (:lead_id, :ws_id, NULL, NULL, 'bot', NOW())
+            ON DUPLICATE KEY UPDATE current_flow_id = NULL, current_node_id = NULL, status = 'bot', last_message_at = NOW()
+            """),
+            {"lead_id": lead_id, "ws_id": tenant_id}
+        )
+        db.commit()
+    return success_response(message="Conversation returned to AI Bot Responder.")
+
 
 
 # --- Chatbot Flow Builder APIs ---

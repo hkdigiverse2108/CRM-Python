@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp, getTenantId } from '@/context/AppContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -17,6 +17,22 @@ export default function WhatsApp() {
   const [conversations, setConversations] = useState([]);
   const [activeChatId, setActiveChatId] = useState('');
   const [messages, setMessages] = useState([]);
+  const messagesContainerRef = useRef(null);
+
+  // Auto scroll to bottom of chat thread when messages array or active chat changes
+  useEffect(() => {
+    if (messagesContainerRef.current) {
+      const container = messagesContainerRef.current;
+      // Scroll immediately
+      container.scrollTop = container.scrollHeight;
+      // Scroll again after browser paint completes
+      const timeoutId = setTimeout(() => {
+        container.scrollTop = container.scrollHeight;
+      }, 80);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [messages, activeChatId]);
+
 
   const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 
@@ -118,13 +134,42 @@ export default function WhatsApp() {
     }
   };
 
-  const handleTakeover = () => {
-    addToast('Assigned chat to yourself', 'success');
+  const handleTakeover = async () => {
+    if (!activeChatId) return;
+    try {
+      const res = await fetch(`${API_BASE}/integrations/whatsapp/conversations/${activeChatId}/takeover`, {
+        method: 'POST',
+        headers: getHeaders()
+      });
+      if (res.ok) {
+        addToast('Assigned chat to yourself', 'success');
+        fetchConversations();
+      } else {
+        addToast('Failed to take over conversation', 'error');
+      }
+    } catch {
+      addToast('Network error during takeover', 'error');
+    }
   };
 
-  const handleReturnToBot = () => {
-    addToast('Conversation returned to AI Bot Responder', 'info');
+  const handleReturnToBot = async () => {
+    if (!activeChatId) return;
+    try {
+      const res = await fetch(`${API_BASE}/integrations/whatsapp/conversations/${activeChatId}/return-to-bot`, {
+        method: 'POST',
+        headers: getHeaders()
+      });
+      if (res.ok) {
+        addToast('Conversation returned to AI Bot Responder', 'info');
+        fetchConversations();
+      } else {
+        addToast('Failed to return conversation to bot', 'error');
+      }
+    } catch {
+      addToast('Network error returning to bot', 'error');
+    }
   };
+
 
   // Filter conversations
   const filteredConversations = conversations.filter(chat => {
@@ -275,7 +320,9 @@ export default function WhatsApp() {
                   className={`rounded-lg p-3 cursor-pointer relative transition-all ${
                     isActive 
                       ? 'bg-emerald-50/50 dark:bg-slate-800 border-l-4 border-l-emerald-600' 
-                      : 'hover:bg-slate-50 dark:hover:bg-slate-800/40 border-l-4 border-l-transparent'
+                      : chat.waiting
+                        ? 'bg-amber-50/80 hover:bg-amber-100/80 dark:bg-amber-950/20 dark:hover:bg-amber-950/30 border-l-4 border-l-amber-500 shadow-sm'
+                        : 'hover:bg-slate-50 dark:hover:bg-slate-800/40 border-l-4 border-l-transparent'
                   }`}
                 >
                   <div className="flex items-center gap-3">
@@ -287,11 +334,16 @@ export default function WhatsApp() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-center mb-1">
-                        <div className="flex items-center gap-1.5 min-w-0">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                           <h4 className="font-bold text-slate-800 dark:text-slate-100 truncate text-sm">{chat.name}</h4>
                           {chat.botHandled && (
                             <span className="bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400 px-1 py-0.5 rounded text-[8px] font-extrabold tracking-wide uppercase shrink-0">
                               BOT
+                            </span>
+                          )}
+                          {chat.waiting && (
+                            <span className="bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 px-1.5 py-0.5 rounded text-[8px] font-extrabold tracking-wide uppercase shrink-0 animate-pulse">
+                              WAITING
                             </span>
                           )}
                         </div>
@@ -409,6 +461,7 @@ export default function WhatsApp() {
 
               {/* Chat Thread stream with classic sand background */}
               <div 
+                ref={messagesContainerRef}
                 className="flex-1 overflow-y-auto p-6 space-y-4 relative"
                 style={{
                   backgroundColor: '#efeae2',
@@ -454,11 +507,28 @@ export default function WhatsApp() {
                   }
 
                   // Outgoing (right-aligned)
+                  const isBot = msg.sender === 'bot';
                   return (
                     <div key={idx} className="flex flex-col items-end gap-1 max-w-[80%] ml-auto">
-                      <div className="bg-[#d1fae5] text-slate-800 p-2.5 rounded-xl rounded-tr-none shadow-sm text-[13px] leading-relaxed relative min-w-[120px]">
+                      <div className={`text-slate-800 p-2.5 rounded-xl rounded-tr-none shadow-sm text-[13px] leading-relaxed relative min-w-[120px] ${
+                        isBot 
+                          ? 'bg-indigo-50 dark:bg-indigo-950/45 border border-indigo-200/60 dark:border-indigo-850/50' 
+                          : 'bg-[#d1fae5] dark:bg-emerald-950/30'
+                      }`}>
+                        {isBot && (
+                          <div className="text-[10px] font-extrabold text-indigo-650 dark:text-indigo-400 flex items-center gap-1.5 mb-1.5 border-b border-indigo-100 dark:border-indigo-900/50 pb-0.5 select-none">
+                            <span className="material-symbols-outlined text-[13px]">smart_toy</span>
+                            <span>AI Responder</span>
+                          </div>
+                        )}
+                        {!isBot && (
+                          <div className="text-[10px] font-extrabold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5 mb-1.5 border-b border-emerald-100 dark:border-emerald-900/50 pb-0.5 select-none">
+                            <span className="material-symbols-outlined text-[13px]">person</span>
+                            <span>Agent Reply</span>
+                          </div>
+                        )}
                         {msg.image && (
-                          <div className="mb-2 max-w-full rounded-lg overflow-hidden border border-emerald-100 shadow-sm">
+                          <div className={`mb-2 max-w-full rounded-lg overflow-hidden border shadow-sm ${isBot ? 'border-indigo-150' : 'border-emerald-100'}`}>
                             <img className="w-full max-h-[300px] object-cover cursor-pointer hover:opacity-90" src={msg.image} alt="Upload" onClick={() => addToast('Opening full scale image')}/>
                           </div>
                         )}
@@ -473,11 +543,12 @@ export default function WhatsApp() {
 
                         <div className="absolute bottom-1 right-2 flex items-center gap-1 text-[9px] text-slate-450 select-none">
                           <span>{msg.time}</span>
-                          <span className="material-symbols-outlined text-[12px] text-sky-550 font-bold">done_all</span>
+                          <span className="material-symbols-outlined text-[12px] text-sky-555 font-bold">done_all</span>
                         </div>
                       </div>
                     </div>
                   );
+
                 })}
               </div>
 
