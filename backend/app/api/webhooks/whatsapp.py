@@ -189,8 +189,19 @@ async def process_whatsapp_webhook(request: Request):
                         
                 elif "statuses" in value:
                     for status in value.get("statuses", []):
-                        logger.info(f"[WHATSAPP STATUS UPDATE] ID: {status.get('id')}, Status: {status.get('status')}")
-                        
-    return {"status": "success"}
+                        wamid = status.get("id")
+                        msg_status = status.get("status")
+                        logger.info(f"[WHATSAPP STATUS UPDATE] ID: {wamid}, Status: {msg_status}")
+                        if wamid and msg_status:
+                            with get_db() as db:
+                                db.execute(
+                                    text("""
+                                    UPDATE lead_messages 
+                                    SET delivery_status = :status 
+                                    WHERE (id = :wamid OR id = CONCAT('wamid.OUT_', :wamid)) AND channel = 'whatsapp'
+                                    """),
+                                    {"status": msg_status, "wamid": wamid}
+                                )
+                                db.commit()
                         
     return {"status": "success"}

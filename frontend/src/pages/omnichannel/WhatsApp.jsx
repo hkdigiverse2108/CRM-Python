@@ -542,8 +542,14 @@ export default function WhatsApp() {
                         </span>
                       )}
                     </div>
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
-                      📞 {activeChat.phone}
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-0.5 flex items-center gap-2">
+                      <span>📞 {activeChat.phone}</span>
+                      {activeChat.online && (
+                        <span className="text-[10px] text-emerald-500 font-sans font-bold flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                          online
+                        </span>
+                      )}
                     </span>
                   </div>
                 </div>
@@ -709,9 +715,15 @@ export default function WhatsApp() {
                           </div>
                         )}
 
-                        <div className="absolute bottom-1 right-2 flex items-center gap-1 text-[9px] text-slate-455 select-none">
+                        <div className="absolute bottom-1 right-2 flex items-center gap-1 text-[9px] text-slate-400 select-none">
                           <span>{formatTime(msg.time)}</span>
-                          <span className="material-symbols-outlined text-[12px] text-sky-555 font-bold">done_all</span>
+                          {msg.status === 'read' ? (
+                            <span className="material-symbols-outlined text-[12px] text-sky-500 font-bold" title="Read">done_all</span>
+                          ) : msg.status === 'delivered' ? (
+                            <span className="material-symbols-outlined text-[12px] text-slate-400 font-bold" title="Delivered">done_all</span>
+                          ) : (
+                            <span className="material-symbols-outlined text-[12px] text-slate-400" title="Sent">done</span>
+                          )}
                         </div>
                       </div>
                     </div>
