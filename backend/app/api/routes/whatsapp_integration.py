@@ -307,6 +307,9 @@ async def get_templates(
                 data = resp.json().get("data", [])
                 templates = []
                 for idx, t in enumerate(data):
+                    name = t.get("name")
+                    if name in ["hello_world", "werty", "vbnm"]:
+                        continue
                     body = ""
                     header_text = None
                     has_image = False
@@ -321,7 +324,7 @@ async def get_templates(
                                 
                     templates.append({
                         "id": t.get("id") or str(idx + 1),
-                        "name": t.get("name"),
+                        "name": name,
                         "category": t.get("category"),
                         "language": t.get("language"),
                         "status": t.get("status", "APPROVED").capitalize(),
