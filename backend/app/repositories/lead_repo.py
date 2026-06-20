@@ -53,6 +53,8 @@ class LeadRepository(BaseRepository[Lead]):
             value=float(row["deal_value_expected"] or 0.0),
             created_at=created_at or datetime.now(timezone.utc),
             updated_at=updated_at or datetime.now(timezone.utc),
+            product_interest=row.get("product_interest"),
+            tags=row.get("tags"),
         )
 
     async def get_by_id(self, entity_id: str, tenant_id: str) -> Optional[Lead]:

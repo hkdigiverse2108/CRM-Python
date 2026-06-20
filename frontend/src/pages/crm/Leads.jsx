@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { leads as initialLeads } from '@/data/mockData';
 import { formatCurrency, formatDate, getStatusColor } from '@/lib/utils';
 import { useApp } from '@/context/AppContext';
@@ -12,13 +12,39 @@ import {
 } from 'lucide-react';
 
 export default function Leads() {
-  const { addToast, leads: allLeads, setLeads: setAllLeads, convertLeadToClient, updateLead, deleteLead, createLead } = useApp();
+  const { addToast, leads: allLeads, setLeads: setAllLeads, convertLeadToClient, updateLead, deleteLead, createLead, token, tenantId } = useApp();
   const [selectedLeadId, setSelectedLeadId] = useState(allLeads[0]?.id || '');
   const selectedLead = allLeads.find(l => l.id === selectedLeadId) || allLeads[0];
   const [search, setSearch] = useState('');
   const [selectedStage, setSelectedStage] = useState('All');
   const [selectedSource, setSelectedSource] = useState('All');
   const [selectedTag, setSelectedTag] = useState('All');
+  const [workspaceLabels, setWorkspaceLabels] = useState([]);
+  const [selectedLabel, setSelectedLabel] = useState('All');
+
+  useEffect(() => {
+    const fetchLabels = async () => {
+      if (!token) return;
+      try {
+        const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+        const res = await fetch(`${API_BASE}/integrations/whatsapp/labels`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'X-Tenant-ID': tenantId || '96722',
+          }
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && json.data) {
+            setWorkspaceLabels(json.data.map(l => l.name));
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch lead labels:', err);
+      }
+    };
+    fetchLabels();
+  }, [token, tenantId]);
   const [showAddLead, setShowAddLead] = useState(false);
   const [showEditLead, setShowEditLead] = useState(false);
   const [editLeadData, setEditLeadData] = useState(null);
@@ -71,7 +97,9 @@ export default function Leads() {
     else if (selectedTag === 'Enterprise') matchesTag = l.value >= 1000000;
     else if (selectedTag === 'Retail') matchesTag = (l.company || '').toLowerCase().includes('retail') || (l.company || '').toLowerCase().includes('foods');
 
-    return matchesSearch && matchesStage && matchesSource && matchesTag;
+    const matchesLabel = selectedLabel === 'All' || l.product_interest === selectedLabel;
+
+    return matchesSearch && matchesStage && matchesSource && matchesTag && matchesLabel;
   });
 
   const handleAddLead = async () => {
@@ -289,6 +317,41 @@ export default function Leads() {
                 ))}
               </div>
             </div>
+
+            <div className="border-t border-slate-100 dark:border-slate-800 pt-3">
+              <h3 className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Product Interest</h3>
+              <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
+                <button
+                  onClick={() => setSelectedLabel('All')}
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold ${
+                    selectedLabel === 'All'
+                      ? 'bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 font-bold'
+                      : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                  }`}
+                >
+                  <span>All</span>
+                  <span className="text-[10px] px-1.5 py-0.2 bg-slate-100 dark:bg-slate-800 text-slate-400 rounded-full">
+                    {allLeads.length}
+                  </span>
+                </button>
+                {workspaceLabels.map(lbl => (
+                  <button
+                    key={lbl}
+                    onClick={() => setSelectedLabel(lbl)}
+                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold ${
+                      selectedLabel === lbl
+                        ? 'bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 font-bold'
+                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <span className="truncate">{lbl}</span>
+                    <span className="text-[10px] px-1.5 py-0.2 bg-slate-100 dark:bg-slate-800 text-slate-400 rounded-full shrink-0">
+                      {allLeads.filter(l => l.product_interest === lbl).length}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -312,6 +375,7 @@ export default function Leads() {
                   <tr>
                     <th>Lead Name</th>
                     <th>Company</th>
+                    <th>Label</th>
                     <th>Value</th>
                     <th>Stage</th>
                     <th>Source</th>
@@ -330,6 +394,15 @@ export default function Leads() {
                         <div className="text-[10px] text-slate-400">{lead.email}</div>
                       </td>
                       <td className="text-xs text-slate-600 dark:text-slate-300 font-medium">{lead.company}</td>
+                      <td>
+                        {lead.product_interest ? (
+                          <span className="text-[10px] bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                            {lead.product_interest}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500 italic">Unlabeled</span>
+                        )}
+                      </td>
                       <td className="text-xs font-bold text-slate-800 dark:text-white">{formatCurrency(lead.value)}</td>
                       <td><span className={`badge ${getStatusColor(lead.stage || 'New')}`}>{lead.stage || 'New'}</span></td>
                       <td className="text-xs text-slate-400 dark:text-slate-500 font-semibold">{lead.source || 'Website'}</td>
@@ -438,6 +511,12 @@ export default function Leads() {
                 <div className="flex items-center gap-2.5">
                   <User size={13} className="text-slate-400 shrink-0" />
                   <span className="text-slate-655 dark:text-slate-300">Rep: {selectedLead.assignedTo || 'Unassigned'}</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <Tag size={13} className="text-slate-400 shrink-0" />
+                  <span className="text-slate-655 dark:text-slate-300">
+                    Interest: <span className="font-bold text-violet-600 dark:text-violet-400">{selectedLead.product_interest || 'Unlabeled'}</span>
+                  </span>
                 </div>
                 <div className="flex items-center gap-2.5">
                   <Calendar size={13} className="text-slate-400 shrink-0" />

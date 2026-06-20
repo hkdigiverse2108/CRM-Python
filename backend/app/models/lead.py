@@ -28,6 +28,8 @@ class Lead:
     value: float = 0.0
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    product_interest: Optional[str] = None
+    tags: Optional[str] = None
 
     def to_dict(self) -> dict:
         return {
@@ -45,4 +47,6 @@ class Lead:
             "value": self.value,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
+            "product_interest": self.product_interest,
+            "tags": self.tags,
         }

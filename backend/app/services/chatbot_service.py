@@ -550,6 +550,27 @@ async def run_chatbot_flow_engine(tenant_id: str, phone: str, text_body: str, db
                     update_parts.append("deal_value_expected = :deal_value_expected")
             except Exception as num_err:
                 logger.warning(f"Failed to parse budget value '{budget_val}': {num_err}")
+
+        product_interest_val = variables.get("product_interest") or variables.get("service") or variables.get("label") or variables.get("interest") or variables.get("product")
+        if product_interest_val:
+            product_interest_val = str(product_interest_val).strip()
+            if product_interest_val:
+                update_parts.append("product_interest = :product_interest")
+                params["product_interest"] = product_interest_val
+                
+                # Auto-add label to workspace_lead_labels if not already existing
+                try:
+                    label_exists = db.execute(
+                        text("SELECT id FROM workspace_lead_labels WHERE workspace_id = :ws_id AND label_name = :name LIMIT 1"),
+                        {"ws_id": tenant_id, "name": product_interest_val}
+                    ).scalar()
+                    if not label_exists:
+                        db.execute(
+                            text("INSERT INTO workspace_lead_labels (id, workspace_id, label_name) VALUES (:id, :ws_id, :name)"),
+                            {"id": uuid_uuid4(), "ws_id": tenant_id, "name": product_interest_val}
+                        )
+                except Exception as lbl_err:
+                    logger.error(f"Failed to auto-add chatbot label '{product_interest_val}' to workspace_lead_labels: {lbl_err}")
             
         if update_parts:
             update_parts.append("updated_at = NOW()")
