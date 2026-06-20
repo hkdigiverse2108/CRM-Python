@@ -37,7 +37,7 @@ def is_duplicate_message(wamid: str) -> bool:
     # Try Redis if configured
     settings = get_settings()
     try:
-        import redis
+        import redis  # type: ignore
         # Simple redis check
         r = redis.Redis.from_url(settings.redis_url or "redis://localhost:6379/0", socket_timeout=2)
         key = f"wa_msg_dup:{wamid}"
@@ -540,6 +540,16 @@ async def run_chatbot_flow_engine(tenant_id: str, phone: str, text_body: str, db
         if name_val and name_val != lead_name:
             update_parts.append("full_name = :name")
             params["name"] = name_val
+            
+        budget_val = variables.get("budget") or variables.get("value") or variables.get("deal_value") or variables.get("price")
+        if budget_val:
+            try:
+                clean_num = "".join(c for c in str(budget_val) if c.isdigit() or c == ".")
+                if clean_num:
+                    params["deal_value_expected"] = float(clean_num)
+                    update_parts.append("deal_value_expected = :deal_value_expected")
+            except Exception as num_err:
+                logger.warning(f"Failed to parse budget value '{budget_val}': {num_err}")
             
         if update_parts:
             update_parts.append("updated_at = NOW()")
