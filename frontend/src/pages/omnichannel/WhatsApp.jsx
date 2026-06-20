@@ -350,6 +350,99 @@ export default function WhatsApp() {
     }
   };
 
+  const [labelDropdownOpen, setLabelDropdownOpen] = useState(false);
+  const [workspaceLabels, setWorkspaceLabels] = useState([]);
+  const [manageModalOpen, setManageModalOpen] = useState(false);
+  const [newLabelName, setNewLabelName] = useState('');
+
+  const fetchLabels = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/integrations/whatsapp/labels`, {
+        headers: getHeaders()
+      });
+      if (res.ok) {
+        const result = await res.json();
+        if (result.success) {
+          setWorkspaceLabels(result.data || []);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching labels:', err);
+    }
+  }, [getHeaders]);
+
+  useEffect(() => {
+    fetchLabels();
+  }, [fetchLabels]);
+
+  const handleAddLabel = async () => {
+    if (!newLabelName.trim()) return;
+    try {
+      const res = await fetch(`${API_BASE}/integrations/whatsapp/labels`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ label_name: newLabelName.trim() })
+      });
+      if (res.ok) {
+        addToast('Label added successfully!', 'success');
+        setNewLabelName('');
+        fetchLabels();
+      } else {
+        const err = await res.json();
+        addToast(err.detail || 'Failed to add label', 'error');
+      }
+    } catch {
+      addToast('Network error adding label', 'error');
+    }
+  };
+
+  const handleDeleteLabel = async (labelId) => {
+    try {
+      const res = await fetch(`${API_BASE}/integrations/whatsapp/labels/${labelId}`, {
+        method: 'DELETE',
+        headers: getHeaders()
+      });
+      if (res.ok) {
+        addToast('Label deleted successfully', 'info');
+        fetchLabels();
+      } else {
+        addToast('Failed to delete label', 'error');
+      }
+    } catch {
+      addToast('Network error deleting label', 'error');
+    }
+  };
+
+  const handleUpdateLabel = async (lbl) => {
+    setLabelDropdownOpen(false);
+    if (!activeChatId) return;
+    
+    setConversations(prev => prev.map(c => {
+      if (c.id === activeChatId) {
+        return { ...c, productInterest: lbl };
+      }
+      return c;
+    }));
+
+    try {
+      const res = await fetch(`${API_BASE}/integrations/whatsapp/conversations/${activeChatId}/label`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ product_interest: lbl })
+      });
+      if (res.ok) {
+        addToast(`Lead labeled as "${lbl || 'Unlabelled'}"`, 'success');
+        fetchConversations();
+      } else {
+        addToast('Failed to update lead label', 'error');
+        fetchConversations();
+      }
+    } catch {
+      addToast('Network error updating lead label', 'error');
+      fetchConversations();
+    }
+  };
+
   const handleClearChat = async () => {
     setShowMoreMenu(false);
     if (!activeChatId) return;
@@ -619,6 +712,51 @@ export default function WhatsApp() {
                     </div>
                     <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-0.5 flex items-center gap-2">
                       <span>📞 {activeChat.phone}</span>
+                      
+                      {/* Label Dropdown Selector */}
+                      <div className="relative inline-block text-left z-30">
+                        <button
+                          onClick={() => setLabelDropdownOpen(!labelDropdownOpen)}
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold text-slate-600 hover:text-emerald-700 bg-slate-100 hover:bg-emerald-50 dark:bg-slate-800 dark:hover:bg-slate-700 rounded border border-slate-200 dark:border-slate-700 transition-colors"
+                          title="Assign Lead Label"
+                        >
+                          <span className="material-symbols-outlined text-[10px]">sell</span>
+                          <span>{activeChat.productInterest || "Unlabelled"}</span>
+                        </button>
+                        {labelDropdownOpen && (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => setLabelDropdownOpen(false)} />
+                            <div className="absolute left-0 mt-1 w-44 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg py-1 z-50">
+                               <p className="px-2.5 py-1 text-[8px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700">Category Label</p>
+                              {workspaceLabels.map(lbl => (
+                                <button
+                                  key={lbl.id}
+                                  onClick={() => handleUpdateLabel(lbl.name)}
+                                  className={`w-full text-left px-2.5 py-1.5 text-[11px] hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors ${activeChat.productInterest === lbl.name ? 'text-emerald-600 font-bold bg-emerald-50/30' : 'text-slate-700 dark:text-slate-200'}`}
+                                >
+                                  {lbl.name}
+                                </button>
+                              ))}
+                              {activeChat.productInterest && (
+                                <button
+                                  onClick={() => handleUpdateLabel(null)}
+                                  className="w-full text-left px-2.5 py-1.5 text-[11px] text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors border-t border-slate-100 dark:border-slate-700 font-semibold"
+                                >
+                                  Clear Label
+                                </button>
+                              )}
+                              <button
+                                onClick={() => { setLabelDropdownOpen(false); setManageModalOpen(true); }}
+                                className="w-full text-left px-2.5 py-1.5 text-[11px] text-indigo-650 hover:bg-slate-50 dark:text-indigo-400 dark:hover:bg-slate-700/60 transition-colors border-t border-slate-100 dark:border-slate-700 font-semibold flex items-center gap-1.5"
+                              >
+                                <span className="material-symbols-outlined text-[12px]">settings</span>
+                                <span>Manage Labels</span>
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+
                       {activeChat.online && (
                         <span className="text-[10px] text-emerald-500 font-sans font-bold flex items-center gap-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -1032,6 +1170,82 @@ export default function WhatsApp() {
           </>
         )}
       </div>
+
+      {/* Manage Labels Modal */}
+      {manageModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-805 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-[scaleUp_200ms_ease]">
+            <header className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 flex justify-between items-center">
+              <h3 className="font-bold text-sm text-slate-850 dark:text-white flex items-center gap-2">
+                <span className="material-symbols-outlined text-[20px] text-indigo-500">settings</span>
+                Manage Lead Labels
+              </h3>
+              <button 
+                onClick={() => setManageModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <span className="material-symbols-outlined text-[18px] block">close</span>
+              </button>
+            </header>
+            
+            <div className="p-4 space-y-4">
+              {/* Add New Label Form */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Enter new label (e.g. VIP Lead)"
+                  value={newLabelName}
+                  onChange={e => setNewLabelName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleAddLabel()}
+                  className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:ring-0 focus:outline-none placeholder-slate-400 dark:text-white"
+                />
+                <button
+                  onClick={handleAddLabel}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1"
+                >
+                  <span className="material-symbols-outlined text-[14px]">add</span>
+                  Add
+                </button>
+              </div>
+
+              {/* Labels List */}
+              <div className="max-h-60 overflow-y-auto space-y-1.5 border border-slate-100 dark:border-slate-800 rounded-xl p-2 bg-slate-50/50 dark:bg-slate-900/30">
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider px-2 mb-1.5">Workspace Labels</p>
+                {workspaceLabels.map(lbl => (
+                  <div 
+                    key={lbl.id} 
+                    className="flex justify-between items-center p-2 rounded-lg bg-white dark:bg-slate-850 border border-slate-100 dark:border-slate-800 shadow-sm text-xs text-slate-800 dark:text-slate-200 hover:shadow transition-shadow"
+                  >
+                    <span className="font-semibold flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[14px] text-slate-400 font-bold">sell</span>
+                      {lbl.name}
+                    </span>
+                    <button
+                      onClick={() => handleDeleteLabel(lbl.id)}
+                      className="text-slate-400 hover:text-red-500 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                      title="Delete Label"
+                    >
+                      <span className="material-symbols-outlined text-[15px] block">delete</span>
+                    </button>
+                  </div>
+                ))}
+                {workspaceLabels.length === 0 && (
+                  <p className="text-center py-6 text-[11px] text-slate-400">No labels configured. Add one above.</p>
+                )}
+              </div>
+            </div>
+
+            <footer className="p-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-right">
+              <button 
+                onClick={() => setManageModalOpen(false)}
+                className="px-4 py-1.5 bg-slate-200 hover:bg-slate-250 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-xl text-xs transition-colors"
+              >
+                Close
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

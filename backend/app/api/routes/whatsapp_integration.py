@@ -292,7 +292,9 @@ async def get_conversations(
                          AND lm_unread.channel = 'whatsapp'
                          AND lm_unread.sender = 'user' 
                          AND lm_unread.is_read = 0
-                   ) AS unread_count
+                   ) AS unread_count,
+                   l.product_interest,
+                   l.tags
             FROM leads l
             JOIN (
                 SELECT lm1.lead_id, lm1.message_body, lm1.message_time, lm1.sender, lm1.delivery_status
@@ -331,6 +333,15 @@ async def get_conversations(
                     diff = min(diff_utc, diff_local)
                 is_online = diff < 60  # 1 minute (60 seconds)
             
+            tags_list = []
+            if len(r) > 12 and r[12]:
+                try:
+                    tags_list = json.loads(r[12])
+                    if not isinstance(tags_list, list):
+                        tags_list = [str(tags_list)]
+                except Exception:
+                    tags_list = [t.strip() for t in r[12].split(",") if t.strip()]
+
             conversations.append({
                 "id": r[0],
                 "name": r[1],
@@ -345,7 +356,9 @@ async def get_conversations(
                 "waiting": is_waiting,
                 "assignedTo": "Gajera Prince Laxmanbhai" if not bot_handled else "AI Bot",
                 "lastAssignedTime": "Just now",
-                "online": is_online
+                "online": is_online,
+                "productInterest": r[11] if len(r) > 11 else None,
+                "tags": tags_list
             })
             
         return success_response(data=conversations)
@@ -835,6 +848,133 @@ async def return_to_bot(
         db.commit()
     return success_response(message="Conversation returned to AI Bot Responder.")
 
+
+class UpdateLabelPayload(BaseModel):
+    product_interest: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+@router.post("/conversations/{lead_id}/label")
+async def update_lead_label(
+    lead_id: str,
+    payload: UpdateLabelPayload,
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    tenant_id = request.state.tenant.id
+    with get_db() as db:
+        lead_exists = db.execute(
+            text("SELECT lead_id FROM leads WHERE workspace_id = :ws_id AND lead_id = :lead_id AND deleted_at IS NULL LIMIT 1"),
+            {"ws_id": tenant_id, "lead_id": lead_id}
+        ).scalar()
+        if not lead_exists:
+            raise HTTPException(status_code=404, detail="Lead not found.")
+            
+        update_parts = []
+        params = {"lead_id": lead_id, "ws_id": tenant_id}
+        
+        if payload.product_interest is not None:
+            update_parts.append("product_interest = :prod_int")
+            params["prod_int"] = payload.product_interest
+            
+        if payload.tags is not None:
+            update_parts.append("tags = :tags")
+            params["tags"] = json.dumps(payload.tags)
+            
+        if update_parts:
+            update_parts.append("updated_at = NOW()")
+            sql = f"UPDATE leads SET {', '.join(update_parts)} WHERE lead_id = :lead_id AND workspace_id = :ws_id"
+            db.execute(text(sql), params)
+            db.commit()
+            
+    return success_response(message="Lead labels updated successfully.")
+
+
+class CreateLabelPayload(BaseModel):
+    label_name: str
+
+@router.get("/labels")
+async def get_workspace_labels(
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    tenant_id = request.state.tenant.id
+    with get_db() as db:
+        rows = db.execute(
+            text("SELECT id, label_name FROM workspace_lead_labels WHERE workspace_id = :ws_id ORDER BY created_at ASC"),
+            {"ws_id": tenant_id}
+        ).mappings().all()
+        
+        # If no labels are set, auto-seed defaults
+        if not rows:
+            DEFAULT_LABELS = [
+                "Software Development",
+                "HRMS SaaS",
+                "Omnichannel Chat",
+                "Finance Billing",
+                "Digital Marketing",
+                "Consulting",
+                "General Inquiry"
+            ]
+            for lbl in DEFAULT_LABELS:
+                db.execute(
+                    text("INSERT INTO workspace_lead_labels (id, workspace_id, label_name) VALUES (:id, :ws_id, :lbl)"),
+                    {"id": str(uuid.uuid4()), "ws_id": tenant_id, "lbl": lbl}
+                )
+            db.commit()
+            
+            # Fetch again
+            rows = db.execute(
+                text("SELECT id, label_name FROM workspace_lead_labels WHERE workspace_id = :ws_id ORDER BY created_at ASC"),
+                {"ws_id": tenant_id}
+            ).mappings().all()
+            
+        labels = [{"id": r["id"], "name": r["label_name"]} for r in rows]
+        return success_response(data=labels)
+
+@router.post("/labels")
+async def add_workspace_label(
+    payload: CreateLabelPayload,
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    tenant_id = request.state.tenant.id
+    name = payload.label_name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Label name cannot be empty.")
+        
+    with get_db() as db:
+        # Check duplicate
+        exists = db.execute(
+            text("SELECT id FROM workspace_lead_labels WHERE workspace_id = :ws_id AND label_name = :name LIMIT 1"),
+            {"ws_id": tenant_id, "name": name}
+        ).scalar()
+        if exists:
+            raise HTTPException(status_code=400, detail="Label already exists.")
+            
+        label_id = str(uuid.uuid4())
+        db.execute(
+            text("INSERT INTO workspace_lead_labels (id, workspace_id, label_name) VALUES (:id, :ws_id, :name)"),
+            {"id": label_id, "ws_id": tenant_id, "name": name}
+        )
+        db.commit()
+        
+    return success_response(data={"id": label_id, "name": name}, message="Label added successfully.")
+
+@router.delete("/labels/{label_id}")
+async def delete_workspace_label(
+    label_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    tenant_id = request.state.tenant.id
+    with get_db() as db:
+        db.execute(
+            text("DELETE FROM workspace_lead_labels WHERE workspace_id = :ws_id AND id = :id"),
+            {"ws_id": tenant_id, "id": label_id}
+        )
+        db.commit()
+        
+    return success_response(message="Label deleted successfully.")
 
 
 # --- Chatbot Flow Builder APIs ---
