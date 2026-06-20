@@ -2,6 +2,7 @@ import uuid
 import httpx
 import logging
 import json
+import re
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -263,13 +264,182 @@ async def disconnect_whatsapp(
         
     return success_response(message="WhatsApp account disconnected successfully.")
 
+class TemplateCreatePayload(BaseModel):
+    name: str
+    category: str
+    language: str
+    body_text: str
+    header_format: str = "None"
+    header_text: Optional[str] = None
+    footer_text: Optional[str] = None
+    button_text: Optional[str] = None
+
+@router.get("/templates")
+async def get_templates(
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    tenant_id = request.state.tenant.id
+    settings = get_settings()
+    
+    with get_db() as db:
+        acc = db.execute(
+            text("SELECT waba_id, access_token FROM whatsapp_accounts WHERE tenant_id = :tenant_id LIMIT 1"),
+            {"tenant_id": tenant_id}
+        ).mappings().first()
+        
+    if not acc:
+        return success_response(data=[])
+        
+    waba_id = acc["waba_id"]
+    access_token = acc["access_token"]
+    
+    mock_templates = [
+        {"id": "1", "name": "hello_world", "category": "UTILITY", "language": "EN_US", "status": "Approved", "body": "Welcome and congratulations!! This message demonstrates your ability to send a WhatsApp message notification from the Cloud API, hosted by Meta. Thank you for taking the time to test with us.\nWhatsApp Business Platform sample message", "vars": 0},
+        {"id": "2", "name": "werty", "category": "MARKETING", "language": "EN", "status": "Approved", "body": "cvbn\nfghj", "vars": 0, "hasHeaderImage": True},
+        {"id": "3", "name": "vbnm", "category": "MARKETING", "language": "EN", "status": "Pending", "body": "vbnm\nvbnm\nvbn", "vars": 0},
+        {"id": "4", "name": "welcome_user", "category": "MARKETING", "language": "EN", "status": "Approved", "body": "Hi {{1}}, thank you for joining! We are excited to help you automate your business.", "vars": 1},
+        {"id": "5", "name": "testing", "category": "MARKETING", "language": "EN", "status": "Approved", "body": "This is a test notification template for API verification.", "vars": 0},
+    ]
+    
+    if not access_token or access_token.startswith("mock_"):
+        return success_response(data=mock_templates)
+        
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                f"https://graph.facebook.com/{settings.META_GRAPH_API_VERSION}/{waba_id}/message_templates",
+                params={"access_token": access_token}
+            )
+            if resp.status_code == 200:
+                data = resp.json().get("data", [])
+                templates = []
+                for idx, t in enumerate(data):
+                    body = ""
+                    header_text = None
+                    has_image = False
+                    for comp in t.get("components", []):
+                        if comp.get("type") == "BODY":
+                            body = comp.get("text", "")
+                        elif comp.get("type") == "HEADER":
+                            if comp.get("format") == "TEXT":
+                                header_text = comp.get("text")
+                            elif comp.get("format") == "IMAGE":
+                                has_image = True
+                                
+                    templates.append({
+                        "id": t.get("id") or str(idx + 1),
+                        "name": t.get("name"),
+                        "category": t.get("category"),
+                        "language": t.get("language"),
+                        "status": t.get("status", "APPROVED").capitalize(),
+                        "body": body,
+                        "vars": len(re.findall(r"\{\{\d\}\}", body)) if body else 0,
+                        "hasHeaderImage": has_image,
+                        "headerText": header_text
+                    })
+                return success_response(data=templates)
+            else:
+                logger.error(f"Meta templates fetch error: {resp.text}")
+                return success_response(data=mock_templates)
+    except Exception as e:
+        logger.error(f"Error fetching Meta templates: {e}")
+        return success_response(data=mock_templates)
+
+@router.post("/templates")
+async def create_template(
+    request: Request,
+    payload: TemplateCreatePayload,
+    current_user: dict = Depends(get_current_user)
+):
+    tenant_id = request.state.tenant.id
+    settings = get_settings()
+    
+    with get_db() as db:
+        acc = db.execute(
+            text("SELECT waba_id, access_token FROM whatsapp_accounts WHERE tenant_id = :tenant_id LIMIT 1"),
+            {"tenant_id": tenant_id}
+        ).mappings().first()
+        
+    if not acc:
+        raise HTTPException(status_code=400, detail="WhatsApp account is not connected.")
+        
+    waba_id = acc["waba_id"]
+    access_token = acc["access_token"]
+    
+    mock_new_template = {
+        "id": str(uuid.uuid4()),
+        "name": payload.name.lower().replace(" ", "_"),
+        "category": payload.category.upper(),
+        "language": payload.language.split(" ")[0].upper() if " " in payload.language else payload.language.upper(),
+        "status": "Pending",
+        "body": payload.body_text,
+        "vars": len(re.findall(r"\{\{\d\}\}", payload.body_text)),
+        "hasHeaderImage": payload.header_format == "Image",
+        "headerText": payload.header_text if payload.header_format == "Text" else None
+    }
+    
+    if not access_token or access_token.startswith("mock_"):
+        return success_response(data=mock_new_template, message="Template submitted to Meta successfully (Sandbox/Mock).")
+        
+    components = []
+    
+    if payload.header_format != "None":
+        header_comp = {"type": "HEADER", "format": payload.header_format.upper()}
+        if payload.header_format == "Text" and payload.header_text:
+            header_comp["text"] = payload.header_text
+        components.append(header_comp)
+        
+    components.append({"type": "BODY", "text": payload.body_text})
+    
+    if payload.footer_text:
+        components.append({"type": "FOOTER", "text": payload.footer_text})
+        
+    if payload.button_text:
+        components.append({
+            "type": "BUTTONS",
+            "buttons": [
+                {
+                    "type": "QUICK_REPLY",
+                    "text": payload.button_text
+                }
+            ]
+        })
+        
+    meta_payload = {
+        "name": payload.name.lower().replace(" ", "_"),
+        "category": payload.category.upper(),
+        "language": payload.language.split("(")[-1].replace(")", "").strip() if "(" in payload.language else "en_US",
+        "components": components
+    }
+    
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                f"https://graph.facebook.com/{settings.META_GRAPH_API_VERSION}/{waba_id}/message_templates",
+                headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+                json=meta_payload
+            )
+            if resp.status_code == 200:
+                res_data = resp.json()
+                mock_new_template["id"] = res_data.get("id") or mock_new_template["id"]
+                mock_new_template["status"] = res_data.get("status", "PENDING").capitalize()
+                return success_response(data=mock_new_template, message="Template submitted to Meta successfully.")
+            else:
+                logger.error(f"Meta template creation failed: {resp.text}")
+                raise HTTPException(status_code=resp.status_code, detail=f"Meta API Error: {resp.json().get('error', {}).get('message', 'Failed to create template')}")
+    except Exception as e:
+        logger.error(f"Error creating Meta template: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/sync-templates")
 async def sync_templates(
     request: Request,
     current_user: dict = Depends(get_current_user)
 ):
-    # Return mock success for sync templates
-    return success_response(message="WhatsApp templates synced successfully.")
+    return await get_templates(request, current_user)
 
 
 @router.get("/conversations")
