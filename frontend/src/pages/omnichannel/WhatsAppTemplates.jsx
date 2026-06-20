@@ -220,10 +220,21 @@ export default function Templates() {
       </div>
 
       {/* Template Designer Modal (Screenshot 4) */}
+      {/* Template Designer Modal (Screenshot 4) */}
       {showAddModal && (
-        <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
-          <div className="modal-content w-full max-w-5xl p-0 overflow-hidden bg-white dark:bg-slate-900 rounded-2xl flex flex-col lg:flex-row" onClick={e => e.stopPropagation()}>
-            
+        <>
+          <div className="modal-overlay" onClick={() => setShowAddModal(false)} />
+          <div 
+            className="modal-content w-full max-w-5xl p-0 overflow-hidden bg-white dark:bg-slate-900 rounded-2xl flex flex-col lg:flex-row" 
+            style={{
+              position: 'fixed',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              zIndex: 100
+            }}
+            onClick={e => e.stopPropagation()}
+          >
             {/* Left Column: Form Settings */}
             <form onSubmit={handleCreate} className="flex-1 p-6 space-y-4 border-r border-slate-200 dark:border-slate-800 overflow-y-auto max-h-[85vh]">
               <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
@@ -324,15 +335,59 @@ export default function Templates() {
                 )}
 
                 {headerFormat === 'Image' && (
-                  <div className="col-span-2">
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-450 block mb-1">Header Image URL (Optional)</label>
-                    <input
-                      type="text"
-                      value={headerImageUrl}
-                      onChange={e => setHeaderImageUrl(e.target.value)}
-                      placeholder="e.g. https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500"
-                      className="input-field text-xs"
-                    />
+                  <div className="col-span-2 space-y-2">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-450 block">Header Image</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={headerImageUrl}
+                        onChange={e => setHeaderImageUrl(e.target.value)}
+                        placeholder="Paste image URL here or use the upload button..."
+                        className="input-field text-xs flex-1"
+                      />
+                      <label className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 bg-white dark:bg-slate-900 transition-all shadow-sm cursor-pointer whitespace-nowrap shrink-0">
+                        <Plus size={14} /> Upload File
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            
+                            addToast('Uploading template header image...', 'info');
+                            const formData = new FormData();
+                            formData.append('file', file);
+                            
+                            try {
+                              const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+                              const res = await fetch(`${API_BASE}/integrations/whatsapp/upload`, {
+                                method: 'POST',
+                                headers: {
+                                  'Authorization': `Bearer ${token}`,
+                                  'X-Tenant-ID': tenantId || '96722',
+                                },
+                                body: formData
+                              });
+                              if (res.ok) {
+                                const result = await res.json();
+                                if (result.success && result.data?.url) {
+                                  setHeaderImageUrl(result.data.url);
+                                  addToast('Image uploaded successfully!', 'success');
+                                } else {
+                                  addToast('Upload failed', 'error');
+                                }
+                              } else {
+                                addToast('Failed to upload image', 'error');
+                              }
+                            } catch (err) {
+                              console.error(err);
+                              addToast('Network error uploading image', 'error');
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
                   </div>
                 )}
 
@@ -474,7 +529,7 @@ export default function Templates() {
               </div>
             </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
