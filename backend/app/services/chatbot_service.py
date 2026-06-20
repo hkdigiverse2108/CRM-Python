@@ -551,9 +551,25 @@ async def run_chatbot_flow_engine(tenant_id: str, phone: str, text_body: str, db
             except Exception as num_err:
                 logger.warning(f"Failed to parse budget value '{budget_val}': {num_err}")
 
-        product_interest_val = variables.get("product_interest") or variables.get("service") or variables.get("label") or variables.get("interest") or variables.get("product")
+        product_interest_val = variables.get("product_interest") or variables.get("service") or variables.get("label") or variables.get("interest") or variables.get("product") or variables.get("interested_service")
+        
+        # If no explicit label variable is set, check project_desc/requirements and promote it if it's short (<= 50 chars)
+        if not product_interest_val:
+            desc_candidate = variables.get("project_desc") or variables.get("requirements")
+            if desc_candidate and len(str(desc_candidate).strip()) <= 50:
+                product_interest_val = desc_candidate
+
         if product_interest_val:
             product_interest_val = str(product_interest_val).strip()
+            
+            # Map numeric selections for standard service nodes to descriptive names
+            if product_interest_val == "1":
+                product_interest_val = "Custom Software Dev"
+            elif product_interest_val == "2":
+                product_interest_val = "Cloud Migration / DevOps"
+            elif product_interest_val == "3":
+                product_interest_val = "Cybersecurity Consulting"
+
             if product_interest_val:
                 update_parts.append("product_interest = :product_interest")
                 params["product_interest"] = product_interest_val
