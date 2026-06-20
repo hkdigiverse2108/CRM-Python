@@ -492,92 +492,108 @@ export default function Templates() {
             {/* Right Column: Live Message Preview Mobile Phone */}
             <div className="w-full lg:w-[380px] bg-slate-50 dark:bg-slate-950 p-6 flex flex-col items-center justify-center min-h-[400px] shrink-0 border-l border-slate-200 dark:border-slate-800">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-4 block">Live Message Preview</span>
-              
-              {/* Modern iPhone Mockup Frame */}
-              <div className="w-[270px] h-[480px] bg-slate-950 rounded-[44px] p-2 shadow-2xl border-[6px] border-slate-900 relative flex flex-col overflow-hidden ring-1 ring-slate-900/10">
+                            {/* Modern iPhone Mockup Frame */}
+              <div className="w-[270px] h-[480px] bg-slate-950 rounded-[44px] p-1.5 shadow-2xl border-[6px] border-slate-900 relative flex flex-col overflow-hidden ring-1 ring-slate-900/10">
                 
                 {/* Dynamic Island */}
-                <div className="absolute left-1/2 -translate-x-1/2 top-2.5 w-20 h-4 bg-black rounded-full z-30 flex items-center justify-center">
-                  <div className="w-1.5 h-1.5 bg-slate-900 rounded-full absolute right-3"></div>
+                <div className="absolute left-1/2 -translate-x-1/2 top-2.5 w-[72px] h-4 bg-black rounded-full z-30 flex items-center justify-center">
+                  <div className="w-1.5 h-1.5 bg-slate-900 rounded-full absolute right-2.5"></div>
                 </div>
 
-                {/* iPhone iOS Status Bar (matching WhatsApp Green background color) */}
-                <div className="h-9 bg-[#005c4b] flex items-end justify-between px-6 pb-1 text-white text-[9px] font-bold shrink-0 relative z-20">
-                  <span>9:41</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-[10px]">signal_cellular_alt</span>
-                    <span className="material-symbols-outlined text-[10px]">wifi</span>
-                    <span className="material-symbols-outlined text-[10px]">battery_5_bar</span>
-                  </div>
-                </div>
-
-                {/* WhatsApp Chat Room Header (iOS Style) */}
-                <div className="bg-[#005c4b] text-white pt-1 pb-3 px-3.5 flex items-center gap-2 shrink-0 z-10">
-                  <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center font-extrabold text-[9px]">
-                    WA
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-extrabold text-[10px] truncate leading-tight">{templateName || 'my_template_name'}</p>
-                    <span className="text-[8px] text-white/80 block font-semibold leading-none">Template Preview</span>
-                  </div>
-                </div>
-
-                {/* WhatsApp Chat Room Body (Sand Background) */}
-                <div 
-                  className="flex-1 p-3 pb-6 flex flex-col justify-start relative overflow-y-auto"
-                  style={{
-                    backgroundColor: '#efeae2',
-                    backgroundImage: 'radial-gradient(#dfdcd6 0.8px, transparent 0.8px)',
-                    backgroundSize: '10px 10px'
-                  }}
-                >
-                  {/* Message Bubble Card */}
-                  <div className="bg-white rounded-lg rounded-tl-none p-2.5 shadow-sm text-[10px] max-w-[90%] relative space-y-1.5 text-slate-800">
-                    
-                    {headerFormat === 'Image' && (
-                      <div className="mb-2 max-w-full rounded overflow-hidden border border-slate-150 shadow-sm bg-slate-100 flex items-center justify-center min-h-[80px]">
-                        {headerImageUrl ? (
-                          <img className="w-full max-h-[110px] object-cover" src={headerImageUrl} alt="Header Preview" />
-                        ) : (
-                          <div className="p-3 text-center text-slate-400 font-bold text-[8px] flex flex-col items-center justify-center">
-                            <span className="material-symbols-outlined text-sm mb-0.5">image</span>
-                            HEADER IMAGE PREVIEW
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {headerFormat === 'Text' && headerText && (
-                      <p className="font-extrabold text-[11px] text-slate-900 border-b border-slate-100 pb-1 mb-1">{headerText}</p>
-                    )}
-                    
-                    <p className="whitespace-pre-wrap leading-relaxed pr-6 font-medium">
-                      {getPreviewBodyText()}
-                    </p>
-                    
-                    {footerText && (
-                      <p className="text-[8px] text-slate-400/90 italic font-medium">{footerText}</p>
-                    )}
-
-                    <div className="text-right text-[7px] text-slate-400 select-none">
-                      9:41 AM
+                {/* Inner Curved Screen Container */}
+                <div className="flex-1 flex flex-col relative overflow-hidden rounded-[36px] bg-[#efeae2]">
+                  {/* iPhone iOS Status Bar (matching WhatsApp Green background color) */}
+                  <div className="h-8 bg-[#005c4b] flex items-end justify-between px-6 pb-1 text-white/90 text-[8.5px] font-bold shrink-0 relative z-25">
+                    <span className="select-none leading-none mb-0.5">9:41</span>
+                    <div className="flex items-center gap-1.5 mb-0.5 select-none text-white/90">
+                      {/* Signal */}
+                      <svg className="w-3 h-1.5 shrink-0" viewBox="0 0 12 7" fill="currentColor">
+                        <rect x="0" y="5" width="1.5" height="2" rx="0.3" />
+                        <rect x="2.5" y="3.5" width="1.5" height="3.5" rx="0.3" />
+                        <rect x="5" y="2" width="1.5" height="5" rx="0.3" />
+                        <rect x="7.5" y="0.5" width="1.5" height="6.5" rx="0.3" />
+                      </svg>
+                      {/* WiFi */}
+                      <svg className="w-3 h-2 shrink-0" viewBox="0 0 12 9" fill="currentColor">
+                        <path d="M6 8a0.8 0 100-1.6 0.8 0 000 1.6zm2.8-2.8a4 4 0 00-5.6 0l0.5 0.5a3.2 3.2 0 014.6 0l0.5-0.5zm1-1a5.6 5.6 0 00-7.6 0l0.5 0.5a4.8 4.8 0 016.6 0l0.5-0.5z" />
+                      </svg>
+                      {/* Battery */}
+                      <svg className="w-4 h-2 shrink-0" viewBox="0 0 16 8" fill="currentColor">
+                        <rect x="0" y="0.5" width="13" height="7" rx="1.8" fill="none" stroke="currentColor" strokeWidth="0.8" />
+                        <rect x="1.2" y="1.7" width="8.5" height="4.6" rx="0.8" />
+                        <path d="M14 2.5v3c0.3 0 0.5-0.2 0.5-0.5v-2c0-0.3-0.2-0.5-0.5-0.5z" />
+                      </svg>
                     </div>
-
-                    {/* Button action */}
-                    {buttonText && (
-                      <div className="border-t border-slate-100 pt-1.5 mt-1.5 text-center">
-                        <button type="button" className="text-emerald-600 text-[8px] font-bold flex items-center justify-center gap-1 w-full hover:bg-slate-50 py-1 rounded">
-                          <span className="material-symbols-outlined text-[10px]">open_in_new</span>
-                          {buttonText}
-                        </button>
-                      </div>
-                    )}
                   </div>
-                </div>
 
-                {/* iPhone Home Indicator Bar */}
-                <div className="absolute bottom-1 left-0 right-0 h-4 flex items-center justify-center z-30 pointer-events-none">
-                  <div className="w-20 h-1 bg-black/40 rounded-full"></div>
+                  {/* WhatsApp Chat Room Header (iOS Style) */}
+                  <div className="bg-[#005c4b] text-white pt-1.5 pb-2.5 px-4 flex items-center gap-2 shrink-0 z-10">
+                    <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center font-extrabold text-[8px] shrink-0">
+                      WA
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-extrabold text-[9px] truncate leading-tight">{templateName || 'my_template_name'}</p>
+                      <span className="text-[7.5px] text-white/80 block font-semibold leading-none mt-0.5">Template Preview</span>
+                    </div>
+                  </div>
+
+                  {/* WhatsApp Chat Room Body (Sand Background) */}
+                  <div 
+                    className="flex-1 p-3 pb-6 flex flex-col justify-start relative overflow-y-auto"
+                    style={{
+                      backgroundColor: '#efeae2',
+                      backgroundImage: 'radial-gradient(#dfdcd6 0.8px, transparent 0.8px)',
+                      backgroundSize: '10px 10px'
+                    }}
+                  >
+                    {/* Message Bubble Card */}
+                    <div className="bg-white rounded-lg rounded-tl-none p-3.5 shadow-sm text-[13px] max-w-[90%] relative space-y-1.5 text-slate-800 font-sans">
+                      
+                      {headerFormat === 'Image' && (
+                        <div className="mb-2 max-w-full rounded overflow-hidden border border-slate-150 shadow-sm bg-slate-100 flex items-center justify-center min-h-[90px]">
+                          {headerImageUrl ? (
+                            <img className="w-full max-h-[120px] object-cover" src={headerImageUrl} alt="Header Preview" />
+                          ) : (
+                            <div className="p-3 text-center text-slate-400 font-bold text-[9px] flex flex-col items-center justify-center">
+                              <span className="material-symbols-outlined text-sm mb-0.5">image</span>
+                              HEADER IMAGE PREVIEW
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {headerFormat === 'Text' && headerText && (
+                        <p className="font-extrabold text-[13.5px] text-slate-900 border-b border-slate-100 pb-1 mb-1 font-sans">{headerText}</p>
+                      )}
+                      
+                      <p className="whitespace-pre-wrap leading-relaxed pr-6 font-normal text-[12.5px] text-slate-800 font-sans">
+                        {getPreviewBodyText()}
+                      </p>
+                      
+                      {footerText && (
+                        <p className="text-[10px] text-slate-400/90 italic font-normal font-sans">{footerText}</p>
+                      )}
+
+                      <div className="text-right text-[8.5px] text-slate-400 select-none font-sans">
+                        9:41 AM
+                      </div>
+
+                      {/* Button action */}
+                      {buttonText && (
+                        <div className="border-t border-slate-100 pt-1.5 mt-1.5 text-center">
+                          <button type="button" className="text-emerald-600 text-[11px] font-bold flex items-center justify-center gap-1 w-full hover:bg-slate-50 py-1 rounded">
+                            <span className="material-symbols-outlined text-[13px]">open_in_new</span>
+                            {buttonText}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* iPhone Home Indicator Bar */}
+                  <div className="absolute bottom-1 left-0 right-0 h-4 flex items-center justify-center z-30 pointer-events-none">
+                    <div className="w-20 h-1 bg-black/20 rounded-full"></div>
+                  </div>
                 </div>
 
               </div>

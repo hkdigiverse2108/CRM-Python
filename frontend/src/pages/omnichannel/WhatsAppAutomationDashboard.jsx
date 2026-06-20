@@ -40,17 +40,9 @@ export default function WhatsAppAutomationDashboard() {
   const [redisQueueRate, setRedisQueueRate] = useState(15); // msgs per second
   const [bullQueueStatus, setBullQueueStatus] = useState('Idle');
   const [scheduledCount] = useState(0);
-  const [broadcasts, setBroadcasts] = useState([
-    { id: 'b1', name: 'Q2 Bulk Broadcast', audience: 'VIP Customers', status: 'Sent', sent: 450, delivered: 442, read: 380, date: '2026-06-15 10:00' },
-    { id: 'b2', name: 'Shopify Cart Abandonment', audience: 'Leads', status: 'Active', sent: 120, delivered: 118, read: 92, date: '2026-06-18 14:30' },
-    { id: 'b3', name: 'VIP Promotion Blast', audience: 'VIP', status: 'Paused', sent: 200, delivered: 198, read: 150, date: '2026-06-19 09:15' }
-  ]);
-
-  // 4. Access Control (RBAC) & Suspension Simulation States
+  const [broadcasts, setBroadcasts] = useState([]);
   const [agents, setAgents] = useState([
-    { id: 'a1', name: 'Rohan Sharma', role: 'Support Agent', status: 'Active' },
-    { id: 'a2', name: 'Alex Rivera', role: 'Sales Specialist', status: 'Active' },
-    { id: 'a3', name: 'Grok AI Responder', role: 'AI Bot Assistant', status: 'Active' }
+    { id: 'a1', name: 'Rohan Sharma', role: 'Support Agent', status: 'Active' }
   ]);
 
   // 5. Audit logs simulation states
@@ -60,11 +52,7 @@ export default function WhatsAppAutomationDashboard() {
   const [webhookPackets, setWebhookPackets] = useState([]);
 
   // 7. Keyword triggers list
-  const [triggers] = useState([
-    { id: 'tr1', keyword: 'welcome', matchType: 'Exact Match', flow: 'Welcome Sequence', hits: 142 },
-    { id: 'tr2', keyword: 'pricing', matchType: 'Keyword Match', flow: 'Pricing Info Flow', hits: 89 },
-    { id: 'tr3', keyword: 'help', matchType: 'Keyword Match', flow: 'Support Escalation', hits: 231 }
-  ]);
+  const [triggers, setTriggers] = useState([]);
 
   // 8. NEW: Contacts Simulation States
   const [contacts, setContacts] = useState([]);
@@ -72,11 +60,7 @@ export default function WhatsAppAutomationDashboard() {
   const [contactFilter, setContactFilter] = useState('All');
 
   // 9. NEW: Templates Simulation States
-  const [templates, setTemplates] = useState([
-    { id: 't1', name: 'welcome_onboarding', status: 'Approved', category: 'UTILITY', language: 'en_US', body: 'Hello {{1}}! Welcome to Digiverse. We are excited to help you get started.' },
-    { id: 't2', name: 'payment_receipt', status: 'Approved', category: 'UTILITY', language: 'en_US', body: 'Hi {{1}}, your payment of {{2}} has been received successfully.' },
-    { id: 't3', name: 'support_followup', status: 'Approved', category: 'MARKETING', language: 'en_US', body: 'Hi {{1}}, how did we do on your recent support request?' }
-  ]);
+  const [templates, setTemplates] = useState([]);
   const [isSyncingTemplates, setIsSyncingTemplates] = useState(false);
 
   const [stats, setStats] = useState(null);
@@ -136,41 +120,72 @@ export default function WhatsAppAutomationDashboard() {
       }
     };
 
+    const fetchTemplates = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/integrations/whatsapp/templates`, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'X-Tenant-ID': tenantId || '96722',
+          }
+        });
+        if (res.ok) {
+          const result = await res.json();
+          if (result.success) {
+            setTemplates(result.data || []);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching templates:', err);
+      }
+    };
+
+    const fetchTriggers = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/integrations/whatsapp/flows`, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'X-Tenant-ID': tenantId || '96722',
+          }
+        });
+        if (res.ok) {
+          const result = await res.json();
+          if (result.success && result.data) {
+            const formatted = result.data.flatMap(flow => {
+              if (flow.trigger && flow.trigger.keywords && flow.trigger.keywords.length > 0) {
+                return flow.trigger.keywords.map((kw, idx) => ({
+                  id: `${flow.id}_${idx}`,
+                  keyword: kw,
+                  matchType: flow.trigger.type === 'keyword' ? 'Keyword Match' : 'Exact Match',
+                  flow: flow.name,
+                  hits: 0
+                }));
+              }
+              return [];
+            });
+            setTriggers(formatted);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching triggers:', err);
+      }
+    };
+
     fetchStats();
     fetchContacts();
+    fetchTemplates();
+    fetchTriggers();
 
     const interval = setInterval(() => {
       fetchStats();
       fetchContacts();
+      fetchTemplates();
+      fetchTriggers();
     }, 10000);
 
     return () => clearInterval(interval);
   }, [token, tenantId]);
-
-  // Simulated Webhook Stream effect
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const randomNames = ['+919876543210', '+15550192834', '+442079460982', '+491729460293'];
-      const randomMsgs = ['Yes, sounds good!', 'Are you online?', 'Status update please.', 'How is the API configured?', 'Let me check.'];
-      const events = ['messages.received', 'messages.status', 'messages.delivered'];
-      const randEvent = events[Math.floor(Math.random() * events.length)];
-      const randFrom = randomNames[Math.floor(Math.random() * randomNames.length)];
-      const randMsg = randomMsgs[Math.floor(Math.random() * randomMsgs.length)];
-
-      const newPacket = {
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-        event: randEvent,
-        from: randEvent === 'messages.received' ? randFrom : undefined,
-        to: randEvent !== 'messages.received' ? randFrom : undefined,
-        type: randEvent === 'messages.received' ? 'text' : 'delivered/read',
-        body: randEvent === 'messages.received' ? randMsg : `wamid.${Math.random().toString(36).substring(7)}`
-      };
-
-      setWebhookPackets(prev => [newPacket, ...prev.slice(0, 4)]);
-    }, 8000);
-
-    return () => clearInterval(interval);
-  }, []);
 
   // Action: Takeover Toggles
   const handleTakeover = () => {
@@ -248,20 +263,59 @@ export default function WhatsAppAutomationDashboard() {
     addToast(`Broadcast "${name}" deleted successfully`, 'success');
   };
 
-  const handleSyncTemplates = () => {
+  const handleSyncTemplates = async () => {
     setIsSyncingTemplates(true);
     addToast('Syncing official Meta templates...', 'info');
-    setTimeout(() => {
+    try {
+      const res = await fetch(`${API_BASE}/integrations/whatsapp/sync-templates`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || '96722',
+        }
+      });
+      if (res.ok) {
+        const result = await res.json();
+        if (result.success) {
+          setTemplates(result.data || []);
+          addToast('Template database updated from Meta API.', 'success');
+          pushAuditLog('RESOLVE', 'Synchronized official WhatsApp message templates');
+        } else {
+          addToast(result.message || 'Failed to sync templates', 'error');
+        }
+      } else {
+        addToast('Server error while syncing templates', 'error');
+      }
+    } catch (err) {
+      console.error('Error syncing templates:', err);
+      addToast('Network error while syncing templates', 'error');
+    } finally {
       setIsSyncingTemplates(false);
-      addToast('Template database updated from Meta API.', 'success');
-      pushAuditLog('RESOLVE', 'Synchronized official WhatsApp message templates');
-    }, 1500);
+    }
   };
 
-  const handleDeleteTemplate = (id, name) => {
-    setTemplates(prev => prev.filter(t => t.id !== id));
-    addToast(`Template "${name}" deleted.`, 'success');
-    pushAuditLog('RELEASE', `Deleted Meta Template: ${name}`);
+  const handleDeleteTemplate = async (id, name) => {
+    try {
+      const res = await fetch(`${API_BASE}/integrations/whatsapp/templates/${name}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || '96722',
+        }
+      });
+      if (res.ok) {
+        setTemplates(prev => prev.filter(t => t.name !== name));
+        addToast(`Template "${name}" deleted.`, 'success');
+        pushAuditLog('RELEASE', `Deleted Meta Template: ${name}`);
+      } else {
+        addToast('Failed to delete template', 'error');
+      }
+    } catch (err) {
+      console.error('Error deleting template:', err);
+      addToast('Network error deleting template', 'error');
+    }
   };
 
   const handleAddContactTag = (contactId, newTag) => {

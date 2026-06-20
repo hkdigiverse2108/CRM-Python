@@ -294,16 +294,8 @@ async def get_templates(
     waba_id = acc["waba_id"]
     access_token = acc["access_token"]
     
-    mock_templates = [
-        {"id": "1", "name": "hello_world", "category": "UTILITY", "language": "EN_US", "status": "Approved", "body": "Welcome and congratulations!! This message demonstrates your ability to send a WhatsApp message notification from the Cloud API, hosted by Meta. Thank you for taking the time to test with us.\nWhatsApp Business Platform sample message", "vars": 0},
-        {"id": "2", "name": "werty", "category": "MARKETING", "language": "EN", "status": "Approved", "body": "cvbn\nfghj", "vars": 0, "hasHeaderImage": True},
-        {"id": "3", "name": "vbnm", "category": "MARKETING", "language": "EN", "status": "Pending", "body": "vbnm\nvbnm\nvbn", "vars": 0},
-        {"id": "4", "name": "welcome_user", "category": "MARKETING", "language": "EN", "status": "Approved", "body": "Hi {{1}}, thank you for joining! We are excited to help you automate your business.", "vars": 1},
-        {"id": "5", "name": "testing", "category": "MARKETING", "language": "EN", "status": "Approved", "body": "This is a test notification template for API verification.", "vars": 0},
-    ]
-    
     if not access_token or access_token.startswith("mock_"):
-        return success_response(data=mock_templates)
+        return success_response(data=[])
         
     try:
         async with httpx.AsyncClient(timeout=15) as client:
@@ -341,10 +333,10 @@ async def get_templates(
                 return success_response(data=templates)
             else:
                 logger.error(f"Meta templates fetch error: {resp.text}")
-                return success_response(data=mock_templates)
+                return success_response(data=[])
     except Exception as e:
         logger.error(f"Error fetching Meta templates: {e}")
-        return success_response(data=mock_templates)
+        return success_response(data=[])
 
 @router.post("/templates")
 async def create_template(
@@ -687,27 +679,7 @@ async def get_dashboard_stats(
                 "read": r[3] or 0
             })
 
-        # Provide a baseline to prevent empty dashboard look
-        if total_sent == 0:
-            total_sent = 1248
-            delivered = 1210
-            read_rate = 78.4
-            failed = 14
-            active_contacts = 12
-            running_bots = 2
-            bot_convs = 15
-            takeovers = 1
-            # Add dummy daily trend
-            import datetime
-            today = datetime.date.today()
-            for i in range(6, -1, -1):
-                d = today - datetime.timedelta(days=i)
-                daily_trends.append({
-                    "date": d.isoformat(),
-                    "sent": 150 + i * 20,
-                    "delivered": 145 + i * 20,
-                    "read": 110 + i * 18
-                })
+
 
         return success_response(data={
             "total_sent": total_sent,
