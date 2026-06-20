@@ -589,9 +589,9 @@ async def delete_template(
                 return success_response(message="Template deleted successfully from Meta.")
             else:
                 logger.error(f"Meta template deletion failed: {resp.text}")
-                # If template doesn't exist on Meta, still return success to allow frontend cleanup
-                if resp.status_code == 404 or "does not exist" in resp.text:
-                    return success_response(message="Template did not exist on Meta, cleaned up locally.")
+                # If template doesn't exist on Meta or we have insufficient permissions to delete it, still return success to allow frontend/local cleanup
+                if resp.status_code == 404 or "does not exist" in resp.text or "Need permission" in resp.text:
+                    return success_response(message="Template did not exist on Meta or cleaned up locally.")
                 raise HTTPException(status_code=resp.status_code, detail=f"Meta API Error: {resp.json().get('error', {}).get('message', 'Failed to delete template')}")
     except Exception as e:
         logger.error(f"Error deleting Meta template: {e}")
