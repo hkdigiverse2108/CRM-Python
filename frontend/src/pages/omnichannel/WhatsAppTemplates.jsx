@@ -368,16 +368,29 @@ export default function Templates() {
                 {headerFormat === 'Image' && (
                   <div className="col-span-2 space-y-2">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-450 block">Header Image</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={headerImageUrl}
-                        onChange={e => setHeaderImageUrl(e.target.value)}
-                        placeholder="Paste image URL here or use the upload button..."
-                        className="input-field text-xs flex-1"
-                      />
-                      <label className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 bg-white dark:bg-slate-900 transition-all shadow-sm cursor-pointer whitespace-nowrap shrink-0">
-                        <Plus size={14} /> Upload File
+                    {headerImageUrl ? (
+                      <div className="relative border border-slate-200 dark:border-slate-800 rounded-xl p-3 bg-slate-50 dark:bg-slate-900/50 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <img src={headerImageUrl} alt="Header" className="w-12 h-12 object-cover rounded-lg border border-slate-200 dark:border-slate-800" />
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-800 dark:text-white truncate">Image Uploaded Successfully</p>
+                            <a href={headerImageUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-emerald-600 hover:underline truncate block">View Full Image</a>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setHeaderImageUrl('')}
+                          className="btn-ghost text-red-500 hover:text-red-750 p-1.5 rounded-full shrink-0"
+                          title="Remove Image"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 hover:border-emerald-500 dark:border-slate-800 dark:hover:border-emerald-500/55 rounded-2xl p-6 bg-slate-50/50 dark:bg-slate-900/30 cursor-pointer transition-all hover:bg-slate-50 dark:hover:bg-slate-900/50 group text-center">
+                        <span className="material-symbols-outlined text-3xl text-slate-400 group-hover:text-emerald-500 mb-2 transition-colors">cloud_upload</span>
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-350">Click to upload image from PC</span>
+                        <span className="text-[10px] text-slate-400 mt-1">Supports PNG, JPG, JPEG</span>
                         <input
                           type="file"
                           accept="image/*"
@@ -418,7 +431,7 @@ export default function Templates() {
                           }}
                         />
                       </label>
-                    </div>
+                    )}
                   </div>
                 )}
 
@@ -477,37 +490,41 @@ export default function Templates() {
             </form>
 
             {/* Right Column: Live Message Preview Mobile Phone */}
-            <div className="w-full lg:w-[380px] bg-slate-50 dark:bg-slate-950 p-6 flex flex-col items-center justify-center min-h-[400px] shrink-0">
+            <div className="w-full lg:w-[380px] bg-slate-50 dark:bg-slate-950 p-6 flex flex-col items-center justify-center min-h-[400px] shrink-0 border-l border-slate-200 dark:border-slate-800">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-4 block">Live Message Preview</span>
               
-              {/* Phone Mockup Frame */}
-              <div className="w-[260px] h-[460px] bg-slate-900 rounded-[36px] p-2.5 shadow-2xl border-4 border-slate-800 relative flex flex-col overflow-hidden">
+              {/* Modern iPhone Mockup Frame */}
+              <div className="w-[270px] h-[480px] bg-slate-950 rounded-[44px] p-2 shadow-2xl border-[6px] border-slate-900 relative flex flex-col overflow-hidden ring-1 ring-slate-900/10">
                 
-                {/* Phone Notch/Header */}
-                <div className="h-6 bg-slate-900 flex items-center justify-between px-4 text-white text-[9px] font-semibold shrink-0 relative z-20">
+                {/* Dynamic Island */}
+                <div className="absolute left-1/2 -translate-x-1/2 top-2.5 w-20 h-4 bg-black rounded-full z-30 flex items-center justify-center">
+                  <div className="w-1.5 h-1.5 bg-slate-900 rounded-full absolute right-3"></div>
+                </div>
+
+                {/* iPhone iOS Status Bar (matching WhatsApp Green background color) */}
+                <div className="h-9 bg-[#005c4b] flex items-end justify-between px-6 pb-1 text-white text-[9px] font-bold shrink-0 relative z-20">
                   <span>9:41</span>
-                  <div className="w-16 h-3.5 bg-black rounded-full absolute left-1/2 -translate-x-1/2 top-1"></div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1.5">
                     <span className="material-symbols-outlined text-[10px]">signal_cellular_alt</span>
                     <span className="material-symbols-outlined text-[10px]">wifi</span>
                     <span className="material-symbols-outlined text-[10px]">battery_5_bar</span>
                   </div>
                 </div>
 
-                {/* WhatsApp Chat Room Header */}
-                <div className="bg-[#005c4b] text-white p-2.5 flex items-center gap-2 shrink-0 z-10">
-                  <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center font-bold text-[10px]">
+                {/* WhatsApp Chat Room Header (iOS Style) */}
+                <div className="bg-[#005c4b] text-white pt-1 pb-3 px-3.5 flex items-center gap-2 shrink-0 z-10">
+                  <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center font-extrabold text-[9px]">
                     WA
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="font-bold text-[10px] truncate">{templateName || 'my_template_name'}</p>
-                    <span className="text-[8px] text-white/80 block">Template Preview</span>
+                    <p className="font-extrabold text-[10px] truncate leading-tight">{templateName || 'my_template_name'}</p>
+                    <span className="text-[8px] text-white/80 block font-semibold leading-none">Template Preview</span>
                   </div>
                 </div>
 
                 {/* WhatsApp Chat Room Body (Sand Background) */}
                 <div 
-                  className="flex-1 p-3 flex flex-col justify-start relative overflow-y-auto"
+                  className="flex-1 p-3 pb-6 flex flex-col justify-start relative overflow-y-auto"
                   style={{
                     backgroundColor: '#efeae2',
                     backgroundImage: 'radial-gradient(#dfdcd6 0.8px, transparent 0.8px)',
@@ -557,6 +574,12 @@ export default function Templates() {
                     )}
                   </div>
                 </div>
+
+                {/* iPhone Home Indicator Bar */}
+                <div className="absolute bottom-1 left-0 right-0 h-4 flex items-center justify-center z-30 pointer-events-none">
+                  <div className="w-20 h-1 bg-black/40 rounded-full"></div>
+                </div>
+
               </div>
             </div>
           </div>
