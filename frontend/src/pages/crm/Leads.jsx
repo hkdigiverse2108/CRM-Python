@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 
 export default function Leads() {
-  const { addToast, leads: allLeads, setLeads: setAllLeads, convertLeadToClient, updateLead, deleteLead } = useApp();
+  const { addToast, leads: allLeads, setLeads: setAllLeads, convertLeadToClient, updateLead, deleteLead, createLead } = useApp();
   const [selectedLeadId, setSelectedLeadId] = useState(allLeads[0]?.id || '');
   const selectedLead = allLeads.find(l => l.id === selectedLeadId) || allLeads[0];
   const [search, setSearch] = useState('');
@@ -74,55 +74,95 @@ export default function Leads() {
     return matchesSearch && matchesStage && matchesSource && matchesTag;
   });
 
-  const handleAddLead = () => {
+  const handleAddLead = async () => {
     if (!newLead.name || !newLead.company) {
       addToast('Name and Company Name are required', 'warning');
       return;
     }
-    const lead = {
-      id: `LD-${String(allLeads.length + 1).padStart(3, '0')}`,
-      ...newLead,
-      status: 'New',
-      stage: 'New',
-      value: Number(newLead.value) || 0,
-      createdAt: new Date().toISOString().split('T')[0],
-      lastActivity: new Date().toISOString().split('T')[0],
-    };
-    setAllLeads(prev => [lead, ...prev]);
-    setSelectedLeadId(lead.id);
-    setShowAddLead(false);
-    setNewLead({
-      name: '',
-      firstName: '',
-      lastName: '',
-      company: '',
-      phone: '',
-      altPhone: '',
-      email: '',
-      website: '',
-      industry: '',
-      source: 'Website',
-      status: 'New',
-      stage: 'New',
-      priority: 'Medium',
-      tags: '',
-      requirement: '',
-      description: '',
-      notes: '',
-      assignedTo: 'Arjun Mehta',
-      createdBy: 'CRM Admin',
-      nextFollowUpDate: '',
-      followUpStatus: 'Scheduled',
-      value: '',
-      probability: '',
-      customerType: 'Individual',
-      preferredChannel: 'Email',
-      city: '',
-      state: '',
-      country: 'India',
-      pincode: ''
-    });
-    addToast(`Lead "${lead.name}" created successfully`);
+    
+    if (createLead) {
+      const created = await createLead(newLead);
+      if (created) {
+        setSelectedLeadId(created.id);
+        setShowAddLead(false);
+        setNewLead({
+          name: '',
+          firstName: '',
+          lastName: '',
+          company: '',
+          phone: '',
+          altPhone: '',
+          email: '',
+          website: '',
+          industry: '',
+          source: 'Website',
+          status: 'New',
+          stage: 'New',
+          priority: 'Medium',
+          tags: '',
+          requirement: '',
+          description: '',
+          notes: '',
+          assignedTo: 'Arjun Mehta',
+          createdBy: 'CRM Admin',
+          nextFollowUpDate: '',
+          followUpStatus: 'Scheduled',
+          value: '',
+          probability: '',
+          customerType: 'Individual',
+          preferredChannel: 'Email',
+          city: '',
+          state: '',
+          country: 'India',
+          pincode: ''
+        });
+      }
+    } else {
+      const lead = {
+        id: `LD-${String(allLeads.length + 1).padStart(3, '0')}`,
+        ...newLead,
+        status: 'New',
+        stage: 'New',
+        value: Number(newLead.value) || 0,
+        createdAt: new Date().toISOString().split('T')[0],
+        lastActivity: new Date().toISOString().split('T')[0],
+      };
+      setAllLeads(prev => [lead, ...prev]);
+      setSelectedLeadId(lead.id);
+      setShowAddLead(false);
+      setNewLead({
+        name: '',
+        firstName: '',
+        lastName: '',
+        company: '',
+        phone: '',
+        altPhone: '',
+        email: '',
+        website: '',
+        industry: '',
+        source: 'Website',
+        status: 'New',
+        stage: 'New',
+        priority: 'Medium',
+        tags: '',
+        requirement: '',
+        description: '',
+        notes: '',
+        assignedTo: 'Arjun Mehta',
+        createdBy: 'CRM Admin',
+        nextFollowUpDate: '',
+        followUpStatus: 'Scheduled',
+        value: '',
+        probability: '',
+        customerType: 'Individual',
+        preferredChannel: 'Email',
+        city: '',
+        state: '',
+        country: 'India',
+        pincode: ''
+      });
+      addToast(`Lead "${lead.name}" created successfully`);
+    }
   };
 
   const handleStartEdit = (lead) => {

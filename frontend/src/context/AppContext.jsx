@@ -1818,6 +1818,32 @@ export function AppProvider({ children }) {
     }
   }, [token, tenantId, logout]);
 
+  const fetchLeads = useCallback(async () => {
+    if (!token || !hasModulePermission('crm')) return;
+    try {
+      const resp = await fetch(`${API_BASE}/leads?per_page=100`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || getTenantId(),
+        }
+      });
+      if (resp.status === 401) { logout(); return; }
+      const data = await resp.json();
+      if (data.success && data.data) {
+        const mappedLeads = data.data.map(l => ({
+          ...l,
+          stage: l.status ? (l.status.charAt(0).toUpperCase() + l.status.slice(1)) : 'New',
+          status: l.status ? (l.status.charAt(0).toUpperCase() + l.status.slice(1)) : 'New',
+          createdAt: l.created_at ? l.created_at.split('T')[0] : new Date().toISOString().split('T')[0]
+        }));
+        setLeads(mappedLeads);
+      }
+    } catch (err) {
+      console.error('Failed to fetch leads:', err);
+    }
+  }, [token, tenantId, logout, hasModulePermission]);
+
   const fetchLetters = useCallback(async () => {
     if (!token) return;
     try {
@@ -1940,13 +1966,15 @@ export function AppProvider({ children }) {
       fetchContacts();
     } else if (currentPath.startsWith('/crm/clients')) {
       fetchClients();
+    } else if (currentPath.startsWith('/crm/leads')) {
+      fetchLeads();
     } else if (currentPath.startsWith('/tasks')) {
       fetchTasks();
       fetchReminders();
     } else if (currentPath.startsWith('/admin/users')) {
       fetchRoles();
     }
-  }, [currentPath, token, fetchInvoices, fetchQuotes, fetchPayments, fetchLedger, fetchExpenses, fetchGstRecords, fetchEmployees, fetchLeaves, fetchPayroll, fetchPayrollAdjustments, fetchAttendance, fetchSubmissions, fetchLetters, fetchContacts, fetchClients, fetchTasks, fetchReminders, fetchRoles]);
+  }, [currentPath, token, fetchInvoices, fetchQuotes, fetchPayments, fetchLedger, fetchExpenses, fetchGstRecords, fetchEmployees, fetchLeaves, fetchPayroll, fetchPayrollAdjustments, fetchAttendance, fetchSubmissions, fetchLetters, fetchContacts, fetchClients, fetchLeads, fetchTasks, fetchReminders, fetchRoles]);
   useEffect(() => {
     if (!token) return;
     
@@ -2232,15 +2260,107 @@ export function AppProvider({ children }) {
     return newUser.id;
   }, [adminUsers, addToast]);
 
-  const updateLead = useCallback((leadId, updatedData) => {
-    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, ...updatedData, lastActivity: new Date().toISOString().split('T')[0] } : l));
-    addToast(`Lead updated successfully`, 'success');
-  }, [addToast]);
+  const createLead = useCallback(async (leadData) => {
+    if (!token) return null;
+    try {
+      const payload = {
+        name: leadData.name,
+        email: leadData.email || '',
+        phone: leadData.phone || '',
+        company: leadData.company,
+        source: leadData.source ? leadData.source.toLowerCase() : 'website',
+        value: Number(leadData.value) || 0.0,
+        notes: leadData.notes || '',
+        status: leadData.status ? leadData.status.toLowerCase() : 'new'
+      };
+      const resp = await fetch(`${API_BASE}/leads`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || getTenantId(),
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = await resp.json();
+      if (data.success && data.data) {
+        const newL = {
+          ...data.data,
+          stage: data.data.status ? (data.data.status.charAt(0).toUpperCase() + data.data.status.slice(1)) : 'New',
+          status: data.data.status ? (data.data.status.charAt(0).toUpperCase() + data.data.status.slice(1)) : 'New',
+          createdAt: data.data.created_at ? data.data.created_at.split('T')[0] : new Date().toISOString().split('T')[0]
+        };
+        setLeads(prev => [newL, ...prev]);
+        addToast(`Lead created successfully`, 'success');
+        return newL;
+      } else {
+        throw new Error(data.message || 'Failed to create lead');
+      }
+    } catch (err) {
+      console.error('Failed to create lead:', err);
+      addToast(err.message, 'error');
+      return null;
+    }
+  }, [token, tenantId, addToast]);
 
-  const deleteLead = useCallback((leadId) => {
-    setLeads(prev => prev.filter(l => l.id !== leadId));
-    addToast(`Lead deleted successfully`, 'info');
-  }, [addToast]);
+  const updateLead = useCallback(async (leadId, updatedData) => {
+    if (!token) return;
+    try {
+      const payload = { ...updatedData };
+      if (payload.stage) {
+        payload.status = payload.stage.toLowerCase();
+      }
+      const resp = await fetch(`${API_BASE}/leads/${leadId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || getTenantId(),
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = await resp.json();
+      if (data.success && data.data) {
+        const updatedLead = {
+          ...data.data,
+          stage: data.data.status ? (data.data.status.charAt(0).toUpperCase() + data.data.status.slice(1)) : 'New',
+          status: data.data.status ? (data.data.status.charAt(0).toUpperCase() + data.data.status.slice(1)) : 'New',
+          createdAt: data.data.created_at ? data.data.created_at.split('T')[0] : new Date().toISOString().split('T')[0]
+        };
+        setLeads(prev => prev.map(l => l.id === leadId ? updatedLead : l));
+        addToast(`Lead updated successfully`, 'success');
+      } else {
+        throw new Error(data.message || 'Failed to update lead');
+      }
+    } catch (err) {
+      console.error('Failed to update lead:', err);
+      addToast(err.message, 'error');
+    }
+  }, [token, tenantId, addToast]);
+
+  const deleteLead = useCallback(async (leadId) => {
+    if (!token) return;
+    try {
+      const resp = await fetch(`${API_BASE}/leads/${leadId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || getTenantId(),
+        },
+      });
+      const data = await resp.json();
+      if (data.success) {
+        setLeads(prev => prev.filter(l => l.id !== leadId));
+        addToast(`Lead deleted successfully`, 'info');
+      } else {
+        throw new Error(data.message || 'Failed to delete lead');
+      }
+    } catch (err) {
+      console.error('Failed to delete lead:', err);
+      addToast(err.message, 'error');
+    }
+  }, [token, tenantId, addToast]);
 
   const convertLeadToClient = useCallback((leadId) => {
     let leadName = '';
@@ -3756,6 +3876,8 @@ export function AppProvider({ children }) {
       resetTheme,
       leads,
       setLeads,
+      fetchLeads,
+      createLead,
       updateLead,
       deleteLead,
       contacts,
