@@ -130,6 +130,37 @@ export default function Templates() {
     }
   };
 
+
+
+
+
+  const handleDelete = async (templateName, templateId) => {
+    if (!window.confirm(`Are you sure you want to delete the template "${templateName}"?`)) return;
+    
+    try {
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+      const res = await fetch(`${API_BASE}/integrations/whatsapp/templates/${templateName}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || '96722',
+        }
+      });
+      
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setTemplates(prev => prev.filter(t => t.id !== templateId && t.name !== templateName));
+        addToast(json.message || 'Template deleted successfully.', 'success');
+      } else {
+        addToast(json.detail || json.message || 'Failed to delete template.', 'error');
+      }
+    } catch (err) {
+      console.error('Failed to delete template:', err);
+      addToast('Delete template request failed.', 'error');
+    }
+  };
+
+
   // Helper to format body text with variable placeholders for a realistic preview
   const getPreviewBodyText = () => {
     if (!bodyText) return '[Empty Body Text]';
@@ -212,7 +243,7 @@ export default function Templates() {
               <div className="flex items-center gap-2">
                 <button onClick={() => addToast(`Copied ID for ${t.name}`)} className="text-xs text-emerald-600 hover:text-emerald-700 hover:underline font-bold">Copy ID</button>
                 <span className="text-slate-300">|</span>
-                <button onClick={() => setTemplates(templates.filter(x => x.id !== t.id))} className="text-xs text-red-500 hover:text-red-650 font-bold">Delete</button>
+                <button onClick={() => handleDelete(t.name, t.id)} className="text-xs text-red-500 hover:text-red-650 font-bold">Delete</button>
               </div>
             </div>
           </div>

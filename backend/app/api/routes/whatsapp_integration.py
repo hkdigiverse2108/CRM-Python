@@ -442,6 +442,51 @@ async def sync_templates(
     return await get_templates(request, current_user)
 
 
+@router.delete("/templates/{template_name}")
+async def delete_template(
+    template_name: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    tenant_id = request.state.tenant.id
+    settings = get_settings()
+    
+    with get_db() as db:
+        acc = db.execute(
+            text("SELECT waba_id, access_token FROM whatsapp_accounts WHERE tenant_id = :tenant_id LIMIT 1"),
+            {"tenant_id": tenant_id}
+        ).mappings().first()
+        
+    if not acc:
+        raise HTTPException(status_code=400, detail="WhatsApp account is not connected.")
+        
+    waba_id = acc["waba_id"]
+    access_token = acc["access_token"]
+    
+    if not access_token or access_token.startswith("mock_"):
+        return success_response(message="Template deleted successfully (Sandbox/Mock).")
+        
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.delete(
+                f"https://graph.facebook.com/{settings.META_GRAPH_API_VERSION}/{waba_id}/message_templates",
+                params={"access_token": access_token, "name": template_name}
+            )
+            if resp.status_code == 200:
+                return success_response(message="Template deleted successfully from Meta.")
+            else:
+                logger.error(f"Meta template deletion failed: {resp.text}")
+                # If template doesn't exist on Meta, still return success to allow frontend cleanup
+                if resp.status_code == 404 or "does not exist" in resp.text:
+                    return success_response(message="Template did not exist on Meta, cleaned up locally.")
+                raise HTTPException(status_code=resp.status_code, detail=f"Meta API Error: {resp.json().get('error', {}).get('message', 'Failed to delete template')}")
+    except Exception as e:
+        logger.error(f"Error deleting Meta template: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/conversations")
 async def get_conversations(
     request: Request,
