@@ -103,6 +103,7 @@ export default function Templates() {
           body_text: bodyText,
           header_format: headerFormat,
           header_text: headerText,
+          header_image_url: headerImageUrl,
           footer_text: footerText,
           button_text: buttonText
         })

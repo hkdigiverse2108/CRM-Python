@@ -271,6 +271,7 @@ class TemplateCreatePayload(BaseModel):
     body_text: str
     header_format: str = "None"
     header_text: Optional[str] = None
+    header_image_url: Optional[str] = None
     footer_text: Optional[str] = None
     button_text: Optional[str] = None
 
@@ -378,28 +379,118 @@ async def create_template(
         return success_response(data=mock_new_template, message="Template submitted to Meta successfully (Sandbox/Mock).")
         
     components = []
+    header_handle = None
     
+    # Handle Image upload to Meta to obtain a header_handle
+    if payload.header_format == "Image" and payload.header_image_url:
+        image_url = payload.header_image_url
+        if not image_url.startswith("http"):
+            base_url = str(request.base_url)
+            if base_url.endswith("/api/"):
+                base_url = base_url[:-4]
+            elif base_url.endswith("/"):
+                base_url = base_url[:-1]
+            image_url = f"{base_url}{image_url}" if image_url.startswith("/") else f"{base_url}/{image_url}"
+            
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                img_resp = await client.get(image_url)
+                if img_resp.status_code == 200:
+                    img_bytes = img_resp.content
+                    file_length = len(img_bytes)
+                    file_type = img_resp.headers.get("content-type", "image/png")
+                    file_name = image_url.split("/")[-1] or "header_image.png"
+                    
+                    app_id = settings.META_APP_ID
+                    if not app_id:
+                        logger.error("META_APP_ID is not configured in settings.")
+                    else:
+                        init_url = f"https://graph.facebook.com/{settings.META_GRAPH_API_VERSION}/{app_id}/uploads"
+                        init_resp = await client.post(
+                            init_url,
+                            params={
+                                "file_name": file_name,
+                                "file_length": file_length,
+                                "file_type": file_type,
+                                "access_token": access_token
+                            }
+                        )
+                        if init_resp.status_code == 200:
+                            session_id = init_resp.json().get("id")
+                            if session_id:
+                                upload_url = f"https://graph.facebook.com/{settings.META_GRAPH_API_VERSION}/{session_id}"
+                                upload_resp = await client.post(
+                                    upload_url,
+                                    headers={
+                                        "Authorization": f"OAuth {access_token}",
+                                        "file_offset": "0",
+                                        "Content-Type": file_type
+                                    },
+                                    content=img_bytes
+                                )
+                                if upload_resp.status_code == 200:
+                                    header_handle = upload_resp.json().get("h")
+                                    logger.info(f"Meta template header image uploaded. Handle: {header_handle}")
+                                else:
+                                    logger.error(f"Failed to upload media bytes to Meta: {upload_resp.text}")
+                        else:
+                            logger.error(f"Failed to init Meta template upload session: {init_resp.text}")
+        except Exception as upload_err:
+            logger.error(f"Error uploading image to Meta: {upload_err}")
+
+    # Build components
     if payload.header_format != "None":
         header_comp = {"type": "HEADER", "format": payload.header_format.upper()}
         if payload.header_format == "Text" and payload.header_text:
             header_comp["text"] = payload.header_text
+        elif payload.header_format == "Image":
+            if not header_handle:
+                raise HTTPException(status_code=400, detail="Failed to upload sample header image to Meta. Please check your image URL and try again.")
+            header_comp["example"] = {
+                "header_handle": [header_handle]
+            }
         components.append(header_comp)
         
-    components.append({"type": "BODY", "text": payload.body_text})
+    # Body Component with Variable Examples
+    body_vars = re.findall(r"\{\{(\d+)\}\}", payload.body_text)
+    body_comp = {"type": "BODY", "text": payload.body_text}
+    if body_vars:
+        body_comp["example"] = {
+            "body_text": [["sample_value" for _ in body_vars]]
+        }
+    components.append(body_comp)
     
     if payload.footer_text:
         components.append({"type": "FOOTER", "text": payload.footer_text})
         
     if payload.button_text:
-        components.append({
-            "type": "BUTTONS",
-            "buttons": [
-                {
-                    "type": "QUICK_REPLY",
-                    "text": payload.button_text
-                }
-            ]
-        })
+        btn_text = payload.button_text.strip()
+        is_url = any(btn_text.startswith(p) for p in ["http://", "https://"]) or "." in btn_text
+        
+        if is_url:
+            btn_url = btn_text
+            if not btn_url.startswith("http"):
+                btn_url = "https://" + btn_url
+            components.append({
+                "type": "BUTTONS",
+                "buttons": [
+                    {
+                        "type": "URL",
+                        "text": "Visit Website",
+                        "url": btn_url
+                    }
+                ]
+            })
+        else:
+            components.append({
+                "type": "BUTTONS",
+                "buttons": [
+                    {
+                        "type": "QUICK_REPLY",
+                        "text": btn_text
+                    }
+                ]
+            })
         
     meta_payload = {
         "name": payload.name.lower().replace(" ", "_"),
@@ -409,7 +500,7 @@ async def create_template(
     }
     
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(timeout=25) as client:
             resp = await client.post(
                 f"https://graph.facebook.com/{settings.META_GRAPH_API_VERSION}/{waba_id}/message_templates",
                 headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
