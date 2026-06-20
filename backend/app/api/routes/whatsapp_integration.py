@@ -384,27 +384,54 @@ async def create_template(
     # Handle Image upload to Meta to obtain a header_handle
     if payload.header_format == "Image" and payload.header_image_url:
         image_url = payload.header_image_url
-        if not image_url.startswith("http"):
-            base_url = str(request.base_url)
-            if base_url.endswith("/api/"):
-                base_url = base_url[:-4]
-            elif base_url.endswith("/"):
-                base_url = base_url[:-1]
-            image_url = f"{base_url}{image_url}" if image_url.startswith("/") else f"{base_url}/{image_url}"
-            
-        try:
-            async with httpx.AsyncClient(timeout=15) as client:
-                img_resp = await client.get(image_url)
-                if img_resp.status_code == 200:
-                    img_bytes = img_resp.content
-                    file_length = len(img_bytes)
-                    file_type = img_resp.headers.get("content-type", "image/png")
-                    file_name = image_url.split("/")[-1] or "header_image.png"
-                    
-                    app_id = settings.META_APP_ID
-                    if not app_id:
-                        logger.error("META_APP_ID is not configured in settings.")
-                    else:
+        img_bytes = None
+        file_name = "header_image.png"
+        file_type = "image/png"
+        
+        # Check if local upload first to avoid network loopbacks or self-signed cert errors
+        if "/uploads/" in image_url:
+            try:
+                fname = os.path.basename(image_url.split("/uploads/")[-1])
+                local_path = os.path.join("uploads", fname)
+                if os.path.exists(local_path):
+                    with open(local_path, "rb") as f:
+                        img_bytes = f.read()
+                    file_name = fname
+                    ext = os.path.splitext(local_path)[1].lower()
+                    file_type = "image/png" if ext == ".png" else "image/jpeg"
+                    logger.info(f"Loaded local template image directly from disk: {local_path}")
+            except Exception as disk_err:
+                logger.error(f"Error reading local template image file: {disk_err}")
+                
+        # If not local or disk read failed, download via HTTP
+        if not img_bytes:
+            if not image_url.startswith("http"):
+                base_url = str(request.base_url)
+                if base_url.endswith("/api/"):
+                    base_url = base_url[:-4]
+                elif base_url.endswith("/"):
+                    base_url = base_url[:-1]
+                image_url = f"{base_url}{image_url}" if image_url.startswith("/") else f"{base_url}/{image_url}"
+                
+            try:
+                # Use verify=False to bypass local self-signed certificate issues
+                async with httpx.AsyncClient(timeout=15, verify=False) as client:
+                    img_resp = await client.get(image_url)
+                    if img_resp.status_code == 200:
+                        img_bytes = img_resp.content
+                        file_type = img_resp.headers.get("content-type", "image/png")
+                        file_name = image_url.split("/")[-1] or "header_image.png"
+            except Exception as http_err:
+                logger.error(f"HTTP error downloading template image: {http_err}")
+                
+        if img_bytes:
+            try:
+                file_length = len(img_bytes)
+                app_id = settings.META_APP_ID
+                if not app_id:
+                    logger.error("META_APP_ID is not configured in settings.")
+                else:
+                    async with httpx.AsyncClient(timeout=15) as client:
                         init_url = f"https://graph.facebook.com/{settings.META_GRAPH_API_VERSION}/{app_id}/uploads"
                         init_resp = await client.post(
                             init_url,
@@ -435,8 +462,8 @@ async def create_template(
                                     logger.error(f"Failed to upload media bytes to Meta: {upload_resp.text}")
                         else:
                             logger.error(f"Failed to init Meta template upload session: {init_resp.text}")
-        except Exception as upload_err:
-            logger.error(f"Error uploading image to Meta: {upload_err}")
+            except Exception as upload_err:
+                logger.error(f"Error uploading image to Meta: {upload_err}")
 
     # Build components
     if payload.header_format != "None":
