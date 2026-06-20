@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import { Plus, RefreshCw, X, Check, AlertTriangle, Eye, Grid, List } from 'lucide-react';
 
 export default function Templates() {
-  const { addToast } = useApp();
+  const { addToast, token, tenantId } = useApp();
   const [showAddModal, setShowAddModal] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   // Form states for template designer
   const [templateMode, setTemplateMode] = useState('Meta Review Mode'); // Meta Review Mode, Local Custom Mode
@@ -19,51 +20,114 @@ export default function Templates() {
   const [footerText, setFooterText] = useState('');
   const [buttonText, setButtonText] = useState('');
 
-  // Sample templates as shown in screenshot 3
-  const [templates, setTemplates] = useState([
-    { id: '1', name: 'hello_world', category: 'UTILITY', language: 'EN_US', status: 'Approved', body: 'Welcome and congratulations!! This message demonstrates your ability to send a WhatsApp message notification from the Cloud API, hosted by Meta. Thank you for taking the time to test with us.\nWhatsApp Business Platform sample message', vars: 0 },
-    { id: '2', name: 'werty', category: 'MARKETING', language: 'EN', status: 'Approved', body: 'cvbn\nfghj', vars: 0, hasHeaderImage: true },
-    { id: '3', name: 'vbnm', category: 'MARKETING', language: 'EN', status: 'Pending', body: 'vbnm\nvbnm\nvbn', vars: 0 },
-    { id: '4', name: 'welcome_user', category: 'MARKETING', language: 'EN', status: 'Approved', body: 'Hi {{1}}, thank you for joining! We are excited to help you automate your business.', vars: 1 },
-    { id: '5', name: 'testing', category: 'MARKETING', language: 'EN', status: 'Approved', body: 'This is a test notification template for API verification.', vars: 0 },
-  ]);
+  // Loaded templates
+  const [templates, setTemplates] = useState([]);
 
-  const handleSync = () => {
-    setSyncing(true);
-    addToast('Syncing templates from Meta Cloud API...', 'info');
-    setTimeout(() => {
-      setSyncing(false);
-      addToast('Templates synced successfully!', 'success');
-    }, 1200);
+  const fetchTemplates = async () => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+      const res = await fetch(`${API_BASE}/integrations/whatsapp/templates`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || '96722',
+        }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          setTemplates(json.data);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch templates:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleCreate = (e) => {
+  useEffect(() => {
+    fetchTemplates();
+  }, [token, tenantId]);
+
+  const handleSync = async () => {
+    if (!token) return;
+    setSyncing(true);
+    addToast('Syncing templates from Meta Cloud API...', 'info');
+    try {
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+      const res = await fetch(`${API_BASE}/integrations/whatsapp/sync-templates`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || '96722',
+        }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          setTemplates(json.data);
+          addToast('Templates synced successfully!', 'success');
+        } else {
+          addToast(json.message || 'Sync completed.', 'success');
+        }
+      } else {
+        addToast('Sync failed or completed with warning.', 'warning');
+      }
+    } catch (err) {
+      console.error('Failed to sync templates:', err);
+      addToast('Sync templates request failed.', 'error');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleCreate = async (e) => {
     e.preventDefault();
     if (!templateName) return;
 
-    const newT = {
-      id: String(templates.length + 1),
-      name: templateName.toLowerCase().replace(/\s+/g, '_'),
-      category: category.toUpperCase(),
-      language: 'EN',
-      status: 'Approved',
-      body: bodyText || '[Empty Body Text]',
-      vars: (bodyText.match(/\{\{\d\}\}/g) || []).length,
-      hasHeaderImage: headerFormat === 'Image',
-      headerText: headerFormat === 'Text' ? headerText : null
-    };
-
-    setTemplates([newT, ...templates]);
-    setShowAddModal(false);
-    // Reset form
-    setTemplateName('');
-    setBodyText('');
-    setHeaderText('');
-    setHeaderImageUrl('');
-    setHeaderFormat('None');
-    setFooterText('');
-    setButtonText('');
-    addToast('Template created and submitted to Meta!', 'success');
+    try {
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+      const res = await fetch(`${API_BASE}/integrations/whatsapp/templates`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || '96722',
+        },
+        body: JSON.stringify({
+          name: templateName,
+          category: category,
+          language: language,
+          body_text: bodyText,
+          header_format: headerFormat,
+          header_text: headerText,
+          footer_text: footerText,
+          button_text: buttonText
+        })
+      });
+      
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setTemplates(prev => [json.data, ...prev]);
+        addToast(json.message || 'Template created and submitted to Meta!', 'success');
+        setShowAddModal(false);
+        // Reset form
+        setTemplateName('');
+        setBodyText('');
+        setHeaderText('');
+        setHeaderImageUrl('');
+        setHeaderFormat('None');
+        setFooterText('');
+        setButtonText('');
+      } else {
+        addToast(json.detail || json.message || 'Failed to submit template.', 'error');
+      }
+    } catch (err) {
+      console.error('Failed to create template:', err);
+      addToast('Create template request failed.', 'error');
+    }
   };
 
   // Helper to format body text with variable placeholders for a realistic preview
@@ -157,8 +221,7 @@ export default function Templates() {
 
       {/* Template Designer Modal (Screenshot 4) */}
       {showAddModal && (
-        <>
-          <div className="modal-overlay" onClick={() => setShowAddModal(false)} />
+        <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
           <div className="modal-content w-full max-w-5xl p-0 overflow-hidden bg-white dark:bg-slate-900 rounded-2xl flex flex-col lg:flex-row" onClick={e => e.stopPropagation()}>
             
             {/* Left Column: Form Settings */}
@@ -411,7 +474,7 @@ export default function Templates() {
               </div>
             </div>
           </div>
-        </>
+        </div>
       )}
     </div>
   );
