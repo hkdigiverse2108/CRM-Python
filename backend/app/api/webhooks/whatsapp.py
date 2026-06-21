@@ -255,6 +255,16 @@ async def process_whatsapp_webhook(request: Request):
                             logger.warning(f"No tenant registered for phone_number_id '{phone_id}'. Message dropped.")
                             continue
                             
+                        # Verify if the resolved tenant actually has an active connection in whatsapp_accounts
+                        with get_db() as db:
+                            is_connected = db.execute(
+                                text("SELECT 1 FROM whatsapp_accounts WHERE tenant_id = :tenant_id AND status = 'Connected' LIMIT 1"),
+                                {"tenant_id": tenant_id}
+                            ).scalar()
+                        if not is_connected:
+                            logger.info(f"Tenant '{tenant_id}' has WhatsApp integration disconnected. Message dropped.")
+                            continue
+                            
                         msg_type = "text"
                         body = ""
                         attachment_url = None

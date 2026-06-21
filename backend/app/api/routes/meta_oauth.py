@@ -604,6 +604,16 @@ async def process_webhook(
                                 logger.warning(f"No tenant registered for phone_number_id '{phone_id}'. Message dropped.")
                                 continue
 
+                            # Verify if the resolved workspace actually has an active connection in whatsapp_accounts
+                            with get_db() as db:
+                                is_connected = db.execute(
+                                    text("SELECT 1 FROM whatsapp_accounts WHERE tenant_id = :tenant_id AND status = 'Connected' LIMIT 1"),
+                                    {"tenant_id": workspace_id}
+                                ).scalar()
+                            if not is_connected:
+                                logger.info(f"Workspace '{workspace_id}' has WhatsApp integration disconnected. Message dropped.")
+                                continue
+
                             logger.info(f"[WHATSAPP MESSAGE EVENT] ID: {wamid}, From: {phone}, Text: {body}, Tenant: {workspace_id}")
                             
                             lead_id = await _create_lead_if_not_exists(
