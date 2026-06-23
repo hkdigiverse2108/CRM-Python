@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import {
   Briefcase, BarChart3, CheckCircle2, Clock, AlertTriangle, CalendarDays,
@@ -80,6 +80,7 @@ export default function ProjectsDashboard() {
 
   const { tab } = useParams();
   const activeTab = tab || 'dashboard';
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
   const [filterPriority, setFilterPriority] = useState('All');
@@ -397,6 +398,28 @@ export default function ProjectsDashboard() {
             <Plus size={14} /> New Project
           </button>
         </div>
+      </div>
+
+      {/* Tab Switcher Bar */}
+      <div className="flex border-b border-border/10 gap-6 px-1">
+        {tabs.map((t) => {
+          const TabIcon = t.icon;
+          const isActive = activeTab === t.id;
+          return (
+            <button
+              key={t.id}
+              onClick={() => navigate(`/projects/${t.id}`)}
+              className={`flex items-center gap-2 pb-3 text-xs font-bold transition-all relative border-b-2 cursor-pointer ${
+                isActive
+                  ? 'text-primary border-primary'
+                  : 'text-muted-foreground border-transparent hover:text-foreground'
+              }`}
+            >
+              <TabIcon size={14} />
+              <span>{t.label}</span>
+            </button>
+          );
+        })}
       </div>
 
 
