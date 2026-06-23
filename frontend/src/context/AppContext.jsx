@@ -2600,18 +2600,63 @@ export function AppProvider({ children }) {
   }, [token, tenantId, logout, addToast]);
 
 
-  const updateProjectStage = useCallback((projectId, newStage) => {
+  const updateProjectStage = useCallback(async (projectId, newStage) => {
     const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
-    setProjects(prev => prev.map(p => {
-      if (p.id === projectId) {
-        const newStatus = (newStage === 'Completed') ? 'Completed' : (newStage === 'On Hold') ? 'On Hold' : (newStage === 'Cancelled') ? 'Cancelled' : 'Active';
-        const entry = { date: now, event: `Stage moved to ${newStage}`, type: 'stage', user: 'CRM Admin' };
-        return { ...p, stage: newStage, status: newStatus, timeline: [...(p.timeline || []), entry], lastModifiedAt: now, lastModifiedBy: 'CRM Admin' };
+    const newStatus = (newStage === 'Completed') ? 'Completed' : (newStage === 'On Hold') ? 'On Hold' : (newStage === 'Cancelled') ? 'Cancelled' : 'Active';
+    
+    let projName = 'Project';
+    setProjects(prev => {
+      const found = prev.find(p => p.id === projectId);
+      if (found) projName = found.name;
+      return prev;
+    });
+
+    try {
+      const resp = await fetch(`${API_BASE}/projects/${projectId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || getTenantId(),
+        },
+        body: JSON.stringify({
+          stage: newStage,
+          status: newStatus
+        })
+      });
+      if (resp.status === 401) {
+        logout();
+        return;
       }
-      return p;
-    }));
-    addToast(`Project stage updated to: ${newStage}`, 'success');
-  }, [addToast]);
+      const resData = await resp.json();
+      if (resData.success && resData.data) {
+        setProjects(prev => prev.map(p => {
+          if (p.id === projectId) {
+            const entry = { date: now, event: `Stage moved to ${newStage}`, type: 'stage', user: 'CRM Admin' };
+            return {
+              ...resData.data,
+              timeline: [...(p.timeline || []), entry],
+              lastModifiedAt: now,
+              lastModifiedBy: 'CRM Admin'
+            };
+          }
+          return p;
+        }));
+        
+        addToast(`Project stage updated to: ${newStage}`, 'success');
+        const notifMsg = `Project "${projName}" stage updated to "${newStage}" by CRM Admin`;
+        setNotifications(prevNotifs => [
+          { id: Date.now() + Math.random(), text: notifMsg, time: 'Just now', read: false },
+          ...prevNotifs
+        ]);
+      } else {
+        addToast(resData.message || 'Failed to update project stage', 'error');
+      }
+    } catch (error) {
+      addToast('Error communicating with backend', 'error');
+      console.error(error);
+    }
+  }, [token, tenantId, logout, addToast]);
 
   const addProjectTask = useCallback((projectId, task) => {
     const now = new Date().toISOString().replace('T', ' ').substring(0, 16);

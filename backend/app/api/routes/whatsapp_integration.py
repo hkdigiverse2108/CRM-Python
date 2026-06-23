@@ -1189,23 +1189,7 @@ def auto_create_task_client_project(db, tenant_id: str, lead_id: str, agent_id: 
             }
         )
         
-    # 2. Insert Task assigned to the employee
-    task_id = str(uuid.uuid4())
-    db.execute(
-        text("""
-            INSERT INTO tasks (task_id, workspace_id, title, type, priority, status, assignee, start_date, due_date, description, project, created_at, updated_at)
-            VALUES (:task_id, :ws_id, :title, 'Task', 'Medium', 'To Do', :assignee, CURDATE(), DATE_ADD(CURDATE(), INTERVAL 3 DAY), :desc, 'General', NOW(), NOW())
-        """),
-        {
-            "task_id": task_id,
-            "ws_id": tenant_id,
-            "title": f"Follow up with WhatsApp Lead: {lead_name}",
-            "assignee": agent_name,
-            "desc": f"Automated follow-up task for WhatsApp Lead {lead_name} (Phone: {lead_phone})."
-        }
-    )
-    
-    # 3. Insert Project linked to client
+    # 2. Insert Project linked to client
     project_id = str(uuid.uuid4())
     db.execute(
         text("""

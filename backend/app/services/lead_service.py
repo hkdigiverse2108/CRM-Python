@@ -53,6 +53,84 @@ class LeadService:
         updated = await self._repo.update(lead_id, tenant_id, data)
         if updated is None:
             raise NotFoundException(f"Lead '{lead_id}' not found")
+            
+        # If lead is assigned, ensure corresponding client and project exist
+        if "assigned_to" in data and data["assigned_to"]:
+            from backend.app.core.database import get_db
+            from sqlalchemy import text
+            import uuid
+            
+            assignee_value = data["assigned_to"]
+            with get_db() as db:
+                # Fetch lead details
+                lead = db.execute(
+                    text("SELECT full_name, phone_primary, email, company_name FROM leads WHERE lead_id = :lead_id AND workspace_id = :ws_id LIMIT 1"),
+                    {"lead_id": lead_id, "ws_id": tenant_id}
+                ).mappings().first()
+                
+                if lead:
+                    lead_name = lead["full_name"]
+                    lead_phone = lead["phone_primary"] or ""
+                    lead_email = lead["email"] or ""
+                    
+                    # Determine agent name
+                    agent_name = assignee_value
+                    db_agent_name = db.execute(
+                        text("SELECT full_name FROM users WHERE user_id = :uid AND workspace_id = :ws_id LIMIT 1"),
+                        {"uid": assignee_value, "ws_id": tenant_id}
+                    ).scalar()
+                    if db_agent_name:
+                        agent_name = db_agent_name
+                        
+                    # 1. Check/Insert Client
+                    client_id = None
+                    if lead_phone:
+                        client_id = db.execute(
+                            text("SELECT client_id FROM clients WHERE workspace_id = :ws_id AND phone = :phone LIMIT 1"),
+                            {"ws_id": tenant_id, "phone": lead_phone}
+                        ).scalar()
+                        
+                    if not client_id:
+                        client_id = str(uuid.uuid4())
+                        db.execute(
+                            text("""
+                                INSERT INTO clients (client_id, workspace_id, name, email, phone, status, created_at, updated_at)
+                                VALUES (:client_id, :ws_id, :name, :email, :phone, 'Active', NOW(), NOW())
+                            """),
+                            {
+                                "client_id": client_id,
+                                "ws_id": tenant_id,
+                                "name": lead_name,
+                                "email": lead_email,
+                                "phone": lead_phone
+                            }
+                        )
+                        
+                    # 2. Check/Insert Project
+                    proj_exists = db.execute(
+                        text("SELECT project_id FROM projects WHERE workspace_id = :ws_id AND client_id = :client_id LIMIT 1"),
+                        {"ws_id": tenant_id, "client_id": client_id}
+                    ).scalar()
+                    
+                    if not proj_exists:
+                        project_id = str(uuid.uuid4())
+                        db.execute(
+                            text("""
+                                INSERT INTO projects (project_id, workspace_id, name, description, client_id, client_name, assigned_manager, status, stage, created_at, updated_at)
+                                VALUES (:proj_id, :ws_id, :name, :desc, :client_id, :client_name, :manager, 'Active', 'New Project', NOW(), NOW())
+                            """),
+                            {
+                                "proj_id": project_id,
+                                "ws_id": tenant_id,
+                                "name": f"Project for {lead_name}",
+                                "desc": f"Automated project generated from lead assignment for {lead_name}.",
+                                "client_id": client_id,
+                                "client_name": lead_name,
+                                "manager": agent_name
+                            }
+                        )
+                        db.commit()
+                        
         return updated.to_dict()
 
     async def delete_lead(self, lead_id: str, tenant_id: str) -> bool:
