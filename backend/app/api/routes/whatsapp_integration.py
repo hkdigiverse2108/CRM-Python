@@ -1151,6 +1151,79 @@ async def get_agents(
     return success_response(data=agents)
 
 
+def auto_create_task_client_project(db, tenant_id: str, lead_id: str, agent_id: str, agent_name: str):
+    # Fetch lead details
+    lead = db.execute(
+        text("SELECT full_name, phone_primary, email FROM leads WHERE lead_id = :lead_id AND workspace_id = :ws_id LIMIT 1"),
+        {"lead_id": lead_id, "ws_id": tenant_id}
+    ).mappings().first()
+    
+    if not lead:
+        return
+        
+    lead_name = lead["full_name"]
+    lead_phone = lead["phone_primary"] or ""
+    lead_email = lead["email"] or ""
+    
+    # 1. Check or insert Client
+    client_id = None
+    if lead_phone:
+        client_id = db.execute(
+            text("SELECT client_id FROM clients WHERE workspace_id = :ws_id AND phone = :phone LIMIT 1"),
+            {"ws_id": tenant_id, "phone": lead_phone}
+        ).scalar()
+        
+    if not client_id:
+        client_id = str(uuid.uuid4())
+        db.execute(
+            text("""
+                INSERT INTO clients (client_id, workspace_id, name, email, phone, status, created_at, updated_at)
+                VALUES (:client_id, :ws_id, :name, :email, :phone, 'Active', NOW(), NOW())
+            """),
+            {
+                "client_id": client_id,
+                "ws_id": tenant_id,
+                "name": lead_name,
+                "email": lead_email,
+                "phone": lead_phone
+            }
+        )
+        
+    # 2. Insert Task assigned to the employee
+    task_id = str(uuid.uuid4())
+    db.execute(
+        text("""
+            INSERT INTO tasks (task_id, workspace_id, title, type, priority, status, assignee, start_date, due_date, description, project, created_at, updated_at)
+            VALUES (:task_id, :ws_id, :title, 'Task', 'Medium', 'To Do', :assignee, CURDATE(), DATE_ADD(CURDATE(), INTERVAL 3 DAY), :desc, 'General', NOW(), NOW())
+        """),
+        {
+            "task_id": task_id,
+            "ws_id": tenant_id,
+            "title": f"Follow up with WhatsApp Lead: {lead_name}",
+            "assignee": agent_name,
+            "desc": f"Automated follow-up task for WhatsApp Lead {lead_name} (Phone: {lead_phone})."
+        }
+    )
+    
+    # 3. Insert Project linked to client
+    project_id = str(uuid.uuid4())
+    db.execute(
+        text("""
+            INSERT INTO projects (project_id, workspace_id, name, description, client_id, client_name, assigned_manager, status, stage, created_at, updated_at)
+            VALUES (:proj_id, :ws_id, :name, :desc, :client_id, :client_name, :manager, 'Active', 'New Project', NOW(), NOW())
+        """),
+        {
+            "proj_id": project_id,
+            "ws_id": tenant_id,
+            "name": f"Project for {lead_name}",
+            "desc": f"Automated project generated from WhatsApp lead handover for {lead_name}.",
+            "client_id": client_id,
+            "client_name": lead_name,
+            "manager": agent_name
+        }
+    )
+
+
 class AssignLeadPayload(BaseModel):
     agent_id: str
 
@@ -1184,12 +1257,6 @@ async def assign_conversation(
         if not lead_name:
             raise HTTPException(status_code=404, detail="Lead not found.")
             
-        # Get old agent if any
-        old_agent_id = db.execute(
-            text("SELECT assigned_agent_id FROM leads WHERE lead_id = :lead_id AND workspace_id = :ws_id LIMIT 1"),
-            {"lead_id": lead_id, "ws_id": tenant_id}
-        ).scalar()
-        
         # 1. Update Lead assigned agent
         db.execute(
             text("UPDATE leads SET assigned_agent_id = :agent_id, updated_at = NOW() WHERE lead_id = :lead_id AND workspace_id = :ws_id"),
@@ -1235,6 +1302,9 @@ async def assign_conversation(
                 "by_uid": current_user_id
             }
         )
+        
+        # 5. Auto-create Task, Client and Project
+        auto_create_task_client_project(db, tenant_id, lead_id, agent_id, agent_name)
         
         db.commit()
         
@@ -1302,6 +1372,9 @@ async def takeover_conversation(
                 "by_uid": current_user_id
             }
         )
+        
+        # 5. Auto-create Task, Client and Project
+        auto_create_task_client_project(db, tenant_id, lead_id, current_user_id, user_name)
         
         db.commit()
         
