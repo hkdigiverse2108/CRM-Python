@@ -622,7 +622,9 @@ async def get_conversations(
                          AND lm_unread.is_read = 0
                    ) AS unread_count,
                    l.product_interest,
-                   l.tags
+                   l.tags,
+                   u.full_name AS assigned_agent_name,
+                   l.assigned_agent_id
             FROM leads l
             JOIN (
                 SELECT lm1.lead_id, lm1.message_body, lm1.message_time, lm1.sender, lm1.delivery_status
@@ -635,6 +637,7 @@ async def get_conversations(
                 ) lm2 ON lm1.lead_id = lm2.lead_id AND lm1.message_time = lm2.max_time
             ) lm ON l.lead_id = lm.lead_id
             LEFT JOIN lead_conversation_states cs ON l.lead_id = cs.lead_id
+            LEFT JOIN users u ON l.assigned_agent_id = u.user_id
             WHERE l.workspace_id = :ws_id AND l.deleted_at IS NULL
             ORDER BY lm.message_time DESC
         """)
@@ -670,6 +673,13 @@ async def get_conversations(
                 except Exception:
                     tags_list = [t.strip() for t in r[12].split(",") if t.strip()]
 
+            assigned_agent_name = r[13] if len(r) > 13 else None
+            assigned_agent_id = r[14] if len(r) > 14 else None
+            
+            assigned_to = "AI Bot" if bot_handled else "Unassigned"
+            if assigned_agent_name:
+                assigned_to = assigned_agent_name
+
             conversations.append({
                 "id": r[0],
                 "name": r[1],
@@ -682,7 +692,8 @@ async def get_conversations(
                 "avatar": f"https://api.dicebear.com/7.x/adventurer/svg?seed={r[1]}",
                 "botHandled": bot_handled,
                 "waiting": is_waiting,
-                "assignedTo": "Gajera Prince Laxmanbhai" if not bot_handled else "AI Bot",
+                "assignedTo": assigned_to,
+                "assignedAgentId": assigned_agent_id,
                 "lastAssignedTime": "Just now",
                 "online": is_online,
                 "productInterest": r[11] if len(r) > 11 else None,
@@ -1117,14 +1128,75 @@ async def send_whatsapp_message(
     return success_response(message="Message sent successfully.")
 
 
-@router.post("/conversations/{lead_id}/takeover")
-async def takeover_conversation(
-    lead_id: str,
+@router.get("/agents")
+async def get_agents(
     request: Request,
     current_user: dict = Depends(get_current_user)
 ):
     tenant_id = request.state.tenant.id
     with get_db() as db:
+        rows = db.execute(
+            text("SELECT user_id, full_name, email, status FROM users WHERE workspace_id = :ws_id AND deleted_at IS NULL"),
+            {"ws_id": tenant_id}
+        ).mappings().all()
+        
+    agents = []
+    for r in rows:
+        agents.append({
+            "id": r["user_id"],
+            "name": r["full_name"],
+            "email": r["email"],
+            "status": r["status"]
+        })
+    return success_response(data=agents)
+
+
+class AssignLeadPayload(BaseModel):
+    agent_id: str
+
+@router.post("/conversations/{lead_id}/assign")
+async def assign_conversation(
+    lead_id: str,
+    payload: AssignLeadPayload,
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    tenant_id = request.state.tenant.id
+    agent_id = payload.agent_id
+    current_user_id = current_user.get("id") or current_user.get("user_id") or "system"
+    
+    with get_db() as db:
+        # Check if agent exists
+        agent_name = db.execute(
+            text("SELECT full_name FROM users WHERE user_id = :agent_id AND workspace_id = :ws_id LIMIT 1"),
+            {"agent_id": agent_id, "ws_id": tenant_id}
+        ).scalar()
+        
+        if not agent_name:
+            raise HTTPException(status_code=400, detail="Invalid agent selected or agent does not belong to this workspace.")
+            
+        # Get lead name
+        lead_name = db.execute(
+            text("SELECT full_name FROM leads WHERE lead_id = :lead_id AND workspace_id = :ws_id LIMIT 1"),
+            {"lead_id": lead_id, "ws_id": tenant_id}
+        ).scalar()
+        
+        if not lead_name:
+            raise HTTPException(status_code=404, detail="Lead not found.")
+            
+        # Get old agent if any
+        old_agent_id = db.execute(
+            text("SELECT assigned_agent_id FROM leads WHERE lead_id = :lead_id AND workspace_id = :ws_id LIMIT 1"),
+            {"lead_id": lead_id, "ws_id": tenant_id}
+        ).scalar()
+        
+        # 1. Update Lead assigned agent
+        db.execute(
+            text("UPDATE leads SET assigned_agent_id = :agent_id, updated_at = NOW() WHERE lead_id = :lead_id AND workspace_id = :ws_id"),
+            {"agent_id": agent_id, "lead_id": lead_id, "ws_id": tenant_id}
+        )
+        
+        # 2. Update Conversation state status to 'human' (stops chatbot responses)
         db.execute(
             text("""
             INSERT INTO lead_conversation_states (lead_id, workspace_id, status, last_message_at)
@@ -1133,8 +1205,107 @@ async def takeover_conversation(
             """),
             {"lead_id": lead_id, "ws_id": tenant_id}
         )
+        
+        # 3. Log Assignment
+        db.execute(
+            text("""
+            INSERT INTO lead_assignments (id, workspace_id, lead_id, assigned_from, assigned_to, reason, assigned_at)
+            VALUES (:id, :ws_id, :lead_id, :from_uid, :to_uid, 'Assigned via WhatsApp panel handover', NOW())
+            """),
+            {
+                "id": str(uuid.uuid4()),
+                "ws_id": tenant_id,
+                "lead_id": lead_id,
+                "from_uid": current_user_id,
+                "to_uid": agent_id
+            }
+        )
+        
+        # 4. Log Activity
+        db.execute(
+            text("""
+            INSERT INTO lead_activities (id, workspace_id, lead_id, activity_type, activity_title, activity_description, activity_by, activity_date, created_at)
+            VALUES (:id, :ws_id, :lead_id, 'assignment', 'Lead Handed Over', :desc, :by_uid, NOW(), NOW())
+            """),
+            {
+                "id": str(uuid.uuid4()),
+                "ws_id": tenant_id,
+                "lead_id": lead_id,
+                "desc": f"Lead assigned to {agent_name} by WhatsApp handover.",
+                "by_uid": current_user_id
+            }
+        )
+        
         db.commit()
-    return success_response(message="Conversation taken over by agent.")
+        
+    return success_response(message=f"Lead successfully assigned to {agent_name}.")
+
+
+@router.post("/conversations/{lead_id}/takeover")
+async def takeover_conversation(
+    lead_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    tenant_id = request.state.tenant.id
+    current_user_id = current_user.get("id") or current_user.get("user_id") or "system"
+    
+    with get_db() as db:
+        # Get current user name
+        user_name = db.execute(
+            text("SELECT full_name FROM users WHERE user_id = :uid AND workspace_id = :ws_id LIMIT 1"),
+            {"uid": current_user_id, "ws_id": tenant_id}
+        ).scalar() or "Agent"
+        
+        # 1. Update Lead assigned agent
+        db.execute(
+            text("UPDATE leads SET assigned_agent_id = :agent_id, updated_at = NOW() WHERE lead_id = :lead_id AND workspace_id = :ws_id"),
+            {"agent_id": current_user_id, "lead_id": lead_id, "ws_id": tenant_id}
+        )
+        
+        # 2. Update Conversation state status to 'human' (stops chatbot responses)
+        db.execute(
+            text("""
+            INSERT INTO lead_conversation_states (lead_id, workspace_id, status, last_message_at)
+            VALUES (:lead_id, :ws_id, 'human', NOW())
+            ON DUPLICATE KEY UPDATE status = 'human', last_message_at = NOW()
+            """),
+            {"lead_id": lead_id, "ws_id": tenant_id}
+        )
+        
+        # 3. Log Assignment
+        db.execute(
+            text("""
+            INSERT INTO lead_assignments (id, workspace_id, lead_id, assigned_from, assigned_to, reason, assigned_at)
+            VALUES (:id, :ws_id, :lead_id, :from_uid, :to_uid, 'Assigned via WhatsApp panel takeover', NOW())
+            """),
+            {
+                "id": str(uuid.uuid4()),
+                "ws_id": tenant_id,
+                "lead_id": lead_id,
+                "from_uid": current_user_id,
+                "to_uid": current_user_id
+            }
+        )
+        
+        # 4. Log Activity
+        db.execute(
+            text("""
+            INSERT INTO lead_activities (id, workspace_id, lead_id, activity_type, activity_title, activity_description, activity_by, activity_date, created_at)
+            VALUES (:id, :ws_id, :lead_id, 'assignment', 'Lead Takeover', :desc, :by_uid, NOW(), NOW())
+            """),
+            {
+                "id": str(uuid.uuid4()),
+                "ws_id": tenant_id,
+                "lead_id": lead_id,
+                "desc": f"Lead taken over by {user_name}.",
+                "by_uid": current_user_id
+            }
+        )
+        
+        db.commit()
+        
+    return success_response(message="Conversation taken over successfully.")
 
 
 @router.post("/conversations/{lead_id}/return-to-bot")
@@ -1144,7 +1315,16 @@ async def return_to_bot(
     current_user: dict = Depends(get_current_user)
 ):
     tenant_id = request.state.tenant.id
+    current_user_id = current_user.get("id") or current_user.get("user_id") or "system"
+    
     with get_db() as db:
+        # 1. Update Lead assigned agent (remove assignment back to bot)
+        db.execute(
+            text("UPDATE leads SET assigned_agent_id = NULL, updated_at = NOW() WHERE lead_id = :lead_id AND workspace_id = :ws_id"),
+            {"lead_id": lead_id, "ws_id": tenant_id}
+        )
+        
+        # 2. Update Conversation state status to 'bot'
         db.execute(
             text("""
             INSERT INTO lead_conversation_states (lead_id, workspace_id, current_flow_id, current_node_id, status, last_message_at)
@@ -1152,6 +1332,20 @@ async def return_to_bot(
             ON DUPLICATE KEY UPDATE current_flow_id = NULL, current_node_id = NULL, status = 'bot', last_message_at = NOW()
             """),
             {"lead_id": lead_id, "ws_id": tenant_id}
+        )
+        
+        # 3. Log Activity
+        db.execute(
+            text("""
+            INSERT INTO lead_activities (id, workspace_id, lead_id, activity_type, activity_title, activity_description, activity_by, activity_date, created_at)
+            VALUES (:id, :ws_id, :lead_id, 'bot_handoff', 'Returned to Bot', 'Lead conversation returned to AI Bot Responder.', :by_uid, NOW(), NOW())
+            """),
+            {
+                "id": str(uuid.uuid4()),
+                "ws_id": tenant_id,
+                "lead_id": lead_id,
+                "by_uid": current_user_id
+            }
         )
         db.commit()
     return success_response(message="Conversation returned to AI Bot Responder.")

@@ -92,6 +92,8 @@ export default function WhatsApp() {
   const [showDetails, setShowDetails] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [agents, setAgents] = useState([]);
+  const [agentDropdownOpen, setAgentDropdownOpen] = useState(false);
 
   // Emoji picker & File upload state/refs
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -374,6 +376,47 @@ export default function WhatsApp() {
   useEffect(() => {
     fetchLabels();
   }, [fetchLabels]);
+
+  const fetchAgents = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/integrations/whatsapp/agents`, {
+        headers: getHeaders()
+      });
+      if (res.ok) {
+        const result = await res.json();
+        if (result.success) {
+          setAgents(result.data || []);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching agents:', err);
+    }
+  }, [getHeaders]);
+
+  useEffect(() => {
+    fetchAgents();
+  }, [fetchAgents]);
+
+  const handleAssignAgent = async (agentId) => {
+    setAgentDropdownOpen(false);
+    if (!activeChatId) return;
+    try {
+      const res = await fetch(`${API_BASE}/integrations/whatsapp/conversations/${activeChatId}/assign`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ agent_id: agentId })
+      });
+      if (res.ok) {
+        addToast('Lead assigned successfully', 'success');
+        fetchConversations();
+      } else {
+        const err = await res.json();
+        addToast(err.detail || 'Failed to assign lead', 'error');
+      }
+    } catch {
+      addToast('Network error assigning lead', 'error');
+    }
+  };
 
   const handleAddLabel = async () => {
     if (!newLabelName.trim()) return;
@@ -786,6 +829,38 @@ export default function WhatsApp() {
                       <span>Return to Bot</span>
                     </button>
                   )}
+
+                  {/* Assign Agent Dropdown */}
+                  <div className="relative">
+                    <button 
+                      onClick={() => setAgentDropdownOpen(!agentDropdownOpen)}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-all font-bold text-xs shadow-sm"
+                      title="Assign to Employee"
+                    >
+                      <span className="material-symbols-outlined text-[15px]">assignment_ind</span>
+                      <span>Assign</span>
+                    </button>
+                    {agentDropdownOpen && (
+                      <>
+                        <div className="fixed inset-0 z-30" onClick={() => setAgentDropdownOpen(false)} />
+                        <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl py-1.5 z-40 max-h-60 overflow-y-auto">
+                          <p className="px-3 py-1 text-[9px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-105 dark:border-slate-700">Assign Employee</p>
+                          {agents.map(agent => (
+                            <button
+                              key={agent.id}
+                              onClick={() => handleAssignAgent(agent.id)}
+                              className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors ${activeChat.assignedAgentId === agent.id ? 'text-indigo-600 font-bold bg-indigo-55/35' : 'text-slate-700 dark:text-slate-200'}`}
+                            >
+                              {agent.name}
+                            </button>
+                          ))}
+                          {agents.length === 0 && (
+                            <p className="px-3 py-2 text-[10px] text-slate-400">No employees found.</p>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
                   
                   <button 
                     onClick={() => setShowDetails(!showDetails)}
