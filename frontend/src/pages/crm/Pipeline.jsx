@@ -137,97 +137,86 @@ export default function Pipeline() {
         </button>
       </PageHeader>
 
-      {/* Kanban Scroll Area */}
-      <div className="overflow-x-auto pb-6 custom-scrollbar">
-        <div className="flex gap-6 h-full items-start">
-          {stages.map(stage => {
-            const stageDeals = filteredDeals.filter(d => d.stage === stage.id);
-            const totalValue = stageDeals.reduce((sum, d) => sum + d.value, 0);
-            return (
-              <div 
-                key={stage.id} 
-                className="flex flex-col gap-4 min-w-[320px] max-w-[320px] shrink-0"
-                onDragOver={handleDragOver}
-                onDrop={() => handleDrop(stage.id)}
-              >
-                {/* Stage Header */}
-                <div className="flex items-center justify-between px-2">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-2.5 h-2.5 rounded-full ${stage.color}`}></div>
-                    <h3 className="text-label-md font-bold text-on-surface uppercase tracking-wider">{stage.name}</h3>
-                    <span className="bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-[10px] font-bold text-on-surface-variant">
-                      {stageDeals.length}
-                    </span>
-                  </div>
-                  <span className="text-label-sm font-bold text-on-surface-variant">₹{totalValue.toLocaleString('en-IN')}</span>
-                </div>
-
-                {/* Cards Container */}
-                <div className="space-y-4 min-h-[500px] bg-slate-50/50 dark:bg-slate-900/10 p-2 rounded-2xl border border-dashed border-outline-variant/30">
-                  {stageDeals.length > 0 ? (
-                    stageDeals.map(deal => (
-                      <div 
-                        key={deal.id}
-                        draggable
-                        onDragStart={() => handleDragStart(deal.id)}
-                        className={`glass-card p-4 rounded-xl shadow-sm hover:shadow-md hover:border-primary/30 transition-all cursor-grab active:cursor-grabbing group ${
-                          deal.hot ? 'border-2 border-secondary/30 ring-2 ring-secondary/10 bg-gradient-to-br from-white to-purple-500/5 dark:from-slate-900 dark:to-purple-950/5' : ''
-                        }`}
+      {/* Deals Table View */}
+      <div className="glass-card rounded-2xl border border-slate-100 dark:border-slate-800/80 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 dark:bg-slate-900/40 text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase tracking-wider border-b border-slate-100 dark:border-slate-800/80">
+                <th className="py-4 px-5">Deal & Company</th>
+                <th className="py-4 px-5">Stage</th>
+                <th className="py-4 px-5">Value (₹)</th>
+                <th className="py-4 px-5">Assigned Agent</th>
+                <th className="py-4 px-5">Source</th>
+                <th className="py-4 px-5">Score / Prob.</th>
+                <th className="py-4 px-5 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+              {filteredDeals.length > 0 ? (
+                filteredDeals.map(deal => (
+                  <tr key={deal.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10 transition-colors">
+                    <td className="py-4 px-5">
+                      <div className="font-bold text-xs text-slate-800 dark:text-white">{deal.name}</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">{deal.company}</div>
+                    </td>
+                    <td className="py-4 px-5">
+                      <select 
+                        value={deal.stage} 
+                        onChange={(e) => {
+                          setLeads(prev => prev.map(l => l.id === deal.id ? { ...l, stage: e.target.value } : l));
+                          addToast(`"${deal.name}" stage updated to ${e.target.value}`, 'success');
+                        }}
+                        className="text-[11px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                       >
-                        <div className="flex justify-between items-start mb-2">
-                          {deal.stage === 'Won' ? (
-                            <span className="bg-emerald-500 text-white text-[10px] px-2.5 py-0.5 rounded-full font-bold">WON</span>
-                          ) : deal.stage === 'Lost' ? (
-                            <span className="bg-red-500 text-white text-[10px] px-2.5 py-0.5 rounded-full font-bold">LOST</span>
-                          ) : deal.hot ? (
-                            <span className="bg-secondary text-white text-[10px] px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-sm">HIGH VALUE</span>
-                          ) : (
-                            <span className="bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-400 text-[10px] px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
-                              Score: {deal.score}
-                            </span>
-                          )}
-                          <button className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded">
-                            <span className="material-symbols-outlined text-[18px]">drag_indicator</span>
-                          </button>
-                        </div>
-                        <h4 className="text-body-sm font-bold text-on-surface mb-1">{deal.name}</h4>
-                        <p className="text-[12px] text-on-surface-variant mb-4">{deal.company}</p>
-                        
-                        <div className="flex items-center justify-between pt-4 border-t border-outline-variant/30">
-                          <div className="flex items-center gap-2">
-                            <img 
-                              alt="Rep Avatar" 
-                              className="w-6 h-6 rounded-full object-cover ring-2 ring-white dark:ring-slate-900" 
-                              src={deal.avatar}
-                            />
-                            <span className="text-[10px] font-bold text-on-surface-variant">{deal.rep}</span>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-label-md font-bold text-primary">₹{deal.value.toLocaleString('en-IN')}</p>
-                            <p className="text-[10px] text-on-surface-variant">{deal.days} day in stage</p>
-                          </div>
-                        </div>
-
-                        {(deal.stage !== 'Won' && deal.stage !== 'Lost') && (
-                          <div className="mt-3">
-                            <div className="bg-slate-100 dark:bg-slate-800 h-1.5 w-full rounded-full overflow-hidden">
-                              <div className="bg-[#805ad5] h-full w-[85%] rounded-full shadow-sm" style={{ width: `${deal.probability}%` }}></div>
-                            </div>
-                            <p className="text-[10px] text-secondary font-bold mt-1 text-right">{deal.probability}% probability</p>
-                          </div>
-                        )}
+                        {stages.map(st => (
+                          <option key={st.id} value={st.id}>{st.name}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="py-4 px-5 text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                      ₹{deal.value.toLocaleString('en-IN')}
+                    </td>
+                    <td className="py-4 px-5">
+                      <div className="flex items-center gap-2">
+                        <img alt="Rep" className="w-5 h-5 rounded-full" src={deal.avatar} />
+                        <span className="text-xs text-slate-655 dark:text-slate-300">{deal.rep}</span>
                       </div>
-                    ))
-                  ) : (
-                    <div className="text-center text-[10px] text-on-surface-variant py-10 border border-dashed border-outline-variant/50 rounded-xl">
-                      Drop deals here
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+                    </td>
+                    <td className="py-4 px-5 text-[11px] text-slate-500 font-semibold uppercase">{deal.source}</td>
+                    <td className="py-4 px-5">
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-1.5 py-0.5 rounded font-bold">
+                          Score: {deal.score}
+                        </span>
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
+                          {deal.probability}%
+                        </span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-5 text-right">
+                      <button 
+                        onClick={() => {
+                          setLeads(prev => prev.filter(l => l.id !== deal.id));
+                          addToast(`Deal "${deal.name}" deleted`, 'info');
+                        }}
+                        className="p-1.5 hover:bg-red-50 dark:hover:bg-red-950/20 text-slate-400 hover:text-red-600 rounded-lg transition-colors cursor-pointer"
+                        title="Delete Deal"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">delete</span>
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="7" className="py-10 text-center text-xs text-slate-400 italic">
+                    No deals or leads found in the sales pipeline.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 

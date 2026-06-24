@@ -38,6 +38,7 @@ from backend.app.api.routes.whatsapp_integration import router as whatsapp_integ
 from backend.app.api.webhooks.whatsapp import router as whatsapp_webhook_router
 from backend.app.api.routes.documents import router as documents_router
 from backend.app.api.routes.payroll_adjustments import router as payroll_adjustments_router
+from backend.app.api.routes.followups import router as followups_router
 
 api_router = APIRouter()
 
@@ -74,4 +75,5 @@ api_router.include_router(super_admin_router, prefix="/super-admin", tags=["SaaS
 api_router.include_router(super_admin_router, prefix="/superadmin", tags=["SaaS Super Admin"])
 api_router.include_router(search_router, prefix="/search", tags=["Global Search"])
 api_router.include_router(workspace_admin_router, prefix="/admin", tags=["SaaS Workspace Admin"])
+api_router.include_router(followups_router, prefix="/followups", tags=["Lead Followups"])
 

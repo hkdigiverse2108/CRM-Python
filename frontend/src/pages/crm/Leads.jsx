@@ -12,7 +12,11 @@ import {
 } from 'lucide-react';
 
 export default function Leads() {
-  const { addToast, leads: allLeads, setLeads: setAllLeads, convertLeadToClient, updateLead, deleteLead, createLead, token, tenantId } = useApp();
+  const { 
+    addToast, leads: allLeads, setLeads: setAllLeads, convertLeadToClient, 
+    updateLead, deleteLead, createLead, token, tenantId,
+    fetchLeadFollowups, createLeadFollowup
+  } = useApp();
   const [selectedLeadId, setSelectedLeadId] = useState(allLeads[0]?.id || '');
   const selectedLead = allLeads.find(l => l.id === selectedLeadId) || allLeads[0];
   const [search, setSearch] = useState('');
@@ -21,6 +25,48 @@ export default function Leads() {
   const [selectedTag, setSelectedTag] = useState('All');
   const [workspaceLabels, setWorkspaceLabels] = useState([]);
   const [selectedLabel, setSelectedLabel] = useState('All');
+
+  // Follow-up States
+  const [followups, setFollowups] = useState([]);
+  const [loadingFollowups, setLoadingFollowups] = useState(false);
+  const [newFollowupNote, setNewFollowupNote] = useState('');
+  const [nextFollowupDate, setNextFollowupDate] = useState('');
+  const [nextFollowupRemarks, setNextFollowupRemarks] = useState('');
+  const [followupType, setFollowupType] = useState('Call');
+
+  useEffect(() => {
+    if (!selectedLead?.id) return;
+    const loadFollowups = async () => {
+      setLoadingFollowups(true);
+      const data = await fetchLeadFollowups(selectedLead.id);
+      setFollowups(data || []);
+      setLoadingFollowups(false);
+    };
+    loadFollowups();
+  }, [selectedLeadId, selectedLead?.id, fetchLeadFollowups]);
+
+  const handleLogFollowup = async (e) => {
+    e.preventDefault();
+    if (!newFollowupNote.trim()) {
+      addToast('Remarks note is required', 'warning');
+      return;
+    }
+    const payload = {
+      followup_date: new Date().toISOString().split('T')[0],
+      followup_type: followupType,
+      remarks: newFollowupNote,
+      next_followup_date: nextFollowupDate || null,
+      next_followup_remarks: nextFollowupRemarks || null,
+    };
+    const created = await createLeadFollowup(selectedLead.id, payload);
+    if (created) {
+      setFollowups(prev => [...prev, created]);
+      setNewFollowupNote('');
+      setNextFollowupDate('');
+      setNextFollowupRemarks('');
+      addToast('Follow-up history updated', 'success');
+    }
+  };
 
   useEffect(() => {
     const fetchLabels = async () => {
@@ -587,24 +633,108 @@ export default function Leads() {
                 </button>
               </div>
 
-              {/* Timeline Activity Log */}
-              <div className="border-t border-slate-100 dark:border-slate-800/80 pt-4 space-y-3">
-                <h4 className="text-[10px] font-bold text-slate-400 uppercase">Activity Log</h4>
-                <div className="space-y-3">
+              {/* Follow-Up Logs & Scheduling Section */}
+              <div className="border-t border-slate-100 dark:border-slate-800/80 pt-4 space-y-4">
+                <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center justify-between">
+                  <span>Follow-Up Logs & Reminders</span>
+                  {followups.length > 0 && (
+                    <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded">
+                      {followups.length} Taken
+                    </span>
+                  )}
+                </h4>
+
+                {/* Schedule Next / Log Current Form */}
+                <form onSubmit={handleLogFollowup} className="space-y-3 bg-slate-50 dark:bg-slate-900/40 p-3 rounded-xl border border-slate-100 dark:border-slate-800/80">
                   <div className="flex gap-2">
-                    <CheckCircle size={14} className="text-indigo-500 shrink-0 mt-0.5" />
+                    <select 
+                      value={followupType} 
+                      onChange={e => setFollowupType(e.target.value)} 
+                      className="text-[10px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-1"
+                    >
+                      <option value="Call">📞 Call</option>
+                      <option value="WhatsApp">💬 WhatsApp</option>
+                      <option value="Email">✉️ Email</option>
+                      <option value="F2F Meeting">🤝 F2F Meeting</option>
+                    </select>
+                    <span className="text-[9px] text-slate-400 font-semibold self-center">
+                      First Taken: {followups.length > 0 ? followups[0].followup_date : 'None yet'}
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] font-bold text-slate-400 block mb-1">Follow-Up Note / Remarks *</label>
+                    <textarea 
+                      value={newFollowupNote}
+                      onChange={e => setNewFollowupNote(e.target.value)}
+                      placeholder="What was discussed?" 
+                      className="w-full text-xs p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500" 
+                      rows="2"
+                      required
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <p className="text-[11px] font-bold text-slate-705 dark:text-slate-300">Proposal Sent</p>
-                      <p className="text-[9px] text-slate-400">Assigned by Arjun Mehta</p>
+                      <label className="text-[9px] font-bold text-slate-400 block mb-1">Next Follow-Up Date</label>
+                      <input 
+                        type="date" 
+                        value={nextFollowupDate}
+                        onChange={e => setNextFollowupDate(e.target.value)}
+                        className="w-full text-xs p-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded" 
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold text-slate-400 block mb-1">Next Remarks / Task</label>
+                      <input 
+                        type="text" 
+                        value={nextFollowupRemarks}
+                        onChange={e => setNextFollowupRemarks(e.target.value)}
+                        placeholder="e.g. Call to close" 
+                        className="w-full text-xs p-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded" 
+                      />
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Clock size={14} className="text-slate-400 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-[11px] font-medium text-slate-705 dark:text-slate-300">Lead Created</p>
-                      <p className="text-[9px] text-slate-400">{selectedLead.createdAt}</p>
-                    </div>
-                  </div>
+
+                  <button 
+                    type="submit" 
+                    className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold rounded-lg transition-colors cursor-pointer"
+                  >
+                    Log Follow-Up & Schedule
+                  </button>
+                </form>
+
+                {/* Follow-up Logs History list */}
+                <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1 scrollbar-thin">
+                  {loadingFollowups ? (
+                    <p className="text-[10px] text-slate-400 italic">Loading logs...</p>
+                  ) : followups.length === 0 ? (
+                    <p className="text-[10px] text-slate-400 italic">No follow-up history logged yet.</p>
+                  ) : (
+                    followups.slice().reverse().map((item, index) => {
+                      const logNum = followups.length - index;
+                      const isFirst = logNum === 1;
+                      return (
+                        <div key={item.id || index} className="p-2.5 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-800/80 rounded-xl relative shadow-xs">
+                          <span className="absolute top-2 right-2 text-[8px] bg-slate-105 dark:bg-slate-900 text-slate-500 px-1 rounded uppercase font-bold">
+                            {item.followup_type}
+                          </span>
+                          <p className="text-[10px] font-bold text-slate-700 dark:text-slate-200">
+                            {isFirst ? 'First Follow-Up' : `${logNum}th Follow-Up`}
+                          </p>
+                          <p className="text-[9px] text-slate-400">{item.followup_date} • {item.created_by || 'Agent'}</p>
+                          <p className="text-xs text-slate-600 dark:text-slate-300 mt-1.5 italic bg-slate-50 dark:bg-slate-900/30 p-1.5 rounded">
+                            "{item.remarks}"
+                          </p>
+                          {item.next_followup_date && (
+                            <div className="mt-2 text-[9px] text-amber-600 dark:text-amber-400 font-semibold border-t border-dashed border-slate-100 dark:border-slate-800 pt-1.5">
+                              📅 Next: {item.next_followup_date} {item.next_followup_remarks && `(${item.next_followup_remarks})`}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
             </div>
