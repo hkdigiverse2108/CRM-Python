@@ -32,10 +32,25 @@ class AttendanceService:
                 "pages": (total + per_page - 1) // per_page if total > 0 else 0,
             },
         }
+    def _resolve_employee_id(self, employee_id: str, tenant_id: str) -> str:
+        if employee_id and "-" in employee_id and not employee_id.startswith("EMP-"):
+            from backend.app.core.database import get_db
+            from sqlalchemy import text
+            try:
+                with get_db() as db:
+                    email_val = db.execute(text("SELECT email FROM users WHERE user_id = :uid AND workspace_id = :ws_id LIMIT 1"), {"uid": employee_id, "ws_id": tenant_id}).scalar()
+                    if email_val:
+                        emp_val = db.execute(text("SELECT employee_id FROM hrms_employees WHERE email = :email AND workspace_id = :ws_id LIMIT 1"), {"email": email_val, "ws_id": tenant_id}).scalar()
+                        if emp_val:
+                            return emp_val
+            except Exception as e:
+                print(f"Error resolving employee ID: {e}")
+        return employee_id
 
     async def clock_in_out(self, data: dict[str, Any], tenant_id: str) -> Dict[str, Any]:
         import json
-        employee_id = data["employeeId"]
+        employee_id = self._resolve_employee_id(data["employeeId"], tenant_id)
+        data["employeeId"] = employee_id
         current_date = date.today()
         action = data.get("action")
 
@@ -267,7 +282,8 @@ class AttendanceService:
                 return updated.to_dict()
 
     async def manual_attendance(self, data: dict[str, Any], tenant_id: str) -> Dict[str, Any]:
-        employee_id = data["employeeId"]
+        employee_id = self._resolve_employee_id(data["employeeId"], tenant_id)
+        data["employeeId"] = employee_id
         att_date = data["date"]
         if isinstance(att_date, str):
             att_date = date.fromisoformat(att_date)

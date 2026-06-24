@@ -578,19 +578,31 @@ async def delete_workspace_user(
         raise HTTPException(status_code=400, detail="Cannot delete your own admin account.")
 
     with get_db() as db:
-        user_exists = db.execute(text("SELECT email FROM users WHERE user_id = :uid AND workspace_id = :ws_id AND deleted_at IS NULL"), {"uid": user_id, "ws_id": workspace_id}).mappings().first()
-        if not user_exists:
+        user_row = db.execute(text("SELECT email, role_id FROM users WHERE user_id = :uid AND workspace_id = :ws_id AND deleted_at IS NULL"), {"uid": user_id, "ws_id": workspace_id}).mappings().first()
+        if not user_row:
             raise HTTPException(status_code=404, detail="User not found in this workspace.")
 
-        db.execute(text("UPDATE users SET deleted_at = CURRENT_TIMESTAMP WHERE user_id = :uid"), {"uid": user_id})
+        email = user_row["email"]
+        role_id = user_row["role_id"]
+
+        # 1. Permanently delete user from users table
+        db.execute(text("DELETE FROM users WHERE user_id = :uid"), {"uid": user_id})
+
+        # 2. Permanently delete custom user role if it matches user_id
+        if role_id and role_id == user_id:
+            db.execute(text("DELETE FROM role_permissions WHERE role_id = :role_id"), {"role_id": role_id})
+            db.execute(text("DELETE FROM roles WHERE role_id = :role_id AND workspace_id = :ws_id"), {"role_id": role_id, "ws_id": workspace_id})
+
+        # 3. Permanently delete employee record
+        db.execute(text("DELETE FROM hrms_employees WHERE email = :email AND workspace_id = :ws_id"), {"email": email, "ws_id": workspace_id})
         
         log_audit_event(
             db, workspace_id, current_user["id"], current_user["email"],
-            "DELETE_USER", f"Soft-deleted user {user_exists['email']}", ip
+            "DELETE_USER", f"Permanently deleted user {email}", ip
         )
         db.commit()
 
-    return success_response(message="User deleted successfully.")
+    return success_response(message="User permanently deleted successfully.")
 
 # 2. Workspace Roles Summary
 @router.get("/roles-summary")
