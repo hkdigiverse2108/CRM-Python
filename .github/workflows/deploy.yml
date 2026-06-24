@@ -1,0 +1,45 @@
+name: Deploy CRM
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H 82.29.160.246 >> ~/.ssh/known_hosts
+
+      - name: Deploy LIVE
+        if: github.ref == 'refs/heads/main'
+        run: |
+          ssh root@82.29.160.246 << 'EOF'
+            cd /root/CRM/live
+
+            git fetch origin
+            git checkout main
+            git pull origin main
+
+            # Install backend dependencies
+            if [ -d ".venv" ]; then
+              .venv/bin/pip install -r backend/requirements.txt --quiet
+            elif [ -d "venv" ]; then
+              venv/bin/pip install -r backend/requirements.txt --quiet
+            fi
+
+            # Install frontend dependencies and build
+            npm install
+            npm run build
+
+            pm2 restart CRM
+          EOF
