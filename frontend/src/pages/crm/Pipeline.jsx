@@ -226,13 +226,13 @@ export default function Pipeline() {
       </PageHeader>
 
       {/* Stages Filter Row */}
-      <div className="flex gap-2 pb-1 overflow-x-auto no-scrollbar shrink-0 bg-white/50 dark:bg-slate-900/10 p-3.5 rounded-xl border border-slate-100 dark:border-slate-850/80">
+      <div className="flex gap-2 pb-2 overflow-x-auto no-scrollbar shrink-0 bg-slate-50/60 dark:bg-slate-950/20 p-2.5 rounded-2xl border border-slate-100 dark:border-slate-800/60 backdrop-blur-xs">
         <button
           onClick={() => setSelectedStageFilter('All')}
-          className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+          className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-200 cursor-pointer ${
             selectedStageFilter === 'All'
-              ? 'bg-indigo-650 text-white shadow-md'
-              : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-705'
+              ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20 scale-[1.02]'
+              : 'bg-white hover:bg-slate-100 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:bg-slate-800 border border-slate-200/50 dark:border-slate-800/80'
           }`}
         >
           All Stages ({deals.length})
@@ -244,13 +244,13 @@ export default function Pipeline() {
             <button
               key={st.id}
               onClick={() => setSelectedStageFilter(st.id)}
-              className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+              className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-200 flex items-center gap-2 cursor-pointer ${
                 isActive
-                  ? 'bg-indigo-650 text-white shadow-md'
-                  : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-705'
+                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20 scale-[1.02]'
+                  : 'bg-white hover:bg-slate-100 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:bg-slate-800 border border-slate-200/50 dark:border-slate-800/80'
               }`}
             >
-              <span className={`w-2 h-2 rounded-full ${st.color}`}></span>
+              <span className={`w-2 h-2 rounded-full ${st.color} shadow-xs`}></span>
               <span>{st.name} ({count})</span>
             </button>
           );
@@ -281,22 +281,22 @@ export default function Pipeline() {
                   <tr 
                     key={deal.id} 
                     onClick={() => handleOpenDetails(deal.id)}
-                    className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10 transition-colors cursor-pointer"
+                    className="hover:bg-indigo-50/20 dark:hover:bg-indigo-950/5 transition-all duration-150 cursor-pointer border-l-2 border-transparent hover:border-indigo-500"
                   >
                     <td className="py-3 px-4 text-center" onClick={e => e.stopPropagation()}>
-                      <button 
-                        onClick={async () => {
-                          const isHot = deal.stage === 'Hot Lead';
-                          const newStage = isHot ? 'New' : 'Hot Lead';
+                      <input 
+                        type="checkbox"
+                        checked={deal.stage === 'Hot Lead'}
+                        onChange={async (e) => {
+                          const isChecked = e.target.checked;
+                          const newStage = isChecked ? 'Hot Lead' : 'New';
                           await updateLead(deal.id, { stage: newStage });
                           setLeads(prev => prev.map(l => l.id === deal.id ? { ...l, stage: newStage, status: newStage } : l));
                           addToast(`Lead marked as ${newStage}`, 'success');
                         }}
-                        className={`p-1 rounded transition-colors ${deal.stage === 'Hot Lead' ? 'bg-orange-100 text-orange-600 dark:bg-orange-950/30 text-xs' : 'text-slate-300 hover:text-orange-500 text-xs'}`}
-                        title={deal.stage === 'Hot Lead' ? "Hot Lead (Click to demote)" : "Mark as Hot Lead"}
-                      >
-                        🔥
-                      </button>
+                        className="w-4 h-4 rounded text-indigo-600 border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                        title={deal.stage === 'Hot Lead' ? "Hot Lead" : "Mark as Hot Lead"}
+                      />
                     </td>
                     <td className="py-3 px-4 text-xs text-slate-655 dark:text-slate-300 font-medium">
                       {deal.createdBy}
@@ -325,7 +325,7 @@ export default function Pipeline() {
                     <td className="py-3 px-4 text-xs text-slate-655 dark:text-slate-300">
                       {deal.rep}
                     </td>
-                    <td className="py-3 px-4 text-xs font-bold text-indigo-650 dark:text-indigo-400">
+                    <td className="py-3 px-4 text-xs font-bold text-indigo-600 dark:text-indigo-400">
                       ₹{deal.value.toLocaleString('en-IN')}
                     </td>
                     <td className="py-3 px-4 text-[11px] text-slate-500 dark:text-slate-400 max-w-[150px] truncate" title={deal.remarks}>
@@ -459,7 +459,7 @@ export default function Pipeline() {
                   </div>
                   <div className="p-2.5 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800/80">
                     <span className="text-[9px] font-bold text-slate-400 uppercase">Current Stage</span>
-                    <p className="text-xs font-bold mt-0.5 text-indigo-650 dark:text-indigo-400">{selectedLead.stage}</p>
+                    <p className="text-xs font-bold mt-0.5 text-indigo-600 dark:text-indigo-400">{selectedLead.stage}</p>
                   </div>
                 </div>
                 {/* Followup logs & scheduling (Only visible if lead stage is 'Follow-up') */}
@@ -512,7 +512,7 @@ export default function Pipeline() {
                         </div>
                       </div>
 
-                      <button type="submit" className="w-full py-1.5 bg-indigo-650 hover:bg-indigo-700 text-white text-[11px] font-bold rounded-lg transition-colors cursor-pointer">
+                      <button type="submit" className="btn-primary w-full justify-center py-2 text-xs font-bold cursor-pointer">
                         Log Follow-Up & Schedule
                       </button>
                     </form>

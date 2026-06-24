@@ -280,19 +280,19 @@ export default function Leads() {
     <div className="space-y-5">
       <PageHeader title="Lead Workspace" subtitle={`${filtered.length} Leads matching filters`}>
         <ButtonGuard module="crm" action="import">
-          <button onClick={handleImport} className="btn-outline py-1.5 px-3 text-xs gap-1.5" style={{ color: '#ffffff', borderColor: 'rgba(99,102,241,0.3)' }}>
+          <button onClick={handleImport} className="btn-outline py-1.5 px-3 text-xs gap-1.5 border border-indigo-200 dark:border-indigo-900/60 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
             <Upload size={13} />
             <span>Import</span>
           </button>
         </ButtonGuard>
         <ButtonGuard module="crm" action="export">
-          <button onClick={handleExport} className="btn-outline py-1.5 px-3 text-xs gap-1.5" style={{ color: '#ffffff', borderColor: 'rgba(99,102,241,0.3)' }}>
+          <button onClick={handleExport} className="btn-outline py-1.5 px-3 text-xs gap-1.5 border border-indigo-200 dark:border-indigo-900/60 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
             <Download size={13} />
             <span>Export</span>
           </button>
         </ButtonGuard>
         <ButtonGuard module="crm" action="create">
-          <button onClick={() => setShowAddLead(true)} className="btn-primary py-1.5 px-3.5 text-xs rounded-xl" style={{ color: '#ffffff' }}>
+          <button onClick={() => setShowAddLead(true)} className="btn-primary py-1.5 px-3.5 text-xs rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold transition-all shadow-md shadow-indigo-600/10 cursor-pointer">
             <Plus size={14} />
             <span>Create Lead</span>
           </button>
@@ -433,7 +433,11 @@ export default function Leads() {
                     <tr 
                       key={lead.id}
                       onClick={() => setSelectedLeadId(lead.id)}
-                      className={`cursor-pointer ${selectedLeadId === lead.id ? 'bg-indigo-50/40 dark:bg-indigo-950/10' : ''}`}
+                      className={`cursor-pointer border-l-2 hover:bg-indigo-50/20 dark:hover:bg-indigo-950/5 transition-all duration-150 ${
+                        selectedLeadId === lead.id 
+                          ? 'bg-indigo-55/60 dark:bg-indigo-950/20 border-indigo-500 font-medium' 
+                          : 'border-transparent hover:border-indigo-400'
+                      }`}
                     >
                       <td>
                         <div className="font-semibold text-xs text-slate-800 dark:text-white">{lead.name}</div>
@@ -698,7 +702,7 @@ export default function Leads() {
 
                   <button 
                     type="submit" 
-                    className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold rounded-lg transition-colors cursor-pointer"
+                    className="btn-primary w-full justify-center py-2 text-xs font-bold cursor-pointer"
                   >
                     Log Follow-Up & Schedule
                   </button>
