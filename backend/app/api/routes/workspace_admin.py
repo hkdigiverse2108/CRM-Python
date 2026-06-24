@@ -459,18 +459,115 @@ async def update_workspace_user_details(
             if email_check:
                 raise HTTPException(status_code=400, detail="Email is already in use by another user in this workspace.")
 
-        # Update users table
+        # Update users table and role
+        is_org_admin = payload.role_name == "Organization Admin"
+        new_role_id = f"role_admin_001_{workspace_id}" if is_org_admin else user_id
+
         db.execute(text("""
             UPDATE users 
-            SET email = :email, full_name = :name, phone = :phone
+            SET email = :email, full_name = :name, phone = :phone, role_id = :role_id
             WHERE user_id = :uid AND workspace_id = :ws_id
         """), {
             "email": payload.email,
             "name": payload.full_name,
             "phone": payload.phone,
+            "role_id": new_role_id,
             "uid": user_id,
             "ws_id": workspace_id
         })
+
+        if not is_org_admin and payload.role_name:
+            # Check if there is an existing template role in the workspace matching payload.role_name
+            # and that it is NOT the user's own custom role (which has role_id == user_id)
+            existing_role = db.execute(text("""
+                SELECT role_id, pages_permissions, buttons_permissions, department_access, branch_access 
+                FROM roles 
+                WHERE role_name = :role_name AND workspace_id = :ws_id AND role_id != :uid
+            """), {"role_name": payload.role_name, "ws_id": workspace_id, "uid": user_id}).mappings().first()
+
+            user_role_exists = db.execute(text("""
+                SELECT role_id FROM roles WHERE role_id = :uid AND workspace_id = :ws_id
+            """), {"uid": user_id, "ws_id": workspace_id}).scalar()
+
+            if existing_role:
+                if user_role_exists:
+                    # Update custom role with the template's permissions
+                    db.execute(text("""
+                        UPDATE roles 
+                        SET role_name = :role_name,
+                            pages_permissions = :pages,
+                            buttons_permissions = :buttons,
+                            department_access = :dept,
+                            branch_access = :branch
+                        WHERE role_id = :uid AND workspace_id = :ws_id
+                    """), {
+                        "role_name": payload.role_name,
+                        "pages": existing_role["pages_permissions"] or "[]",
+                        "buttons": existing_role["buttons_permissions"] or "[]",
+                        "dept": existing_role["department_access"] or "[]",
+                        "branch": existing_role["branch_access"] or "all",
+                        "uid": user_id,
+                        "ws_id": workspace_id
+                    })
+                else:
+                    # Create custom role cloned from the template
+                    db.execute(text("""
+                        INSERT INTO roles (role_id, workspace_id, role_name, description, is_custom, status, pages_permissions, buttons_permissions, department_access, branch_access)
+                        VALUES (:role_id, :ws_id, :role_name, :desc, 1, 'active', :pages, :buttons, :dept, :branch)
+                    """), {
+                        "role_id": user_id,
+                        "ws_id": workspace_id,
+                        "role_name": payload.role_name,
+                        "desc": f"User-specific custom role cloned from {payload.role_name} for {payload.full_name} ({payload.email})",
+                        "pages": existing_role["pages_permissions"] or "[]",
+                        "buttons": existing_role["buttons_permissions"] or "[]",
+                        "dept": existing_role["department_access"] or "[]",
+                        "branch": existing_role["branch_access"] or "all"
+                    })
+
+                # Copy role permissions
+                db.execute(text("DELETE FROM role_permissions WHERE role_id = :role_id"), {"role_id": user_id})
+                existing_perms = db.execute(text("""
+                    SELECT module, can_view, can_create, can_edit, can_delete, can_export, can_import, can_approve, can_assign, can_archive, record_scope
+                    FROM role_permissions WHERE role_id = :role_id
+                """), {"role_id": existing_role["role_id"]}).mappings().all()
+
+                for r in existing_perms:
+                    rp_id = str(uuid.uuid4())
+                    db.execute(text("""
+                        INSERT INTO role_permissions (id, role_id, module, can_view, can_create, can_edit, can_delete, can_export, can_import, can_approve, can_assign, can_archive, record_scope)
+                        VALUES (:id, :role_id, :module, :view, :create, :edit, :delete, :export, :import, :approve, :assign, :archive, :scope)
+                    """), {
+                        "id": rp_id, "role_id": user_id, "module": r["module"],
+                        "view": r["can_view"], "create": r["can_create"], "edit": r["can_edit"], "delete": r["can_delete"],
+                        "export": r["can_export"], "import": r["can_import"], "approve": r["can_approve"], "assign": r["can_assign"],
+                        "archive": r["can_archive"], "scope": r["record_scope"]
+                    })
+            else:
+                # Fallback: if there is no template matching payload.role_name, just update or insert basic custom role
+                if user_role_exists:
+                    db.execute(text("""
+                        UPDATE roles SET role_name = :role_name WHERE role_id = :uid AND workspace_id = :ws_id
+                    """), {"role_name": payload.role_name, "uid": user_id, "ws_id": workspace_id})
+                else:
+                    db.execute(text("""
+                        INSERT INTO roles (role_id, workspace_id, role_name, description, is_custom, status, pages_permissions, buttons_permissions)
+                        VALUES (:role_id, :ws_id, :role_name, :desc, 1, 'active', '[]', '[]')
+                    """), {
+                        "role_id": user_id,
+                        "ws_id": workspace_id,
+                        "role_name": payload.role_name,
+                        "desc": f"User-specific custom role for {payload.full_name} ({payload.email})"
+                    })
+                    active_modules = db.execute(text("""
+                        SELECT DISTINCT module FROM workspace_modules WHERE workspace_id = :ws_id AND is_enabled = 1
+                    """), {"ws_id": workspace_id}).fetchall()
+                    for (mod,) in active_modules:
+                        rp_id = str(uuid.uuid4())
+                        db.execute(text("""
+                            INSERT INTO role_permissions (id, role_id, module, can_view, can_create, can_edit, can_delete, can_export, can_import, can_approve, can_assign, can_archive, record_scope)
+                            VALUES (:id, :role_id, :module, 1, 0, 0, 0, 0, 0, 0, 0, 0, 'all')
+                        """), {"id": rp_id, "role_id": user_id, "module": mod})
 
         # Update or create hrms_employees record
         existing_emp = db.execute(text("""
