@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useApp } from '@/context/AppContext';
+import { useApp, getTenantId } from '@/context/AppContext';
 import { 
   Search, Send, Users, User, Plus, MessageSquare, Hash, 
   X, UserPlus, Paperclip, Pin, Smile, Check, CheckCheck, Loader2,
@@ -10,9 +10,9 @@ import { toast } from 'sonner';
 
 export default function Chat() {
   const { user } = useApp();
-  // Always read token synchronously from localStorage — no async timing issues
   const getToken = () => localStorage.getItem('auth-token') || '';
   const token = getToken();
+  const tenantId = localStorage.getItem('auth-tenant-id') || getTenantId() || '';
 
   const isAdmin = user?.role === 'super_admin' || user?.role_name === 'Super Admin' || 
                   user?.role === 'admin' || user?.role_name === 'Admin' || 
@@ -76,7 +76,8 @@ export default function Chat() {
 
   const getHeaders = () => ({
     'Authorization': `Bearer ${getToken()}`,
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    'X-Tenant-ID': tenantId
   });
 
   const fetchChannels = async () => {
