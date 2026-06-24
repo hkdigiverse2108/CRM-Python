@@ -109,7 +109,9 @@ def create_app() -> FastAPI:
 
     # ── API Routes ──────────────────────────────────────────────────
     from backend.app.api.routes.meta_oauth import meta_integration_router
+    from backend.app.api.routes.chat import router as chat_router
     app.include_router(meta_integration_router)
+    app.include_router(chat_router, prefix="/api/chat")
     app.include_router(api_router, prefix="/api")
 
     # Serve static uploaded files

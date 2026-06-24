@@ -43,6 +43,7 @@ const sidebarGroups = [
       { label: 'Contacts', path: '/crm/contacts', module: 'crm', pageKey: 'crm_contacts' },
       { label: 'Clients', path: '/crm/clients', module: 'crm', pageKey: 'crm_companies' },
       { label: 'Pipeline', path: '/crm/pipeline', module: 'crm', pageKey: 'sales_pipeline' },
+      { label: 'Chat Rooms', path: '/crm/chat', module: 'crm', pageKey: 'crm_leads' },
     ]
   },
   {

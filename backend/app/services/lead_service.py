@@ -38,7 +38,52 @@ class LeadService:
             },
         }
 
+    async def get_auto_routed_agent(self, tenant_id: str) -> Optional[str]:
+        from backend.app.core.database import get_db
+        from sqlalchemy import text
+        import anyio
+        
+        def _find():
+            with get_db() as db:
+                # 1. Fetch active Sales Executives in this workspace
+                active_agents = db.execute(text("""
+                    SELECT u.user_id 
+                    FROM users u
+                    JOIN roles r ON u.role_id = r.role_id
+                    WHERE u.workspace_id = :ws_id 
+                      AND u.status = 'active'
+                      AND r.role_name = 'Sales Executive'
+                    ORDER BY u.created_at ASC
+                """), {"ws_id": tenant_id}).mappings().all()
+                
+                if not active_agents:
+                    return None
+                    
+                # 2. Get the last assigned agent ID from recently created leads
+                last_assigned = db.execute(text("""
+                    SELECT assigned_agent_id 
+                    FROM leads 
+                    WHERE workspace_id = :ws_id AND assigned_agent_id IS NOT NULL AND deleted_at IS NULL
+                    ORDER BY created_at DESC LIMIT 1
+                """), {"ws_id": tenant_id}).scalar()
+                
+                # 3. Determine the next agent in round-robin fashion
+                agent_ids = [a["user_id"] for a in active_agents]
+                if not last_assigned or last_assigned not in agent_ids:
+                    return agent_ids[0]
+                    
+                last_index = agent_ids.index(last_assigned)
+                next_index = (last_index + 1) % len(agent_ids)
+                return agent_ids[next_index]
+                
+        return await anyio.to_thread.run_sync(_find)
+
     async def create_lead(self, data: dict[str, Any], tenant_id: str, created_by: Optional[str] = "Admin") -> dict:
+        # Perform Auto-Routing if not manually assigned
+        assigned_agent_id = data.get("assigned_to")
+        if not assigned_agent_id:
+            assigned_agent_id = await self.get_auto_routed_agent(tenant_id)
+
         lead = Lead(
             name=data["name"], email=data["email"],
             phone=data.get("phone"), company=data.get("company"),
@@ -46,6 +91,7 @@ class LeadService:
             value=data.get("value", 0.0), notes=data.get("notes"),
             created_by=created_by,
             tenant_id=tenant_id,
+            assigned_to=assigned_agent_id,
         )
         created = await self._repo.create(lead)
         return created.to_dict()

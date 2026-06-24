@@ -14,6 +14,7 @@ import Contacts from '@/pages/crm/Contacts';
 import Clients from '@/pages/crm/Clients';
 import Pipeline from '@/pages/crm/Pipeline';
 import Customer360 from '@/pages/crm/Customer360';
+import Chat from '@/pages/crm/Chat';
 
 // Omnichannel
 import WhatsApp from '@/pages/omnichannel/WhatsApp';
@@ -166,6 +167,7 @@ export default function App() {
             <Route path="/crm/clients" element={<PermissionGuard module="crm"><Clients /></PermissionGuard>} />
             <Route path="/crm/pipeline" element={<PermissionGuard module="crm"><Pipeline /></PermissionGuard>} />
             <Route path="/crm/customer-360" element={<PermissionGuard module="crm"><Customer360 /></PermissionGuard>} />
+            <Route path="/crm/chat" element={<PermissionGuard module="crm"><Chat /></PermissionGuard>} />
 
             {/* Omnichannel Hub */}
             <Route path="/omnichannel/whatsapp" element={<PermissionGuard module="whatsapp"><WhatsApp /></PermissionGuard>} />
