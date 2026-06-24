@@ -101,7 +101,6 @@ class LeadRepository(BaseRepository[Lead]):
                         ) n2 ON n1.lead_id = n2.lead_id AND n1.created_at = n2.max_created
                     ) n ON l.lead_id = n.lead_id
                     WHERE l.workspace_id = :workspace_id AND l.deleted_at IS NULL
-                    AND (l.lead_source != 'WhatsApp' OR (l.product_interest IS NOT NULL AND l.product_interest != ''))
                 """
                 params = {"workspace_id": tenant_id}
                 
@@ -308,7 +307,6 @@ class LeadRepository(BaseRepository[Lead]):
                 query_str = """
                     SELECT COUNT(*) FROM leads l 
                     WHERE l.workspace_id = :workspace_id AND l.deleted_at IS NULL
-                    AND (l.lead_source != 'WhatsApp' OR (l.product_interest IS NOT NULL AND l.product_interest != ''))
                 """
                 params = {"workspace_id": tenant_id}
                 
