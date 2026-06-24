@@ -496,6 +496,12 @@ async def list_chat_channels_duplicate(
                     "sender_id": latest["sender_id"]
                 }
 
+            unread_count = db.execute(text("""
+                SELECT COUNT(*) FROM chat_messages m
+                LEFT JOIN chat_message_reads r ON m.message_id = r.message_id AND r.user_id = :uid
+                WHERE m.channel_id = :ch_id AND m.sender_id != :uid AND r.id IS NULL AND m.deleted_at IS NULL
+            """), {"ch_id": ch["channel_id"], "uid": user_id}).scalar() or 0
+
             channels_list.append({
                 "channel_id": ch["channel_id"],
                 "name": ch_name,
@@ -504,6 +510,7 @@ async def list_chat_channels_duplicate(
                 "members": members,
                 "recipient": recipient,
                 "latest_message": latest_msg,
+                "unread_count": unread_count,
                 "created_at": ch["created_at"].isoformat() if ch["created_at"] else None
             })
             

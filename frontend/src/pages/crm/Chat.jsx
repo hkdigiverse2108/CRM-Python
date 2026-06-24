@@ -646,6 +646,31 @@ export default function Chat() {
     }
   };
 
+  const sendMessageDirectly = (text, file) => {
+    if (!selectedChannel) return;
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      const payload = {
+        channel_id: selectedChannel.channel_id,
+        text: text
+      };
+      
+      if (file) {
+        payload.file_url = file.file_url;
+        payload.file_name = file.file_name;
+        payload.file_type = file.file_type;
+      }
+
+      if (replyMessage) {
+        payload.reply_to_id = replyMessage.message_id;
+      }
+
+      wsRef.current.send(JSON.stringify(payload));
+      sendTypingStatus(false);
+    } else {
+      toast.error('Connection lost. Please refresh.');
+    }
+  };
+
   const uploadAudioBlob = async (blob) => {
     setUploading(true);
     const formData = new FormData();
@@ -654,17 +679,21 @@ export default function Chat() {
     try {
       const res = await fetch(`${API_BASE}/chat/upload`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId
+        },
         body: formData
       });
       const d = await res.json();
       if (res.ok) {
-        setAttachedFile({
+        const voiceFile = {
           file_url: d.data.file_url,
           file_name: 'Voice Message',
           file_type: 'audio/webm'
-        });
-        toast.success('Voice message recorded');
+        };
+        sendMessageDirectly('', voiceFile);
+        toast.success('Voice message sent');
       } else {
         toast.error('Voice note upload failed');
       }
@@ -693,7 +722,10 @@ export default function Chat() {
     try {
       const res = await fetch(`${API_BASE}/chat/upload`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId
+        },
         body: formData
       });
       const d = await res.json();
@@ -715,30 +747,10 @@ export default function Chat() {
     e.preventDefault();
     if ((!newMessage.trim() && !attachedFile) || !selectedChannel) return;
 
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      const payload = {
-        channel_id: selectedChannel.channel_id,
-        text: newMessage
-      };
-      
-      if (attachedFile) {
-        payload.file_url = attachedFile.file_url;
-        payload.file_name = attachedFile.file_name;
-        payload.file_type = attachedFile.file_type;
-      }
-
-      if (replyMessage) {
-        payload.reply_to_id = replyMessage.message_id;
-      }
-
-      wsRef.current.send(JSON.stringify(payload));
-      setNewMessage('');
-      setAttachedFile(null);
-      setReplyMessage(null);
-      sendTypingStatus(false);
-    } else {
-      toast.error('Connection lost. Please refresh.');
-    }
+    sendMessageDirectly(newMessage, attachedFile);
+    setNewMessage('');
+    setAttachedFile(null);
+    setReplyMessage(null);
   };
 
   const sendTypingStatus = (isTyping) => {
@@ -1195,18 +1207,18 @@ export default function Chat() {
                 filteredMessages.map((msg, idx) => {
                   const isOwn = msg.sender_id === user?.id;
                   
-                  let ticks = <Check className="w-3.5 h-3.5 text-slate-400" />;
+                  let ticks = <Check className="w-3 h-3 text-teal-200/50" />;
                   if (selectedChannel.type === 'direct') {
                     const readCount = msg.read_by?.filter(uid => uid !== msg.sender_id).length || 0;
                     if (readCount > 0) {
-                      ticks = <CheckCheck className="w-3.5 h-3.5 text-indigo-500" />;
+                      ticks = <CheckCheck className="w-3.5 h-3.5 text-teal-200" />;
                     } else {
-                      ticks = <CheckCheck className="w-3.5 h-3.5 text-slate-400" />;
+                      ticks = <CheckCheck className="w-3.5 h-3.5 text-teal-100/40" />;
                     }
                   } else {
                     const otherReads = msg.read_by?.filter(uid => uid !== msg.sender_id).length || 0;
                     if (otherReads > 0) {
-                      ticks = <CheckCheck className="w-3.5 h-3.5 text-indigo-500" />;
+                      ticks = <CheckCheck className="w-3.5 h-3.5 text-teal-200" />;
                     }
                   }
 
@@ -1217,7 +1229,7 @@ export default function Chat() {
                       className={`flex flex-col group/msg ${isOwn ? 'items-end' : 'items-start'} transition-colors duration-500 rounded-xl p-1`}
                     >
                       {!isOwn && (
-                        <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 mb-1 ml-1">
+                        <span className="text-[10px] font-bold text-teal-600 dark:text-teal-400 mb-0.5 ml-2.5 select-none">
                           {msg.sender_name}
                         </span>
                       )}
@@ -1271,10 +1283,10 @@ export default function Chat() {
                         </div>
 
                         {/* Message Balloon */}
-                        <div className={`p-3 rounded-2xl shadow-sm text-xs relative ${
+                        <div className={`p-3 px-4 rounded-2xl shadow-sm text-[13px] relative transition-all ${
                           isOwn 
-                            ? 'bg-indigo-500 text-white rounded-tr-none' 
-                            : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-150 border border-slate-100 dark:border-slate-800 rounded-tl-none'
+                            ? 'bg-gradient-to-br from-teal-500 to-teal-600 text-white rounded-tr-none' 
+                            : 'bg-slate-100 dark:bg-slate-850 text-slate-800 dark:text-slate-100 rounded-tl-none border border-slate-200/40 dark:border-slate-800/40'
                         }`}>
                           
                           {msg.is_deleted ? (
@@ -1287,13 +1299,13 @@ export default function Chat() {
                               {msg.reply_to_id && (
                                 <div 
                                   onClick={() => scrollToMessage(msg.reply_to_id)}
-                                  className={`mb-2 p-2 rounded-lg text-[10px] cursor-pointer border-l-4 text-left ${
+                                  className={`mb-2 p-2 rounded-lg text-[11px] cursor-pointer border-l-4 text-left transition-all ${
                                     isOwn 
-                                      ? 'bg-white/10 text-white/90 border-white/40' 
-                                      : 'bg-slate-50 dark:bg-slate-950 text-slate-500 border-indigo-500'
+                                      ? 'bg-black/15 text-white/95 border-teal-300 hover:bg-black/25' 
+                                      : 'bg-slate-200/60 dark:bg-slate-900/60 text-slate-600 dark:text-slate-400 border-teal-500 hover:bg-slate-200/80 dark:hover:bg-slate-900/80'
                                   }`}
                                 >
-                                  <p className="font-bold mb-0.5">{msg.reply_to_sender_name || 'User'}</p>
+                                  <p className="font-bold text-[10px] mb-0.5">{msg.reply_to_sender_name || 'User'}</p>
                                   <p className="truncate">{msg.reply_to_text}</p>
                                 </div>
                               )}
@@ -1322,7 +1334,7 @@ export default function Chat() {
                                       />
                                     </div>
                                   ) : (
-                                    <div className="p-3 flex items-center gap-2.5 text-xs text-slate-700 dark:text-slate-300">
+                                    <div className="p-3 flex items-center gap-2.5 text-xs text-slate-700 dark:text-slate-350">
                                       <Paperclip className="w-4 h-4 text-indigo-500 shrink-0" />
                                       <div className="truncate flex-1 min-w-0">
                                         <p className="font-bold truncate">{msg.file_name}</p>
@@ -1343,8 +1355,8 @@ export default function Chat() {
 
                               {msg.text && <p className="leading-relaxed break-words">{msg.text}</p>}
                               
-                              <div className="flex items-center justify-end gap-1 mt-1.5">
-                                <span className={`text-[8px] block ${isOwn ? 'text-white/80' : 'text-slate-400 dark:text-slate-500'}`}>
+                              <div className="flex items-center justify-end gap-1 mt-1 select-none">
+                                <span className={`text-[9px] block ${isOwn ? 'text-teal-100' : 'text-slate-400 dark:text-slate-500'}`}>
                                   {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </span>
                                 {isOwn && ticks}
