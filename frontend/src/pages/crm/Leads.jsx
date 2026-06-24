@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { leads as initialLeads } from '@/data/mockData';
 import { formatCurrency, formatDate, getStatusColor } from '@/lib/utils';
 import { useApp } from '@/context/AppContext';
 import PageHeader from '@/components/ui/PageHeader';
 import ButtonGuard from '@/components/ui/ButtonGuard';
+import { formatAssignedAgent } from './Pipeline';
 
 import {
   Search, Plus, Filter, X, Phone, MessageCircle, Mail, Building,
@@ -15,8 +17,9 @@ export default function Leads() {
   const { 
     addToast, leads: allLeads, setLeads: setAllLeads, convertLeadToClient, 
     updateLead, deleteLead, createLead, token, tenantId,
-    fetchLeadFollowups, createLeadFollowup
+    fetchLeadFollowups, createLeadFollowup, fetchLeadAuditLogs
   } = useApp();
+  const navigate = useNavigate();
   const [selectedLeadId, setSelectedLeadId] = useState(null);
   const selectedLead = allLeads.find(l => l.id === selectedLeadId);
   const [search, setSearch] = useState('');
@@ -34,6 +37,10 @@ export default function Leads() {
   const [nextFollowupRemarks, setNextFollowupRemarks] = useState('');
   const [followupType, setFollowupType] = useState('Call');
 
+  // Audit Logs States
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [loadingAuditLogs, setLoadingAuditLogs] = useState(false);
+
   useEffect(() => {
     if (!selectedLead?.id) return;
     const loadFollowups = async () => {
@@ -44,6 +51,17 @@ export default function Leads() {
     };
     loadFollowups();
   }, [selectedLeadId, selectedLead?.id, fetchLeadFollowups]);
+
+  useEffect(() => {
+    if (!selectedLead?.id) return;
+    const loadAuditLogs = async () => {
+      setLoadingAuditLogs(true);
+      const data = await fetchLeadAuditLogs(selectedLead.id);
+      setAuditLogs(data || []);
+      setLoadingAuditLogs(false);
+    };
+    loadAuditLogs();
+  }, [selectedLeadId, selectedLead?.id, fetchLeadAuditLogs]);
 
   const handleLogFollowup = async (e) => {
     e.preventDefault();
@@ -244,18 +262,26 @@ export default function Leads() {
     setShowEditLead(true);
   };
 
-  const handleSaveEdit = (e) => {
+  const handleSaveEdit = async (e) => {
     e.preventDefault();
     if (!editLeadData.name || !editLeadData.company) {
       addToast('Name and Company Name are required', 'warning');
       return;
     }
-    updateLead(editLeadData.id, {
+    await updateLead(editLeadData.id, {
       ...editLeadData,
       value: Number(editLeadData.value) || 0
     });
     setShowEditLead(false);
+    const oldId = editLeadData.id;
     setEditLeadData(null);
+    
+    if (selectedLeadId === oldId) {
+      setLoadingAuditLogs(true);
+      const data = await fetchLeadAuditLogs(oldId);
+      setAuditLogs(data || []);
+      setLoadingAuditLogs(false);
+    }
   };
 
   const handleDeleteClick = (leadId) => {
@@ -532,7 +558,7 @@ export default function Leads() {
                 )}
                 <div className="flex items-center gap-2.5">
                   <User size={13} className="text-slate-400 shrink-0" />
-                  <span className="text-slate-655 dark:text-slate-300">Rep: {selectedLead.assignedTo || 'Unassigned'}</span>
+                  <span className="text-slate-655 dark:text-slate-300">Rep: {formatAssignedAgent(selectedLead.assignedTo || selectedLead.assigned_to)}</span>
                 </div>
                 <div className="flex items-center gap-2.5">
                   <Tag size={13} className="text-slate-400 shrink-0" />
@@ -581,27 +607,23 @@ export default function Leads() {
                 )}
               </div>
 
-              {selectedLead.stage !== 'Won' && (
-                <button
-                  onClick={() => convertLeadToClient(selectedLead.id)}
-                  className="w-full py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:opacity-90 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md shadow-indigo-600/10 cursor-pointer"
-                >
-                  <ArrowRight size={13} />
-                  <span>Convert to Client</span>
-                </button>
-              )}
-
               {/* Trigger Actions */}
               <div className="flex items-center gap-2 border-t border-slate-100 dark:border-slate-800 pt-4">
                 <button 
-                  onClick={() => addToast(`Opening WhatsApp chat with ${selectedLead.name}`)}
+                  onClick={() => {
+                    navigate('/omnichannel/whatsapp');
+                    addToast(`Opening WhatsApp chat with ${selectedLead.name}`);
+                  }}
                   className="flex-1 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <MessageCircle size={13} />
                   <span>WhatsApp</span>
                 </button>
                 <button 
-                  onClick={() => addToast(`Calling ${selectedLead.name}...`)}
+                  onClick={() => {
+                    navigate('/omnichannel/calls');
+                    addToast(`Redirecting to Call Dialer for ${selectedLead.name}`);
+                  }}
                   className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <Phone size={13} />
@@ -609,104 +631,168 @@ export default function Leads() {
                 </button>
               </div>
 
-              {/* Follow-Up Logs & Scheduling Section */}
-              <div className="border-t border-slate-100 dark:border-slate-800/80 pt-4 space-y-4">
+              {/* Follow-Up Logs & Scheduling Section (Only shown if stage is Follow-up) */}
+              {selectedLead.stage === 'Follow-up' && (
+                <div className="border-t border-slate-100 dark:border-slate-800/80 pt-4 space-y-4">
+                  <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center justify-between">
+                    <span>Follow-Up Logs & Reminders</span>
+                    {followups.length > 0 && (
+                      <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded">
+                        {followups.length} Taken
+                      </span>
+                    )}
+                  </h4>
+
+                  {/* Schedule Next / Log Current Form */}
+                  <form onSubmit={handleLogFollowup} className="space-y-3 bg-slate-50 dark:bg-slate-900/40 p-3 rounded-xl border border-slate-100 dark:border-slate-800/80">
+                    <div className="flex gap-2">
+                      <select 
+                        value={followupType} 
+                        onChange={e => setFollowupType(e.target.value)} 
+                        className="text-[10px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-1"
+                      >
+                        <option value="Call">📞 Call</option>
+                        <option value="WhatsApp">💬 WhatsApp</option>
+                        <option value="Email">✉️ Email</option>
+                        <option value="F2F Meeting">🤝 F2F Meeting</option>
+                      </select>
+                      <span className="text-[9px] text-slate-400 font-semibold self-center">
+                        First Taken: {followups.length > 0 ? followups[0].followup_date : 'None yet'}
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="text-[9px] font-bold text-slate-400 block mb-1">Follow-Up Note / Remarks *</label>
+                      <textarea 
+                        value={newFollowupNote}
+                        onChange={e => setNewFollowupNote(e.target.value)}
+                        placeholder="What was discussed?" 
+                        className="w-full text-xs p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500" 
+                        rows="2"
+                        required
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[9px] font-bold text-slate-400 block mb-1">Next Follow-Up Date</label>
+                        <input 
+                          type="date" 
+                          value={nextFollowupDate}
+                          onChange={e => setNextFollowupDate(e.target.value)}
+                          className="w-full text-xs p-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded" 
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-bold text-slate-400 block mb-1">Next Remarks / Task</label>
+                        <input 
+                          type="text" 
+                          value={nextFollowupRemarks}
+                          onChange={e => setNextFollowupRemarks(e.target.value)}
+                          placeholder="e.g. Call to close" 
+                          className="w-full text-xs p-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded" 
+                        />
+                      </div>
+                    </div>
+
+                    <button 
+                      type="submit" 
+                      className="btn-primary w-full justify-center py-2 text-xs font-bold cursor-pointer"
+                    >
+                      Log Follow-Up & Schedule
+                    </button>
+                  </form>
+
+                  {/* Follow-up Logs History list */}
+                  <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1 scrollbar-thin">
+                    {loadingFollowups ? (
+                      <p className="text-[10px] text-slate-400 italic">Loading logs...</p>
+                    ) : followups.length === 0 ? (
+                      <p className="text-[10px] text-slate-400 italic">No follow-up history logged yet.</p>
+                    ) : (
+                      followups.slice().reverse().map((item, index) => {
+                        const logNum = followups.length - index;
+                        const isFirst = logNum === 1;
+                        return (
+                          <div key={item.id || index} className="p-2.5 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-800/80 rounded-xl relative shadow-xs">
+                            <span className="absolute top-2 right-2 text-[8px] bg-slate-105 dark:bg-slate-900 text-slate-500 px-1 rounded uppercase font-bold">
+                              {item.followup_type}
+                            </span>
+                            <p className="text-[10px] font-bold text-slate-700 dark:text-slate-200">
+                              {isFirst ? 'First Follow-Up' : `${logNum}th Follow-Up`}
+                            </p>
+                            <p className="text-[9px] text-slate-400">{item.followup_date} • {item.created_by || 'Agent'}</p>
+                            <p className="text-xs text-slate-600 dark:text-slate-300 mt-1.5 italic bg-slate-50 dark:bg-slate-900/30 p-1.5 rounded">
+                              "{item.remarks}"
+                            </p>
+                            {item.next_followup_date && (
+                              <div className="mt-2 text-[9px] text-amber-600 dark:text-amber-400 font-semibold border-t border-dashed border-slate-100 dark:border-slate-800 pt-1.5">
+                                📅 Next: {item.next_followup_date} {item.next_followup_remarks && `(${item.next_followup_remarks})`}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Activity & Audit Logs */}
+              <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800/80">
                 <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center justify-between">
-                  <span>Follow-Up Logs & Reminders</span>
-                  {followups.length > 0 && (
-                    <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded">
-                      {followups.length} Taken
-                    </span>
-                  )}
+                  <span>Activity History & Audit Logs</span>
+                  <span className="text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-500 px-1.5 py-0.5 rounded">
+                    {auditLogs.length} changes
+                  </span>
                 </h4>
 
-                {/* Schedule Next / Log Current Form */}
-                <form onSubmit={handleLogFollowup} className="space-y-3 bg-slate-50 dark:bg-slate-900/40 p-3 rounded-xl border border-slate-100 dark:border-slate-800/80">
-                  <div className="flex gap-2">
-                    <select 
-                      value={followupType} 
-                      onChange={e => setFollowupType(e.target.value)} 
-                      className="text-[10px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-1"
-                    >
-                      <option value="Call">📞 Call</option>
-                      <option value="WhatsApp">💬 WhatsApp</option>
-                      <option value="Email">✉️ Email</option>
-                      <option value="F2F Meeting">🤝 F2F Meeting</option>
-                    </select>
-                    <span className="text-[9px] text-slate-400 font-semibold self-center">
-                      First Taken: {followups.length > 0 ? followups[0].followup_date : 'None yet'}
-                    </span>
-                  </div>
-
-                  <div>
-                    <label className="text-[9px] font-bold text-slate-400 block mb-1">Follow-Up Note / Remarks *</label>
-                    <textarea 
-                      value={newFollowupNote}
-                      onChange={e => setNewFollowupNote(e.target.value)}
-                      placeholder="What was discussed?" 
-                      className="w-full text-xs p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500" 
-                      rows="2"
-                      required
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[9px] font-bold text-slate-400 block mb-1">Next Follow-Up Date</label>
-                      <input 
-                        type="date" 
-                        value={nextFollowupDate}
-                        onChange={e => setNextFollowupDate(e.target.value)}
-                        className="w-full text-xs p-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded" 
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[9px] font-bold text-slate-400 block mb-1">Next Remarks / Task</label>
-                      <input 
-                        type="text" 
-                        value={nextFollowupRemarks}
-                        onChange={e => setNextFollowupRemarks(e.target.value)}
-                        placeholder="e.g. Call to close" 
-                        className="w-full text-xs p-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded" 
-                      />
-                    </div>
-                  </div>
-
-                  <button 
-                    type="submit" 
-                    className="btn-primary w-full justify-center py-2 text-xs font-bold cursor-pointer"
-                  >
-                    Log Follow-Up & Schedule
-                  </button>
-                </form>
-
-                {/* Follow-up Logs History list */}
-                <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1 scrollbar-thin">
-                  {loadingFollowups ? (
-                    <p className="text-[10px] text-slate-400 italic">Loading logs...</p>
-                  ) : followups.length === 0 ? (
-                    <p className="text-[10px] text-slate-400 italic">No follow-up history logged yet.</p>
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {loadingAuditLogs ? (
+                    <p className="text-[10px] text-slate-400 italic">Loading activity history...</p>
+                  ) : auditLogs.length === 0 ? (
+                    <p className="text-[10px] text-slate-400 italic">No activity recorded yet.</p>
                   ) : (
-                    followups.slice().reverse().map((item, index) => {
-                      const logNum = followups.length - index;
-                      const isFirst = logNum === 1;
+                    auditLogs.map((log) => {
+                      // Convert UTC time to Indian Standard Time (IST)
+                      const utcDate = new Date(log.changed_at);
+                      const istOptions = {
+                        timeZone: 'Asia/Kolkata',
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: true
+                      };
+                      const istTimeString = utcDate.toLocaleString('en-IN', istOptions);
+
+                      // Format column name to friendly text
+                      const fieldNameMap = {
+                        full_name: 'Name',
+                        email: 'Email',
+                        phone_primary: 'Phone',
+                        company_name: 'Company',
+                        lead_source: 'Source',
+                        lead_status: 'Status/Stage',
+                        lead_score: 'Score',
+                        assigned_agent_id: 'Assigned Agent',
+                        deal_value_expected: 'Expected Income'
+                      };
+                      const friendlyField = fieldNameMap[log.field_name] || log.field_name;
+
                       return (
-                        <div key={item.id || index} className="p-2.5 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-800/80 rounded-xl relative shadow-xs">
-                          <span className="absolute top-2 right-2 text-[8px] bg-slate-105 dark:bg-slate-900 text-slate-500 px-1 rounded uppercase font-bold">
-                            {item.followup_type}
-                          </span>
-                          <p className="text-[10px] font-bold text-slate-700 dark:text-slate-200">
-                            {isFirst ? 'First Follow-Up' : `${logNum}th Follow-Up`}
+                        <div key={log.id} className="p-2.5 bg-slate-50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-800/80 rounded-xl relative text-[11px]">
+                          <p className="font-semibold text-slate-700 dark:text-slate-200">
+                            Updated <span className="text-indigo-600 dark:text-indigo-400 font-bold">{friendlyField}</span>
                           </p>
-                          <p className="text-[9px] text-slate-400">{item.followup_date} • {item.created_by || 'Agent'}</p>
-                          <p className="text-xs text-slate-600 dark:text-slate-300 mt-1.5 italic bg-slate-50 dark:bg-slate-900/30 p-1.5 rounded">
-                            "{item.remarks}"
+                          <p className="text-[10px] text-slate-500 mt-0.5">
+                            From: <span className="italic">"{log.old_value || 'None'}"</span> → To: <span className="font-semibold">"{log.new_value || 'None'}"</span>
                           </p>
-                          {item.next_followup_date && (
-                            <div className="mt-2 text-[9px] text-amber-600 dark:text-amber-400 font-semibold border-t border-dashed border-slate-100 dark:border-slate-800 pt-1.5">
-                              📅 Next: {item.next_followup_date} {item.next_followup_remarks && `(${item.next_followup_remarks})`}
-                            </div>
-                          )}
+                          <div className="mt-1 flex items-center justify-between text-[9px] text-slate-400 font-medium">
+                            <span>By: {log.changed_by || 'System/Admin'}</span>
+                            <span className="text-amber-600 dark:text-amber-500 font-bold">🇮🇳 {istTimeString}</span>
+                          </div>
                         </div>
                       );
                     })

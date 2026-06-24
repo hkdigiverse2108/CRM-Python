@@ -54,9 +54,6 @@ class LeadService:
         updated = await self._repo.update(lead_id, tenant_id, data, changed_by)
         if updated is None:
             raise NotFoundException(f"Lead '{lead_id}' not found")
-
-    async def get_lead_audit_logs(self, lead_id: str, tenant_id: str) -> list[dict]:
-        return await self._repo.get_audit_logs(lead_id, tenant_id)
             
         # If lead is assigned, ensure corresponding client and project exist
         if "assigned_to" in data and data["assigned_to"]:
@@ -136,6 +133,9 @@ class LeadService:
                         db.commit()
                         
         return updated.to_dict()
+
+    async def get_lead_audit_logs(self, lead_id: str, tenant_id: str) -> list[dict]:
+        return await self._repo.get_audit_logs(lead_id, tenant_id)
 
     async def delete_lead(self, lead_id: str, tenant_id: str) -> bool:
         deleted = await self._repo.delete(lead_id, tenant_id)

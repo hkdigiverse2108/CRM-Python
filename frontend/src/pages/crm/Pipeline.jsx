@@ -3,6 +3,20 @@ import { useApp } from '@/context/AppContext';
 import PageHeader from '@/components/ui/PageHeader';
 import { X } from 'lucide-react';
 
+export function formatAssignedAgent(agentId) {
+  if (!agentId || agentId === 'Unassigned') return 'Unassigned';
+  if (agentId === 'usr_admin_001') return 'Prince Gajera (Admin)';
+  if (agentId.startsWith('usr_admin_')) {
+    const suffix = agentId.split('_').pop();
+    return `Admin (${suffix})`;
+  }
+  if (agentId.length === 36 || agentId.includes('-')) {
+    const shortId = agentId.substring(0, 8);
+    return `Sales Agent (${shortId})`;
+  }
+  return agentId;
+}
+
 export default function Pipeline() {
   const { 
     addToast, leads = [], setLeads, 
@@ -323,7 +337,7 @@ export default function Pipeline() {
                       </select>
                     </td>
                     <td className="py-3 px-4 text-xs text-slate-655 dark:text-slate-300">
-                      {deal.rep}
+                      {formatAssignedAgent(deal.rep)}
                     </td>
                     <td className="py-3 px-4 text-xs font-bold text-indigo-600 dark:text-indigo-400">
                       ₹{deal.value.toLocaleString('en-IN')}

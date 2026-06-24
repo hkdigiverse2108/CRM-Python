@@ -8,29 +8,19 @@
  */
 export default function PageHeader({ title, subtitle, children }) {
   return (
-    <div
-      className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-2xl border border-border/20 shadow-xl"
-      style={{ background: 'linear-gradient(to right, #0f172a, #1e1b4b, #0f172a)' }}
-    >
+    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-2xl border border-slate-200/60 dark:border-slate-800/80 bg-white/80 dark:bg-slate-900/60 backdrop-blur-md shadow-sm transition-all duration-200">
       <div>
-        <h1
-          className="text-2xl font-bold tracking-tight"
-          style={{
-            background: 'linear-gradient(to right, #ffffff, #c7d2fe, #e0e7ff)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-          }}
-        >
+        <h1 className="text-xl font-bold tracking-tight text-slate-800 dark:text-white">
           {title}
         </h1>
         {subtitle && (
-          <p className="text-xs mt-1" style={{ color: '#a5b4fc' }}>
+          <p className="text-xs mt-1 text-slate-500 dark:text-slate-400 font-medium">
             {subtitle}
           </p>
         )}
       </div>
       {children && (
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2.5 flex-wrap">
           {children}
         </div>
       )}
