@@ -10,8 +10,10 @@ import { toast } from 'sonner';
 
 export default function Chat() {
   const { user } = useApp();
-  const token = localStorage.getItem('auth-token') || '';
-  
+  // Always read token synchronously from localStorage — no async timing issues
+  const getToken = () => localStorage.getItem('auth-token') || '';
+  const token = getToken();
+
   const isAdmin = user?.role === 'super_admin' || user?.role_name === 'Super Admin' || 
                   user?.role === 'admin' || user?.role_name === 'Admin' || 
                   user?.role_name === 'Organization Admin' || user?.role_name === 'Workspace Admin';
@@ -73,7 +75,7 @@ export default function Chat() {
   const typingTimeoutRef = useRef(null);
 
   const getHeaders = () => ({
-    'Authorization': `Bearer ${token}`,
+    'Authorization': `Bearer ${getToken()}`,
     'Content-Type': 'application/json'
   });
 
@@ -93,16 +95,21 @@ export default function Chat() {
     try {
       const res = await fetch(`${API_BASE}/chat/users`, { headers: getHeaders() });
       const d = await res.json();
+      console.log('[Chat] fetchUsers response:', res.status, d);
       if (res.ok) {
-        // Ensure each user has a displayable full_name; fallback to email prefix if missing
         const usersWithName = (d.data || []).map((u) => ({
           ...u,
           full_name: u.full_name?.trim() || u.email?.split('@')[0] || 'Unknown'
         }));
+        console.log('[Chat] users loaded:', usersWithName.length);
         setUsers(usersWithName);
+      } else {
+        console.error('[Chat] fetchUsers failed:', d);
+        toast.error(`Failed to load contacts: ${d.message || res.status}`);
       }
     } catch (err) {
-      console.error('Error fetching users:', err);
+      console.error('[Chat] fetchUsers error:', err);
+      toast.error('Could not load contacts. Check network.');
     }
   };
 
@@ -136,11 +143,18 @@ export default function Chat() {
     }
   };
 
-  // WebSocket Connection
+  // ── Fetch data on mount (runs immediately, no token dependency) ──
   useEffect(() => {
-    if (!token) return;
+    fetchChannels();
+    fetchUsers();
+  }, []);
 
-    const wsUrl = `${WS_BASE}/chat/ws?token=${token}`;
+  // ── WebSocket Connection (needs token for auth) ──
+  useEffect(() => {
+    const tok = getToken();
+    if (!tok) return;
+
+    const wsUrl = `${WS_BASE}/chat/ws?token=${tok}`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
@@ -298,15 +312,12 @@ export default function Chat() {
       console.log('[*] Chat WebSocket Disconnected');
     };
 
-    fetchChannels();
-    fetchUsers();
-
     return () => {
       if (wsRef.current) wsRef.current.close();
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
     };
-  }, [token]);
+  }, []);
 
   // Scroll to bottom
   useEffect(() => {
