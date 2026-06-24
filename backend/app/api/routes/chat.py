@@ -550,14 +550,24 @@ async def create_chat_channel(
                     })
                 recipient_id = usr_id
 
+            member_count = 1 if user_id == recipient_id else 2
             existing_channel_id = db.execute(text("""
-                SELECT m1.channel_id 
-                FROM chat_channel_members m1
-                JOIN chat_channel_members m2 ON m1.channel_id = m2.channel_id
-                JOIN chat_channels c ON m1.channel_id = c.channel_id
+                SELECT c.channel_id
+                FROM chat_channels c
                 WHERE c.type = 'direct' AND c.workspace_id = :ws_id
-                  AND m1.user_id = :uid1 AND m2.user_id = :uid2
-            """), {"ws_id": workspace_id, "uid1": user_id, "uid2": recipient_id}).scalar()
+                  AND (
+                      SELECT COUNT(DISTINCT user_id) 
+                      FROM chat_channel_members 
+                      WHERE channel_id = c.channel_id
+                  ) = :member_count
+                  AND EXISTS (SELECT 1 FROM chat_channel_members WHERE channel_id = c.channel_id AND user_id = :uid1)
+                  AND EXISTS (SELECT 1 FROM chat_channel_members WHERE channel_id = c.channel_id AND user_id = :uid2)
+            """), {
+                "ws_id": workspace_id,
+                "member_count": member_count,
+                "uid1": user_id,
+                "uid2": recipient_id
+            }).scalar()
             
             if existing_channel_id:
                 return success_response(data={"channel_id": existing_channel_id}, message="Direct channel already exists.")
@@ -573,7 +583,8 @@ async def create_chat_channel(
                 VALUES (:ch_id, :ws_id, :name, 'direct')
             """), {"ch_id": channel_id, "ws_id": workspace_id, "name": f"Direct: {recipient_name}"})
             
-            for uid in [user_id, recipient_id]:
+            uids = [user_id] if user_id == recipient_id else [user_id, recipient_id]
+            for uid in uids:
                 db.execute(text("""
                     INSERT INTO chat_channel_members (id, workspace_id, channel_id, user_id)
                     VALUES (:id, :ws_id, :ch_id, :uid)
