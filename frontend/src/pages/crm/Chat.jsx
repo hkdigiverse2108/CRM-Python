@@ -792,20 +792,27 @@ export default function Chat() {
 
   const displayChannels = (() => {
     let list = [];
-    
+
     if (activeTab === 'Personal') {
-      const directChans = channels.filter(ch => ch.type === 'direct');
-      list = [...directChans];
-      
+      // Build a map: userId -> real direct channel (if exists)
+      const directChanByRecipient = {};
+      channels.forEach(ch => {
+        if (ch.type === 'direct' && ch.recipient) {
+          directChanByRecipient[ch.recipient.user_id] = ch;
+        }
+      });
+
+      // Always render ALL employees; use real channel if found, else virtual
       users.forEach(u => {
         const isSelf = u.user_id === user?.id;
         const displayName = isSelf ? `${u.full_name} (You)` : u.full_name;
-        
-        const hasDirect = channels.some(ch => 
-          ch.type === 'direct' && ch.recipient && ch.recipient.user_id === u.user_id
-        );
-        
-        if (!hasDirect) {
+        const realChan = directChanByRecipient[u.user_id];
+
+        if (realChan) {
+          // Override name for clarity (in case DB name differs)
+          list.push({ ...realChan, name: displayName });
+        } else {
+          // Virtual placeholder – clicking it creates the channel
           list.push({
             channel_id: `virtual_direct_${u.user_id}`,
             name: displayName,
@@ -814,15 +821,8 @@ export default function Chat() {
             recipient: u,
             virtual: true,
             latest_message: null,
-            created_at: new Date().toISOString()
+            created_at: u.created_at || new Date().toISOString()
           });
-        } else {
-          if (isSelf) {
-            const idx = list.findIndex(ch => ch.recipient && ch.recipient.user_id === u.user_id);
-            if (idx !== -1) {
-              list[idx] = { ...list[idx], name: displayName };
-            }
-          }
         }
       });
     } else if (activeTab === 'Groups') {
@@ -833,13 +833,19 @@ export default function Chat() {
       list = [];
     }
 
-    return list.filter(ch => 
+    return list.filter(ch =>
       ch.name?.toLowerCase().includes(searchQuery.toLowerCase())
     ).sort((a, b) => {
+      // "You" entry always first
       const isSelfA = a.recipient && a.recipient.user_id === user?.id;
       const isSelfB = b.recipient && b.recipient.user_id === user?.id;
       if (isSelfA && !isSelfB) return -1;
       if (isSelfB && !isSelfA) return 1;
+
+      // Chats with messages sort before virgin virtual entries
+      const hasMsg = (ch) => !!ch.latest_message;
+      if (hasMsg(a) && !hasMsg(b)) return -1;
+      if (!hasMsg(a) && hasMsg(b)) return 1;
 
       const timeA = a.latest_message ? new Date(a.latest_message.created_at) : new Date(a.created_at || 0);
       const timeB = b.latest_message ? new Date(b.latest_message.created_at) : new Date(b.created_at || 0);
@@ -963,7 +969,9 @@ export default function Chat() {
                   className={`w-full flex items-start gap-3 p-3 rounded-xl transition-all text-left relative ${
                     isSelected 
                       ? 'bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-150 border-l-4 border-teal-600 rounded-l-none' 
-                      : 'hover:bg-slate-100/50 dark:hover:bg-slate-800/50 text-slate-700 dark:text-slate-350'
+                      : ch.virtual
+                        ? 'hover:bg-teal-50/60 dark:hover:bg-teal-900/10 text-slate-600 dark:text-slate-400'
+                        : 'hover:bg-slate-100/50 dark:hover:bg-slate-800/50 text-slate-700 dark:text-slate-350'
                   }`}
                 >
                   <div className="relative shrink-0">
@@ -971,15 +979,17 @@ export default function Chat() {
                       ch.type === 'general'
                         ? 'bg-teal-50 dark:bg-slate-900 text-teal-600'
                         : isSelected 
-                          ? 'bg-teal-100 dark:bg-slate-850 text-teal-700' 
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                          ? 'bg-teal-100 dark:bg-slate-850 text-teal-700'
+                          : ch.virtual
+                            ? 'bg-slate-50 dark:bg-slate-900 text-slate-400 border border-dashed border-slate-300 dark:border-slate-700'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
                     }`}>
                       {ch.type === 'general' ? (
                         <Hash className="w-5 h-5" />
                       ) : ch.type === 'group' ? (
                         <Users className="w-5 h-5" />
                       ) : (
-                        ch.name?.charAt(0) || <User className="w-5 h-5" />
+                        ch.name?.charAt(0)?.toUpperCase() || <User className="w-5 h-5" />
                       )}
                     </div>
                     {isOnline && (
