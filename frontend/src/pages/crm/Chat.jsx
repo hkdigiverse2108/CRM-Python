@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 
 export default function Chat() {
   const { user } = useApp();
-  const token = localStorage.getItem('token') || '';
+  const token = localStorage.getItem('auth-token') || '';
   
   const isAdmin = user?.role === 'super_admin' || user?.role_name === 'Super Admin' || 
                   user?.role === 'admin' || user?.role_name === 'Admin' || 
