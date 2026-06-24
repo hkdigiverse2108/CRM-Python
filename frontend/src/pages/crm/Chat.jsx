@@ -94,7 +94,12 @@ export default function Chat() {
       const res = await fetch(`${API_BASE}/chat/users`, { headers: getHeaders() });
       const d = await res.json();
       if (res.ok) {
-        setUsers(d.data || []);
+        // Ensure each user has a displayable full_name; fallback to email prefix if missing
+        const usersWithName = (d.data || []).map((u) => ({
+          ...u,
+          full_name: u.full_name?.trim() || u.email?.split('@')[0] || 'Unknown'
+        }));
+        setUsers(usersWithName);
       }
     } catch (err) {
       console.error('Error fetching users:', err);
