@@ -2,7 +2,7 @@
 export const leads = [];
 export const contacts = [];
 export const companies = [];
-export const pipelineStages = ['New', 'Contacted', 'Qualified', 'Negotiation', 'Won', 'Lost'];
+export const pipelineStages = ['New', 'Contacted', 'Follow-up', 'Negotiation', 'Hot Lead', 'Proposal', 'Won', 'Lost'];
 export const pipelineDeals = [];
 export const dashboardStats = {
   totalRevenue: 0,

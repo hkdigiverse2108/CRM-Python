@@ -29,9 +29,10 @@ export default function Pipeline() {
   const stages = [
     { id: 'New', name: 'New Lead', color: 'bg-blue-500' },
     { id: 'Contacted', name: 'Contacted', color: 'bg-indigo-500' },
-    { id: 'Qualified', name: 'Qualified', color: 'bg-purple-500' },
+    { id: 'Follow-up', name: 'Follow-up', color: 'bg-cyan-500' },
+    { id: 'Negotiation', name: 'Negotiation', color: 'bg-purple-500' },
+    { id: 'Hot Lead', name: 'Hot Lead', color: 'bg-orange-500' },
     { id: 'Proposal', name: 'Proposal Sent', color: 'bg-pink-500' },
-    { id: 'Negotiation', name: 'Negotiation', color: 'bg-[#805ad5]' },
     { id: 'Won', name: 'Won', color: 'bg-emerald-500' },
     { id: 'Lost', name: 'Lost', color: 'bg-red-500' }
   ];
@@ -261,9 +262,10 @@ export default function Pipeline() {
                 <select value={newDeal.stage} onChange={e => setNewDeal({...newDeal, stage: e.target.value})} className="input-field">
                   <option value="New">New Lead</option>
                   <option value="Contacted">Contacted</option>
-                  <option value="Qualified">Qualified</option>
-                  <option value="Proposal">Proposal Sent</option>
+                  <option value="Follow-up">Follow-up</option>
                   <option value="Negotiation">Negotiation</option>
+                  <option value="Hot Lead">Hot Lead</option>
+                  <option value="Proposal">Proposal Sent</option>
                   <option value="Won">Won</option>
                   <option value="Lost">Lost</option>
                 </select>
