@@ -2083,18 +2083,31 @@ export function AppProvider({ children }) {
       }
     }, 3000);
 
+    // Real-time polling for Leads & Pipeline modules to sync stages changes
+    const crmInterval = setInterval(() => {
+      const path = window.location.pathname;
+      if (path.startsWith('/crm/leads') || path.startsWith('/crm/pipeline')) {
+        fetchLeads();
+      }
+    }, 4000);
+
     const handleFocus = () => {
+      const path = window.location.pathname;
       if (window.location.pathname === '/hrms/leaves') {
         fetchLeaves();
+      }
+      if (path.startsWith('/crm/leads') || path.startsWith('/crm/pipeline')) {
+        fetchLeads();
       }
     };
     window.addEventListener('focus', handleFocus);
 
     return () => {
       clearInterval(leavesInterval);
+      clearInterval(crmInterval);
       window.removeEventListener('focus', handleFocus);
     };
-  }, [token, fetchLeaves]);
+  }, [token, fetchLeaves, fetchLeads]);
   useEffect(() => {
     localStorage.setItem('marketing-campaigns', JSON.stringify(campaigns));
   }, [campaigns]);

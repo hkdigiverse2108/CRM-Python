@@ -11,7 +11,7 @@ from pydantic import BaseModel, EmailStr, Field
 class LeadCreate(BaseModel):
     """POST /leads"""
     name: str = Field(..., min_length=1, max_length=255)
-    email: EmailStr
+    email: Optional[EmailStr] = None
     phone: Optional[str] = None
     company: Optional[str] = None
     source: str = Field(
@@ -43,7 +43,7 @@ class LeadResponse(BaseModel):
     """Lead entity in API responses."""
     id: str
     name: str
-    email: str
+    email: Optional[EmailStr] = None
     phone: Optional[str] = None
     company: Optional[str] = None
     source: str

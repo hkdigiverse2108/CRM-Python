@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { leads as initialLeads } from '@/data/mockData';
 import { formatCurrency, formatDate, getStatusColor } from '@/lib/utils';
@@ -6,6 +6,11 @@ import { useApp } from '@/context/AppContext';
 import PageHeader from '@/components/ui/PageHeader';
 import ButtonGuard from '@/components/ui/ButtonGuard';
 import { formatAssignedAgent } from './Pipeline';
+
+// Import newly created enhanced CRM UI components
+import FilterBar from '@/components/crm/FilterBar';
+import SavedViewsToggle from '@/components/crm/SavedViewsToggle';
+import LeadDetailDrawer from '@/components/crm/LeadDetailDrawer';
 
 import {
   Search, Plus, Filter, X, Phone, MessageCircle, Mail, Building,
@@ -17,17 +22,25 @@ export default function Leads() {
   const { 
     addToast, leads: allLeads, setLeads: setAllLeads, convertLeadToClient, 
     updateLead, deleteLead, createLead, token, tenantId,
-    fetchLeadFollowups, createLeadFollowup, fetchLeadAuditLogs
+    fetchLeadFollowups, createLeadFollowup, fetchLeadAuditLogs, createReminder
   } = useApp();
   const navigate = useNavigate();
   const [selectedLeadId, setSelectedLeadId] = useState(null);
   const selectedLead = allLeads.find(l => l.id === selectedLeadId);
-  const [search, setSearch] = useState('');
-  const [selectedStage, setSelectedStage] = useState('All');
-  const [selectedSource, setSelectedSource] = useState('All');
-  const [selectedTag, setSelectedTag] = useState('All');
+  
+  // Combined Filter State for Saved Views Toggle compatibility
+  const [filters, setFilters] = useState({
+    stage: 'All',
+    source: 'All',
+    tag: 'All',
+    label: 'All',
+    search: ''
+  });
+  
   const [workspaceLabels, setWorkspaceLabels] = useState([]);
-  const [selectedLabel, setSelectedLabel] = useState('All');
+  
+  // Pagination State: initial visible count of leads to optimize DOM loading
+  const [visibleCount, setVisibleCount] = useState(15);
 
   // Follow-up States
   const [followups, setFollowups] = useState([]);
@@ -144,27 +157,29 @@ export default function Leads() {
     pincode: ''
   });
 
-  const stages = ['All', 'New Lead', 'Contacted', 'Follow-up', 'Negotiation', 'Hot Lead', 'Proposal Sent', 'Converted'];
-  const sources = ['All', 'Website', 'LinkedIn', 'Referral', 'Google Ads', 'WhatsApp', 'Cold Call'];
-  const tags = ['All', 'High Value', 'Warm Lead', 'Enterprise', 'Retail'];
+  const stages = useMemo(() => ['All', 'New Lead', 'Contacted', 'Follow-up', 'Negotiation', 'Hot Lead', 'Proposal Sent', 'Converted'], []);
+  const sources = useMemo(() => ['All', 'Website', 'LinkedIn', 'Referral', 'Google Ads', 'WhatsApp', 'Cold Call'], []);
+  const tags = useMemo(() => ['All', 'High Value', 'Warm Lead', 'Enterprise', 'Retail'], []);
 
-  const filtered = allLeads.filter(l => {
-    const matchesSearch = (l.name || '').toLowerCase().includes(search.toLowerCase()) || 
-                          (l.company || '').toLowerCase().includes(search.toLowerCase());
-    const matchesStage = selectedStage === 'All' || l.stage === selectedStage;
-    const matchesSource = selectedSource === 'All' || l.source === selectedSource;
-    
-    // Custom tag mock matching
-    let matchesTag = true;
-    if (selectedTag === 'High Value') matchesTag = l.value >= 500000;
-    else if (selectedTag === 'Warm Lead') matchesTag = l.stage === 'Negotiation' || l.stage === 'Qualified';
-    else if (selectedTag === 'Enterprise') matchesTag = l.value >= 1000000;
-    else if (selectedTag === 'Retail') matchesTag = (l.company || '').toLowerCase().includes('retail') || (l.company || '').toLowerCase().includes('foods');
+  const filtered = useMemo(() => {
+    return allLeads.filter(l => {
+      const searchLower = (filters.search || '').toLowerCase();
+      const matchesSearch = (l.name || '').toLowerCase().includes(searchLower) || 
+                            (l.company || '').toLowerCase().includes(searchLower);
+      const matchesStage = filters.stage === 'All' || l.stage === filters.stage;
+      const matchesSource = filters.source === 'All' || l.source === filters.source;
+      
+      let matchesTag = true;
+      if (filters.tag === 'High Value') matchesTag = l.value >= 500000;
+      else if (filters.tag === 'Warm Lead') matchesTag = l.stage === 'Negotiation' || l.stage === 'Qualified';
+      else if (filters.tag === 'Enterprise') matchesTag = l.value >= 1000000;
+      else if (filters.tag === 'Retail') matchesTag = (l.company || '').toLowerCase().includes('retail') || (l.company || '').toLowerCase().includes('foods');
 
-    const matchesLabel = selectedLabel === 'All' || l.product_interest === selectedLabel;
+      const matchesLabel = filters.label === 'All' || l.product_interest === filters.label;
 
-    return matchesSearch && matchesStage && matchesSource && matchesTag && matchesLabel;
-  });
+      return matchesSearch && matchesStage && matchesSource && matchesTag && matchesLabel;
+    });
+  }, [allLeads, filters]);
 
   const handleAddLead = async () => {
     if (!newLead.name || !newLead.company) {
@@ -325,92 +340,53 @@ export default function Leads() {
         </ButtonGuard>
       </PageHeader>
 
-      {/* Filters Row */}
-      <div className="glass-card p-3.5 flex flex-wrap items-center gap-3 bg-white/70 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800/80">
-        <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 mr-2">
-          <Filter size={14} />
-          <span>Filters:</span>
-        </div>
-        
-        {/* Stage Filter */}
-        <select
-          value={selectedStage}
-          onChange={e => setSelectedStage(e.target.value)}
-          className="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-semibold"
-        >
-          <option value="All">All Stages</option>
-          {stages.filter(s => s !== 'All').map(s => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
+      {/* Saved Views Configurator Switchboard */}
+      <SavedViewsToggle 
+        currentFilters={filters}
+        onLoadView={(savedFilters) => setFilters(savedFilters)}
+        onAddToast={addToast}
+      />
 
-        {/* Source Filter */}
-        <select
-          value={selectedSource}
-          onChange={e => setSelectedSource(e.target.value)}
-          className="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-semibold"
-        >
-          <option value="All">All Sources</option>
-          {sources.filter(s => s !== 'All').map(s => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-
-        {/* Tag Filter */}
-        <select
-          value={selectedTag}
-          onChange={e => setSelectedTag(e.target.value)}
-          className="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-semibold"
-        >
-          <option value="All">All Tags</option>
-          {tags.filter(t => t !== 'All').map(t => (
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
-
-        {/* Product/Label Filter */}
-        <select
-          value={selectedLabel}
-          onChange={e => setSelectedLabel(e.target.value)}
-          className="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-semibold"
-        >
-          <option value="All">All Interests</option>
-          {workspaceLabels.map(lbl => (
-            <option key={lbl} value={lbl}>{lbl}</option>
-          ))}
-        </select>
-
-        {/* Clear Filters Button */}
-        {(selectedStage !== 'All' || selectedSource !== 'All' || selectedTag !== 'All' || selectedLabel !== 'All' || search) && (
-          <button
-            onClick={() => {
-              setSelectedStage('All');
-              setSelectedSource('All');
-              setSelectedTag('All');
-              setSelectedLabel('All');
-              setSearch('');
-            }}
-            className="text-xs text-rose-500 hover:text-rose-600 font-bold flex items-center gap-1 transition-colors px-2.5 py-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/20"
-          >
-            <X size={12} /> Clear Filters
-          </button>
-        )}
-      </div>
+      {/* Premium Glass-Card styled Filter Bar */}
+      <FilterBar 
+        stages={stages}
+        sources={sources}
+        tags={tags}
+        workspaceLabels={workspaceLabels}
+        filters={filters}
+        onChangeFilter={(key, value) => {
+          setFilters(prev => ({ ...prev, [key]: value }));
+          setVisibleCount(15); // Reset pagination offset
+        }}
+        onClearFilters={() => {
+          setFilters({
+            stage: 'All',
+            source: 'All',
+            tag: 'All',
+            label: 'All',
+            search: ''
+          });
+          setVisibleCount(15);
+        }}
+      />
 
       {/* Main Table Layout */}
-      <div className="space-y-3">
-        <div className="glass-card p-3 flex items-center gap-3">
+      <div className="space-y-4">
+        <div className="glass-card p-3.5 flex items-center gap-3 bg-white/70 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800/80">
           <Search size={15} className="text-slate-400 dark:text-slate-500 shrink-0" />
           <input 
             type="text" 
             placeholder="Search leads by name or company..." 
-            value={search} 
-            onChange={e => setSearch(e.target.value)} 
-            className="flex-1 bg-transparent border-0 outline-none text-xs text-slate-700 dark:text-slate-200 placeholder-slate-400" 
+            value={filters.search} 
+            onChange={e => {
+              setFilters(prev => ({ ...prev, search: e.target.value }));
+              setVisibleCount(15);
+            }} 
+            className="flex-1 bg-transparent border-0 outline-none text-xs text-slate-700 dark:text-slate-200 placeholder-slate-400 font-semibold" 
           />
         </div>
 
-        <div className="glass-card overflow-hidden rounded-2xl border border-slate-100 dark:border-slate-800/80">
+        <div className="glass-card overflow-hidden rounded-2xl border border-slate-100 dark:border-slate-800/80 shadow-sm bg-white/80 dark:bg-slate-900/40">
           <div className="overflow-x-auto">
             <table className="data-table">
               <thead>
@@ -426,7 +402,7 @@ export default function Leads() {
               </thead>
               <tbody>
                 {filtered.length > 0 ? (
-                  filtered.map(lead => (
+                  filtered.slice(0, visibleCount).map(lead => (
                     <tr 
                       key={lead.id}
                       onClick={() => setSelectedLeadId(lead.id)}
@@ -451,8 +427,8 @@ export default function Leads() {
                         )}
                       </td>
                       <td className="text-xs font-bold text-slate-800 dark:text-white">{formatCurrency(lead.value)}</td>
-                      <td><span className={`badge ${getStatusColor(lead.stage || 'New')} whitespace-nowrap`}>{lead.stage || 'New'}</span></td>
-                      <td className="text-xs text-slate-400 dark:text-slate-500 font-semibold">{lead.source || 'Website'}</td>
+                      <td><span className={`badge ${getStatusColor(lead.stage || lead.status || 'New Lead')} whitespace-nowrap`}>{lead.stage || lead.status || 'New Lead'}</span></td>
+                      <td className="text-xs text-slate-405 dark:text-slate-500 font-semibold">{lead.source || 'Website'}</td>
                       <td className="text-right" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-end gap-1">
                           <ButtonGuard module="crm" action="edit">
@@ -486,321 +462,35 @@ export default function Leads() {
             </table>
           </div>
         </div>
+
+        {/* Load More Pagination Button for performance optimization */}
+        {filtered.length > visibleCount && (
+          <div className="flex justify-center pt-2">
+            <button
+              onClick={() => setVisibleCount(prev => prev + 15)}
+              className="px-5 py-2 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 text-xs font-bold rounded-xl border border-indigo-150/40 dark:border-indigo-900/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-all shadow-sm active:scale-95"
+            >
+              Load More Leads
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* RIGHT DRAWER - Detailed Lead Profile Sheet (Slide-out) */}
+      {/* Right side slide-out drawer containing full lead detail dashboard */}
       {selectedLeadId && selectedLead && (
         <>
           <div className="sheet-overlay animate-fade-in" onClick={() => setSelectedLeadId(null)} />
-          <div className="sheet-content w-full max-w-lg p-6 overflow-y-auto z-50">
-            <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h2 className="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider">Lead Profile & Timeline</h2>
-              <div className="flex items-center gap-2">
-                <ButtonGuard module="crm" action="edit">
-                  <button 
-                    onClick={() => handleStartEdit(selectedLead)}
-                    className="px-2.5 py-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 cursor-pointer"
-                  >
-                    Edit Info
-                  </button>
-                </ButtonGuard>
-                <button onClick={() => setSelectedLeadId(null)} className="btn-ghost p-1"><X size={18} /></button>
-              </div>
-            </div>
-
-            <div className="space-y-5">
-              <div className="text-center pb-4 border-b border-slate-100 dark:border-slate-800/80">
-                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-white font-bold flex items-center justify-center mx-auto shadow-md">
-                  {selectedLead.name ? selectedLead.name.split(' ').map(n => n.charAt(0)).join('') : 'LD'}
-                </div>
-                <h3 className="font-bold text-sm text-slate-800 dark:text-white mt-3">{selectedLead.name}</h3>
-                <p className="text-[11px] text-slate-400 font-medium">{selectedLead.company}</p>
-                {selectedLead.industry && <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider mt-1.5 inline-block">{selectedLead.industry}</span>}
-              </div>
-
-              {/* Stats */}
-              <div className="grid grid-cols-2 gap-2 text-center">
-                <div className="p-2.5 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800/60">
-                  <span className="text-[9px] font-bold text-slate-400 uppercase">Deal Value</span>
-                  <p className="text-xs font-bold text-slate-700 dark:text-slate-200 mt-0.5">{formatCurrency(selectedLead.value)}</p>
-                </div>
-                <div className="p-2.5 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800/60">
-                  <span className="text-[9px] font-bold text-slate-400 uppercase">Stage</span>
-                  <div><span className={`badge ${getStatusColor(selectedLead.stage || 'New')} mt-0.5 whitespace-nowrap`}>{selectedLead.stage || 'New'}</span></div>
-                </div>
-              </div>
-
-              {/* Lead Details */}
-              <div className="space-y-3 text-xs">
-                <div className="flex items-center gap-2.5">
-                  <Mail size={13} className="text-slate-400 shrink-0" />
-                  <span className="text-slate-655 dark:text-slate-300 truncate" title="Email">{selectedLead.email || 'No Email'}</span>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <Phone size={13} className="text-slate-400 shrink-0" />
-                  <span className="text-slate-655 dark:text-slate-300" title="Phone">{selectedLead.phone || 'No Phone'}</span>
-                </div>
-                {selectedLead.altPhone && (
-                  <div className="flex items-center gap-2.5">
-                    <Phone size={13} className="text-slate-400 shrink-0" />
-                    <span className="text-slate-655 dark:text-slate-300" title="Alternate Phone">{selectedLead.altPhone} (Alt)</span>
-                  </div>
-                )}
-                <div className="flex items-center gap-2.5">
-                  <Building size={13} className="text-slate-400 shrink-0" />
-                  <span className="text-slate-655 dark:text-slate-300" title="Company">{selectedLead.company}</span>
-                </div>
-                {selectedLead.website && (
-                  <div className="flex items-center gap-2.5">
-                    <Globe size={13} className="text-slate-400 shrink-0" />
-                    <a href={`https://${selectedLead.website}`} target="_blank" rel="noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline truncate">{selectedLead.website}</a>
-                  </div>
-                )}
-                <div className="flex items-center gap-2.5">
-                  <User size={13} className="text-slate-400 shrink-0" />
-                  <span className="text-slate-655 dark:text-slate-300">Rep: {formatAssignedAgent(selectedLead.assignedTo || selectedLead.assigned_to)}</span>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <Tag size={13} className="text-slate-400 shrink-0" />
-                  <span className="text-slate-655 dark:text-slate-300">
-                    Interest: <span className="font-bold text-violet-600 dark:text-violet-400">{selectedLead.product_interest || 'Unlabeled'}</span>
-                  </span>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <Calendar size={13} className="text-slate-400 shrink-0" />
-                  <span className="text-slate-655 dark:text-slate-300">Created: {formatDate(selectedLead.createdAt)}</span>
-                </div>
-                {selectedLead.priority && (
-                  <div className="flex items-center gap-2.5">
-                    <Tag size={13} className="text-slate-400 shrink-0" />
-                    <span className="text-slate-655 dark:text-slate-300">Priority: <span className="font-bold">{selectedLead.priority}</span></span>
-                  </div>
-                )}
-                {selectedLead.nextFollowUpDate && (
-                  <div className="flex items-center gap-2.5 border-t border-dashed border-slate-100 dark:border-slate-800/80 pt-2 mt-2">
-                    <Clock size={13} className="text-amber-500 shrink-0" />
-                    <span className="text-slate-655 dark:text-slate-300">Next Follow-Up: <span className="font-bold text-amber-600 dark:text-amber-400">{selectedLead.nextFollowUpDate}</span> ({selectedLead.followUpStatus || 'Scheduled'})</span>
-                  </div>
-                )}
-                {selectedLead.requirement && (
-                  <div className="bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/60 mt-2">
-                    <span className="text-[9px] font-bold text-slate-400 uppercase block">Requirements</span>
-                    <span className="text-slate-655 dark:text-slate-305 text-[11px] leading-relaxed mt-0.5 block">{selectedLead.requirement}</span>
-                  </div>
-                )}
-                {selectedLead.description && (
-                  <div className="bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/60">
-                    <span className="text-[9px] font-bold text-slate-400 uppercase block">Description</span>
-                    <span className="text-slate-655 dark:text-slate-305 text-[11px] leading-relaxed mt-0.5 block">{selectedLead.description}</span>
-                  </div>
-                )}
-                {selectedLead.notes && (
-                  <div className="bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/60">
-                    <span className="text-[9px] font-bold text-slate-400 uppercase block">Notes</span>
-                    <span className="text-slate-655 dark:text-slate-355 text-[11px] leading-relaxed mt-0.5 block italic">"{selectedLead.notes}"</span>
-                  </div>
-                )}
-                {(selectedLead.city || selectedLead.state || selectedLead.pincode) && (
-                  <div className="text-[10px] text-slate-400 mt-2 font-semibold">
-                    📍 {selectedLead.city}, {selectedLead.state}, {selectedLead.country} {selectedLead.pincode ? `- ${selectedLead.pincode}` : ''}
-                  </div>
-                )}
-              </div>
-
-              {/* Trigger Actions */}
-              <div className="flex items-center gap-2 border-t border-slate-100 dark:border-slate-800 pt-4">
-                <button 
-                  onClick={() => {
-                    navigate('/omnichannel/whatsapp');
-                    addToast(`Opening WhatsApp chat with ${selectedLead.name}`);
-                  }}
-                  className="flex-1 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <MessageCircle size={13} />
-                  <span>WhatsApp</span>
-                </button>
-                <button 
-                  onClick={() => {
-                    navigate('/omnichannel/calls');
-                    addToast(`Redirecting to Call Dialer for ${selectedLead.name}`);
-                  }}
-                  className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <Phone size={13} />
-                  <span>Call Dialer</span>
-                </button>
-              </div>
-
-              {/* Follow-Up Logs & Scheduling Section (Only shown if stage is Follow-up) */}
-              {selectedLead.stage === 'Follow-up' && (
-                <div className="border-t border-slate-100 dark:border-slate-800/80 pt-4 space-y-4">
-                  <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center justify-between">
-                    <span>Follow-Up Logs & Reminders</span>
-                    {followups.length > 0 && (
-                      <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded">
-                        {followups.length} Taken
-                      </span>
-                    )}
-                  </h4>
-
-                  {/* Schedule Next / Log Current Form */}
-                  <form onSubmit={handleLogFollowup} className="space-y-3 bg-slate-50 dark:bg-slate-900/40 p-3 rounded-xl border border-slate-100 dark:border-slate-800/80">
-                    <div className="flex gap-2">
-                      <select 
-                        value={followupType} 
-                        onChange={e => setFollowupType(e.target.value)} 
-                        className="text-[10px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-1"
-                      >
-                        <option value="Call">📞 Call</option>
-                        <option value="WhatsApp">💬 WhatsApp</option>
-                        <option value="Email">✉️ Email</option>
-                        <option value="F2F Meeting">🤝 F2F Meeting</option>
-                      </select>
-                      <span className="text-[9px] text-slate-400 font-semibold self-center">
-                        First Taken: {followups.length > 0 ? followups[0].followup_date : 'None yet'}
-                      </span>
-                    </div>
-
-                    <div>
-                      <label className="text-[9px] font-bold text-slate-400 block mb-1">Follow-Up Note / Remarks *</label>
-                      <textarea 
-                        value={newFollowupNote}
-                        onChange={e => setNewFollowupNote(e.target.value)}
-                        placeholder="What was discussed?" 
-                        className="w-full text-xs p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500" 
-                        rows="2"
-                        required
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[9px] font-bold text-slate-400 block mb-1">Next Follow-Up Date</label>
-                        <input 
-                          type="date" 
-                          value={nextFollowupDate}
-                          onChange={e => setNextFollowupDate(e.target.value)}
-                          className="w-full text-xs p-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded" 
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[9px] font-bold text-slate-400 block mb-1">Next Remarks / Task</label>
-                        <input 
-                          type="text" 
-                          value={nextFollowupRemarks}
-                          onChange={e => setNextFollowupRemarks(e.target.value)}
-                          placeholder="e.g. Call to close" 
-                          className="w-full text-xs p-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded" 
-                        />
-                      </div>
-                    </div>
-
-                    <button 
-                      type="submit" 
-                      className="btn-primary w-full justify-center py-2 text-xs font-bold cursor-pointer"
-                    >
-                      Log Follow-Up & Schedule
-                    </button>
-                  </form>
-
-                  {/* Follow-up Logs History list */}
-                  <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1 scrollbar-thin">
-                    {loadingFollowups ? (
-                      <p className="text-[10px] text-slate-400 italic">Loading logs...</p>
-                    ) : followups.length === 0 ? (
-                      <p className="text-[10px] text-slate-400 italic">No follow-up history logged yet.</p>
-                    ) : (
-                      followups.slice().reverse().map((item, index) => {
-                        const logNum = followups.length - index;
-                        const isFirst = logNum === 1;
-                        return (
-                          <div key={item.id || index} className="p-2.5 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-800/80 rounded-xl relative shadow-xs">
-                            <span className="absolute top-2 right-2 text-[8px] bg-slate-105 dark:bg-slate-900 text-slate-500 px-1 rounded uppercase font-bold">
-                              {item.followup_type}
-                            </span>
-                            <p className="text-[10px] font-bold text-slate-700 dark:text-slate-200">
-                              {isFirst ? 'First Follow-Up' : `${logNum}th Follow-Up`}
-                            </p>
-                            <p className="text-[9px] text-slate-400">{item.followup_date} • {item.created_by || 'Agent'}</p>
-                            <p className="text-xs text-slate-600 dark:text-slate-300 mt-1.5 italic bg-slate-50 dark:bg-slate-900/30 p-1.5 rounded">
-                              "{item.remarks}"
-                            </p>
-                            {item.next_followup_date && (
-                              <div className="mt-2 text-[9px] text-amber-600 dark:text-amber-400 font-semibold border-t border-dashed border-slate-100 dark:border-slate-800 pt-1.5">
-                                📅 Next: {item.next_followup_date} {item.next_followup_remarks && `(${item.next_followup_remarks})`}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Activity & Audit Logs */}
-              <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800/80">
-                <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center justify-between">
-                  <span>Activity History & Audit Logs</span>
-                  <span className="text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-500 px-1.5 py-0.5 rounded">
-                    {auditLogs.length} changes
-                  </span>
-                </h4>
-
-                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                  {loadingAuditLogs ? (
-                    <p className="text-[10px] text-slate-400 italic">Loading activity history...</p>
-                  ) : auditLogs.length === 0 ? (
-                    <p className="text-[10px] text-slate-400 italic">No activity recorded yet.</p>
-                  ) : (
-                    auditLogs.map((log) => {
-                      // Convert UTC time to Indian Standard Time (IST)
-                      const utcDate = new Date(log.changed_at);
-                      const istOptions = {
-                        timeZone: 'Asia/Kolkata',
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        hour12: true
-                      };
-                      const istTimeString = utcDate.toLocaleString('en-IN', istOptions);
-
-                      // Format column name to friendly text
-                      const fieldNameMap = {
-                        full_name: 'Name',
-                        email: 'Email',
-                        phone_primary: 'Phone',
-                        company_name: 'Company',
-                        lead_source: 'Source',
-                        lead_status: 'Status/Stage',
-                        lead_score: 'Score',
-                        assigned_agent_id: 'Assigned Agent',
-                        deal_value_expected: 'Expected Income'
-                      };
-                      const friendlyField = fieldNameMap[log.field_name] || log.field_name;
-
-                      return (
-                        <div key={log.id} className="p-2.5 bg-slate-50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-800/80 rounded-xl relative text-[11px]">
-                          <p className="font-semibold text-slate-700 dark:text-slate-200">
-                            Updated <span className="text-indigo-600 dark:text-indigo-400 font-bold">{friendlyField}</span>
-                          </p>
-                          <p className="text-[10px] text-slate-500 mt-0.5">
-                            From: <span className="italic">"{log.old_value || 'None'}"</span> → To: <span className="font-semibold">"{log.new_value || 'None'}"</span>
-                          </p>
-                          <div className="mt-1 flex items-center justify-between text-[9px] text-slate-400 font-medium">
-                            <span>By: {log.changed_by || 'System/Admin'}</span>
-                            <span className="text-amber-600 dark:text-amber-500 font-bold">🇮🇳 {istTimeString}</span>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
+          <LeadDetailDrawer 
+            lead={selectedLead}
+            onClose={() => setSelectedLeadId(null)}
+            onStartEdit={handleStartEdit}
+            addToast={addToast}
+            fetchLeadFollowups={fetchLeadFollowups}
+            createLeadFollowup={createLeadFollowup}
+            fetchLeadAuditLogs={fetchLeadAuditLogs}
+            createReminder={createReminder}
+            formatAssignedAgent={formatAssignedAgent}
+          />
         </>
       )}
 

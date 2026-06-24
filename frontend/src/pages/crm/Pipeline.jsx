@@ -20,8 +20,9 @@ export function formatAssignedAgent(agentId) {
 export default function Pipeline() {
   const { 
     addToast, leads = [], setLeads, 
-    fetchLeadFollowups, fetchLeadAuditLogs, createLeadFollowup, updateLead 
+    fetchLeadFollowups, fetchLeadAuditLogs, createLeadFollowup, updateLead, user 
   } = useApp();
+  const [selectedAssigneeFilter, setSelectedAssigneeFilter] = useState('All');
   
   const [search, setSearch] = useState('');
   const [selectedStageFilter, setSelectedStageFilter] = useState('All');
@@ -155,6 +156,15 @@ export default function Pipeline() {
     setLoadingAuditLogs(false);
   };
 
+  // Helper to refresh audit logs for a specific lead
+  const refreshAuditLogs = async (leadId) => {
+    setLoadingAuditLogs(true);
+    const aData = await fetchLeadAuditLogs(leadId);
+    setAuditLogs(aData || []);
+    setLoadingAuditLogs(false);
+  };
+
+
   const deals = leads.map(l => ({
     id: l.id,
     stage: l.stage || 'New',
@@ -175,13 +185,26 @@ export default function Pipeline() {
     const matchesSearch = (d.name || '').toLowerCase().includes(search.toLowerCase()) ||
                           (d.company || '').toLowerCase().includes(search.toLowerCase());
     const matchesStage = selectedStageFilter === 'All' || d.stage === selectedStageFilter;
-    return matchesSearch && matchesStage;
+    const matchesAssignee = selectedAssigneeFilter === 'All' ||
+                           (user && d.rep && d.rep === (user.full_name || user.name || user.username));
+    return matchesSearch && matchesStage && matchesAssignee;
   });
 
   const handleCreateDealSubmit = (e) => {
     e.preventDefault();
-    if (!newDeal.name || !newDeal.company) {
-      addToast('Deal Name and Company Name are required', 'warning');
+    let hasError = false;
+    const errors = { name: '', company: '' };
+    if (!newDeal.name.trim()) {
+      errors.name = 'Deal Name is required';
+      hasError = true;
+    }
+    if (!newDeal.company.trim()) {
+      errors.company = 'Company Name is required';
+      hasError = true;
+    }
+    setCreateDealErrors(errors);
+    if (hasError) {
+      addToast('Please fill required fields', 'warning');
       return;
     }
 
@@ -269,6 +292,17 @@ export default function Pipeline() {
             </button>
           );
         })}
+        {/* My Leads Filter Button */}
+        <button
+          onClick={() => setSelectedAssigneeFilter(prev => prev === 'My' ? 'All' : 'My')}
+          className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-200 cursor-pointer ${
+            selectedAssigneeFilter === 'My'
+              ? 'bg-green-600 text-white shadow-lg shadow-green-600/20 scale-[1.02]'
+              : 'bg-white hover:bg-slate-100 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:bg-slate-800 border border-slate-200/50 dark:border-slate-800/80'
+          }`}
+        >
+          My Leads
+        </button>
       </div>
 
       {/* Deals Table View */}
@@ -306,6 +340,7 @@ export default function Pipeline() {
                           const newStage = isChecked ? 'Hot Lead' : 'New';
                           await updateLead(deal.id, { stage: newStage });
                           setLeads(prev => prev.map(l => l.id === deal.id ? { ...l, stage: newStage, status: newStage } : l));
+                          await refreshAuditLogs(deal.id);
                           addToast(`Lead marked as ${newStage}`, 'success');
                         }}
                         className="w-4 h-4 rounded text-indigo-600 border-slate-300 focus:ring-indigo-500 cursor-pointer"
@@ -327,6 +362,7 @@ export default function Pipeline() {
                           const newStage = e.target.value;
                           await updateLead(deal.id, { stage: newStage });
                           setLeads(prev => prev.map(l => l.id === deal.id ? { ...l, stage: newStage, status: newStage } : l));
+                          await refreshAuditLogs(deal.id);
                           addToast(`"${deal.name}" stage updated to ${newStage}`, 'success');
                         }}
                         className="text-[11px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500"
