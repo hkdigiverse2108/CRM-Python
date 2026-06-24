@@ -4,9 +4,82 @@ import {
   Search, Send, Users, User, Plus, MessageSquare, Hash, 
   X, UserPlus, Paperclip, Pin, Smile, Check, CheckCheck, Loader2,
   Mic, Square, Volume2, CornerUpLeft, VolumeX, AlertCircle,
-  Trash2, Share2, Info, LogOut, Bookmark
+  Trash2, Share2, Info, LogOut, Bookmark, Zap, Coffee, Car, Lightbulb, Flag
 } from 'lucide-react';
 import { toast } from 'sonner';
+
+const emojiData = {
+  smileys: {
+    label: "SMILEYS & PEOPLE",
+    emojis: [
+      { char: "😀", name: "grinning" }, { char: "😃", name: "happy" }, { char: "😄", name: "smile" }, { char: "😁", name: "grin" },
+      { char: "😆", name: "laughing" }, { char: "😅", name: "sweat" }, { char: "😂", name: "joy" }, { char: "🤣", name: "rofl" },
+      { char: "😊", name: "blush" }, { char: "😇", name: "halo" }, { char: "🙂", name: "slight smile" }, { char: "🙃", name: "upside down" },
+      { char: "😉", name: "wink" }, { char: "😌", name: "relieved" }, { char: "😍", name: "heart eyes" }, { char: "🥰", name: "hearts" },
+      { char: "😘", name: "kiss" }, { char: "😗", name: "kissing" }, { char: "😙", name: "kissing smile" }, { char: "😚", name: "kissing closed" },
+      { char: "😋", name: "yum" }, { char: "😛", name: "tongue" }, { char: "😝", name: "tongue squint" }, { char: "😜", name: "tongue wink" },
+      { char: "🤪", name: "zany" }, { char: "🤨", name: "raised eyebrow" }, { char: "🧐", name: "monocle" }, { char: "🤓", name: "geek" },
+      { char: "😎", name: "sunglasses" }, { char: "🤩", name: "star struck" }, { char: "🥳", name: "party" }, { char: "😏", name: "smirk" },
+      { char: "😒", name: "unamused" }, { char: "😞", name: "disappointed" }, { char: "😔", name: "pensive" }, { char: "😟", name: "worried" },
+      { char: "😕", name: "confused" }, { char: "🙁", name: "slight frown" }, { char: "☹️", name: "frown" }, { char: "😣", name: "persevere" },
+      { char: "😖", name: "confounded" }, { char: "😫", name: "tired" }, { char: "😩", name: "weary" }, { char: "🥺", name: "pleading" },
+      { char: "😢", name: "cry" }, { char: "😭", name: "sob" }, { char: "😤", name: "triumph" }, { char: "😠", name: "angry" },
+      { char: "😡", name: "rage" }, { char: "🤬", name: "cursing" }, { char: "🤯", name: "mind blown" }, { char: "😳", name: "flushed" },
+      { char: "🥵", name: "hot" }, { char: "🥶", name: "cold" }, { char: "😱", name: "screaming" }, { char: "😨", name: "fear" }
+    ]
+  },
+  activities: {
+    label: "ACTIVITIES & SPORTS",
+    emojis: [
+      { char: "⚽", name: "soccer" }, { char: "🏀", name: "basketball" }, { char: "🏈", name: "football" }, { char: "⚾", name: "baseball" },
+      { char: "🥎", name: "softball" }, { char: "🎾", name: "tennis" }, { char: "🏐", name: "volleyball" }, { char: "🏉", name: "rugby" },
+      { char: "🎱", name: "billiards" }, { char: "🏓", name: "ping pong" }, { char: "🏸", name: "badminton" }, { char: "🥅", name: "goal" },
+      { char: "🏒", name: "hockey" }, { char: "🥍", name: "lacrosse" }, { char: "🏏", name: "cricket" }, { char: "⛳", name: "golf" },
+      { char: "🏹", name: "archery" }, { char: "🎣", name: "fishing" }, { char: "🥊", name: "boxing" }, { char: "🥋", name: "martial arts" }
+    ]
+  },
+  food: {
+    label: "FOOD & DRINK",
+    emojis: [
+      { char: "🍎", name: "apple" }, { char: "🍌", name: "banana" }, { char: "🍉", name: "watermelon" }, { char: "🍇", name: "grapes" },
+      { char: "🍓", name: "strawberry" }, { char: "🍒", name: "cherry" }, { char: "🍑", name: "peach" }, { char: "🥭", name: "mango" },
+      { char: "🍍", name: "pineapple" }, { char: "🥥", name: "coconut" }, { char: "🥝", name: "kiwi" }, { char: "🍅", name: "tomato" },
+      { char: "🥑", name: "avocado" }, { char: "🍆", name: "eggplant" }, { char: "🥔", name: "potato" }, { char: "🥕", name: "carrot" },
+      { char: "🍞", name: "bread" }, { char: "🍕", name: "pizza" }, { char: "🍔", name: "hamburger" }, { char: "🍟", name: "fries" },
+      { char: "☕", name: "coffee" }, { char: "🍵", name: "tea" }, { char: "🍺", name: "beer" }, { char: "🍷", name: "wine" }
+    ]
+  },
+  travel: {
+    label: "TRAVEL & PLACES",
+    emojis: [
+      { char: "🚗", name: "car" }, { char: "🚕", name: "taxi" }, { char: "🚙", name: "suv" }, { char: "🚌", name: "bus" },
+      { char: "🚎", name: "trolleybus" }, { char: "🏎️", name: "racecar" }, { char: "🚓", name: "police" }, { char: "🚑", name: "ambulance" },
+      { char: "🚒", name: "fire engine" }, { char: "🚐", name: "van" }, { char: "🚚", name: "truck" }, { char: "🚛", name: "semi" },
+      { char: "🚜", name: "tractor" }, { char: "🚲", name: "bicycle" }, { char: "🛴", name: "scooter" }, { char: "🛵", name: "motorcycle" },
+      { char: "✈️", name: "airplane" }, { char: "🚁", name: "helicopter" }, { char: "🚀", name: "rocket" }, { char: "🛸", name: "ufo" }
+    ]
+  },
+  objects: {
+    label: "OBJECTS & ITEMS",
+    emojis: [
+      { char: "💡", name: "lightbulb" }, { char: "🔦", name: "flashlight" }, { char: "🕯️", name: "candle" }, { char: "🔑", name: "key" },
+      { char: "🔒", name: "lock" }, { char: "🔓", name: "unlock" }, { char: "✉️", name: "envelope" }, { char: "📦", name: "package" },
+      { char: "📝", name: "memo" }, { char: "📅", name: "calendar" }, { char: "📊", name: "chart" }, { char: "📎", name: "paperclip" },
+      { char: "📌", name: "pushpin" }, { char: "📐", name: "ruler" }, { char: "📕", name: "book" }, { char: "🎨", name: "palette" },
+      { char: "💻", name: "laptop" }, { char: "📱", name: "phone" }, { char: "⌚", name: "watch" }, { char: "📷", name: "camera" }
+    ]
+  },
+  symbols: {
+    label: "SYMBOLS & FLAGS",
+    emojis: [
+      { char: "❤️", name: "red heart" }, { char: "🧡", name: "orange heart" }, { char: "💛", name: "yellow heart" }, { char: "💚", name: "green heart" },
+      { char: "💙", name: "blue heart" }, { char: "💜", name: "purple heart" }, { char: "🖤", name: "black heart" }, { char: "🤍", name: "white heart" },
+      { char: "🤎", name: "brown heart" }, { char: "💔", name: "broken heart" }, { char: "❣️", name: "exclamation heart" }, { char: "💕", name: "two hearts" },
+      { char: "🏁", name: "checkered flag" }, { char: "🚩", name: "triangular flag" }, { char: "🏳️‍🌈", name: "rainbow flag" }, { char: "🇺🇸", name: "us flag" },
+      { char: "🇮🇳", name: "india flag" }, { char: "🇬🇧", name: "uk flag" }, { char: "🇪🇺", name: "eu flag" }, { char: "🇯🇵", name: "japan flag" }
+    ]
+  }
+};
 
 export default function Chat() {
   const { user } = useApp();
@@ -20,6 +93,15 @@ export default function Chat() {
   
   const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
   const WS_BASE = API_BASE.replace(/^http/, 'ws').replace(/^https/, 'wss');
+  
+  const getAttachmentUrl = (fileUrl) => {
+    if (!fileUrl) return '';
+    if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) return fileUrl;
+    let host = API_BASE.startsWith('/') ? window.location.origin + API_BASE : API_BASE;
+    host = host.replace(/\/api\/?$/, '');
+    const cleanFileUrl = fileUrl.startsWith('/') ? fileUrl : '/' + fileUrl;
+    return `${host}${cleanFileUrl}`;
+  };
   
   const [channels, setChannels] = useState([]);
   const [selectedChannel, setSelectedChannel] = useState(null);
@@ -61,6 +143,11 @@ export default function Chat() {
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
   const [showCreateGeneralModal, setShowCreateGeneralModal] = useState(false);
   const [generalChannelName, setGeneralChannelName] = useState('');
+
+  // Custom Emoji Picker states
+  const [selectedEmojiCategory, setSelectedEmojiCategory] = useState('smileys');
+  const [emojiSearchQuery, setEmojiSearchQuery] = useState('');
+  const [hoveredEmoji, setHoveredEmoji] = useState(null);
   
   // Group creation state
   const [groupName, setGroupName] = useState('');
@@ -1207,18 +1294,18 @@ export default function Chat() {
                 filteredMessages.map((msg, idx) => {
                   const isOwn = msg.sender_id === user?.id;
                   
-                  let ticks = <Check className="w-3 h-3 text-teal-200/50" />;
+                  let ticks = <Check className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />;
                   if (selectedChannel.type === 'direct') {
                     const readCount = msg.read_by?.filter(uid => uid !== msg.sender_id).length || 0;
                     if (readCount > 0) {
-                      ticks = <CheckCheck className="w-3.5 h-3.5 text-teal-200" />;
+                      ticks = <CheckCheck className="w-3.5 h-3.5 text-sky-500 dark:text-sky-400" />;
                     } else {
-                      ticks = <CheckCheck className="w-3.5 h-3.5 text-teal-100/40" />;
+                      ticks = <CheckCheck className="w-3.5 h-3.5 text-slate-400/60 dark:text-slate-500/60" />;
                     }
                   } else {
                     const otherReads = msg.read_by?.filter(uid => uid !== msg.sender_id).length || 0;
                     if (otherReads > 0) {
-                      ticks = <CheckCheck className="w-3.5 h-3.5 text-teal-200" />;
+                      ticks = <CheckCheck className="w-3.5 h-3.5 text-sky-500 dark:text-sky-400" />;
                     }
                   }
 
@@ -1283,10 +1370,10 @@ export default function Chat() {
                         </div>
 
                         {/* Message Balloon */}
-                        <div className={`p-3 px-4 rounded-2xl shadow-sm text-[13px] relative transition-all ${
+                        <div className={`p-3 px-4 shadow-sm text-[13px] relative transition-all ${
                           isOwn 
-                            ? 'bg-gradient-to-br from-teal-500 to-teal-600 text-white rounded-tr-none' 
-                            : 'bg-slate-100 dark:bg-slate-850 text-slate-800 dark:text-slate-100 rounded-tl-none border border-slate-200/40 dark:border-slate-800/40'
+                            ? 'bg-[#e2ffdb] dark:bg-teal-950/40 text-slate-800 dark:text-slate-100 rounded-[18px] rounded-br-[4px] border border-[#d0f5c4]/70 dark:border-teal-900/40' 
+                            : 'bg-white dark:bg-slate-850 text-slate-800 dark:text-slate-100 rounded-[18px] rounded-bl-[4px] border border-slate-150 dark:border-slate-800/60'
                         }`}>
                           
                           {msg.is_deleted ? (
@@ -1321,7 +1408,7 @@ export default function Chat() {
                                 <div className="mb-2 rounded-xl overflow-hidden border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
                                   {msg.file_type?.startsWith('image/') ? (
                                     <img 
-                                      src={msg.file_url.startsWith('/') ? `${API_BASE.replace('/api', '')}${msg.file_url}` : msg.file_url} 
+                                      src={getAttachmentUrl(msg.file_url)} 
                                       alt="Attachment" 
                                       className="max-h-48 w-full object-cover"
                                     />
@@ -1329,7 +1416,7 @@ export default function Chat() {
                                     <div className="p-2 select-none">
                                       <audio 
                                         controls 
-                                        src={msg.file_url.startsWith('/') ? `${API_BASE.replace('/api', '')}${msg.file_url}` : msg.file_url} 
+                                        src={getAttachmentUrl(msg.file_url)} 
                                         className="w-48 max-w-full h-8"
                                       />
                                     </div>
@@ -1339,7 +1426,7 @@ export default function Chat() {
                                       <div className="truncate flex-1 min-w-0">
                                         <p className="font-bold truncate">{msg.file_name}</p>
                                         <a 
-                                          href={msg.file_url.startsWith('/') ? `${API_BASE.replace('/api', '')}${msg.file_url}` : msg.file_url} 
+                                          href={getAttachmentUrl(msg.file_url)} 
                                           download 
                                           target="_blank"
                                           rel="noreferrer"
@@ -1356,7 +1443,7 @@ export default function Chat() {
                               {msg.text && <p className="leading-relaxed break-words">{msg.text}</p>}
                               
                               <div className="flex items-center justify-end gap-1 mt-1 select-none">
-                                <span className={`text-[9px] block ${isOwn ? 'text-teal-100' : 'text-slate-400 dark:text-slate-500'}`}>
+                                <span className="text-[9px] block text-slate-400 dark:text-slate-500">
                                   {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </span>
                                 {isOwn && ticks}
@@ -1530,25 +1617,124 @@ export default function Chat() {
                 </button>
                 {/* Emoji picker for input */}
                 {activeReactionPicker === 'input' && (
-                  <div className="flex gap-1.5 mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-1.5 shadow-xl">
-                    {['👍', '❤️', '🔥', '👏', '😂', '😮'].map((emoji) => (
-                      <button
-                        key={emoji}
+                  <div className="absolute bottom-16 left-4 z-50 w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[20px] shadow-2xl p-4 flex flex-col gap-3 max-h-[420px] select-none animate-in fade-in zoom-in-95 duration-150">
+                    {/* Search Bar */}
+                    <div className="relative">
+                      <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                      <input 
+                        type="text"
+                        placeholder="Search all emoji"
+                        value={emojiSearchQuery}
+                        onChange={(e) => setEmojiSearchQuery(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-950 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 pl-9 pr-4 py-2 border border-slate-200 focus:border-teal-500 rounded-xl outline-none"
+                      />
+                    </div>
+
+                    {/* Category tabs (only show if not searching) */}
+                    {!emojiSearchQuery && (
+                      <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-850 pb-2">
+                        {[
+                          { key: 'smileys', icon: <Smile className="w-4 h-4" /> },
+                          { key: 'activities', icon: <Zap className="w-4 h-4" /> },
+                          { key: 'food', icon: <Coffee className="w-4 h-4" /> },
+                          { key: 'travel', icon: <Car className="w-4 h-4" /> },
+                          { key: 'objects', icon: <Lightbulb className="w-4 h-4" /> },
+                          { key: 'symbols', icon: <Flag className="w-4 h-4" /> }
+                        ].map((cat) => (
+                          <button
+                            key={cat.key}
+                            type="button"
+                            onClick={() => setSelectedEmojiCategory(cat.key)}
+                            className={`p-1.5 rounded-lg transition-colors ${
+                              selectedEmojiCategory === cat.key 
+                                ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400' 
+                                : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-350'
+                            }`}
+                          >
+                            {cat.icon}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Emoji Grid */}
+                    <div className="flex-1 overflow-y-auto max-h-52 custom-scrollbar">
+                      {emojiSearchQuery ? (
+                        <div>
+                          <p className="text-[10px] font-bold tracking-wider text-slate-400 uppercase mb-2">Search Results</p>
+                          <div className="grid grid-cols-8 gap-2">
+                            {Object.values(emojiData).flatMap(cat => cat.emojis)
+                              .filter(e => e.name.toLowerCase().includes(emojiSearchQuery.toLowerCase()))
+                              .map(emoji => (
+                                <button
+                                  key={emoji.char}
+                                  type="button"
+                                  onClick={() => {
+                                    setNewMessage((prev) => prev + emoji.char);
+                                    setActiveReactionPicker(null);
+                                    setEmojiSearchQuery('');
+                                  }}
+                                  onMouseEnter={() => setHoveredEmoji(emoji)}
+                                  onMouseLeave={() => setHoveredEmoji(null)}
+                                  className="text-xl p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all transform hover:scale-125 animate-in fade-in duration-100"
+                                >
+                                  {emoji.char}
+                                </button>
+                              ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <p className="text-[10px] font-bold tracking-wider text-slate-400 uppercase mb-2">
+                            {emojiData[selectedEmojiCategory].label}
+                          </p>
+                          <div className="grid grid-cols-8 gap-2">
+                            {emojiData[selectedEmojiCategory].emojis.map((emoji) => (
+                              <button
+                                key={emoji.char}
+                                type="button"
+                                onClick={() => {
+                                  setNewMessage((prev) => prev + emoji.char);
+                                  setActiveReactionPicker(null);
+                                }}
+                                onMouseEnter={() => setHoveredEmoji(emoji)}
+                                onMouseLeave={() => setHoveredEmoji(null)}
+                                className="text-xl p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all transform hover:scale-125"
+                              >
+                                {emoji.char}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer Info / Custom Action */}
+                    <div className="flex justify-between items-center border-t border-slate-100 dark:border-slate-800 pt-2 text-[11px]">
+                      <div className="flex items-center gap-1 text-slate-450 dark:text-slate-400 capitalize">
+                        {hoveredEmoji ? (
+                          <>
+                            <span className="text-base">{hoveredEmoji.char}</span>
+                            <span>{hoveredEmoji.name}</span>
+                          </>
+                        ) : (
+                          <>
+                            <Smile className="w-3.5 h-3.5 text-slate-400" />
+                            <span>Pick an emoji...</span>
+                          </>
+                        )}
+                      </div>
+                      <button 
+                        type="button"
                         onClick={() => {
-                          setNewMessage((prev) => prev + emoji);
+                          toast.info("Custom emojis features are coming soon!");
                           setActiveReactionPicker(null);
                         }}
-                        className="text-xs hover:scale-125 transition-transform"
+                        className="text-teal-600 dark:text-teal-400 font-bold hover:underline"
                       >
-                        {emoji}
+                        Add Custom Emoji
                       </button>
-                    ))}
-                    <button
-                      onClick={() => setActiveReactionPicker(null)}
-                      className="text-[9px] font-bold text-slate-400 hover:text-slate-600 pl-1 border-l border-slate-200 dark:border-slate-800"
-                    >
-                      Cancel
-                    </button>
+                    </div>
                   </div>
                 )}
               </div>
