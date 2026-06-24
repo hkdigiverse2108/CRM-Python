@@ -1951,6 +1951,27 @@ export function AppProvider({ children }) {
     }
   }, [token, tenantId]);
 
+  const fetchLeadAuditLogs = useCallback(async (leadId) => {
+    if (!token) return [];
+    try {
+      const resp = await fetch(`${API_BASE}/leads/${leadId}/audit-logs`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || getTenantId(),
+        }
+      });
+      const data = await resp.json();
+      if (data.success && data.data) {
+        return data.data;
+      }
+      return [];
+    } catch (err) {
+      console.error('Failed to fetch lead audit logs:', err);
+      return [];
+    }
+  }, [token, tenantId]);
+
   const createLeadFollowup = useCallback(async (leadId, followupData) => {
     if (!token) return null;
     try {
@@ -4004,6 +4025,7 @@ export function AppProvider({ children }) {
       updateLead,
       deleteLead,
       fetchLeadFollowups,
+      fetchLeadAuditLogs,
       createLeadFollowup,
       checkDueFollowups,
       contacts,

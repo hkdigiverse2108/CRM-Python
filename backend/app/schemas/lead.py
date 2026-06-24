@@ -50,8 +50,10 @@ class LeadResponse(BaseModel):
     status: str
     score: int
     assigned_to: Optional[str] = None
+    created_by: Optional[str] = None
     tenant_id: str
     notes: Optional[str] = None
     value: float
     created_at: str
     updated_at: str
+    next_followup_date: Optional[str] = None

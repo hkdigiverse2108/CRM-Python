@@ -23,6 +23,7 @@ class Lead:
     status: str = "new"         # new | contacted | qualified | proposal | won | lost
     score: int = 0
     assigned_to: Optional[str] = None
+    created_by: Optional[str] = "Admin"
     tenant_id: str = ""
     notes: Optional[str] = None
     value: float = 0.0
@@ -30,6 +31,7 @@ class Lead:
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     product_interest: Optional[str] = None
     tags: Optional[str] = None
+    next_followup_date: Optional[str] = None
 
     def to_dict(self) -> dict:
         return {
@@ -42,6 +44,7 @@ class Lead:
             "status": self.status,
             "score": self.score,
             "assigned_to": self.assigned_to,
+            "created_by": self.created_by,
             "tenant_id": self.tenant_id,
             "notes": self.notes,
             "value": self.value,
@@ -49,4 +52,5 @@ class Lead:
             "updated_at": self.updated_at.isoformat(),
             "product_interest": self.product_interest,
             "tags": self.tags,
+            "next_followup_date": self.next_followup_date,
         }

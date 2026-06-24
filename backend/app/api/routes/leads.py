@@ -77,9 +77,12 @@ async def create_lead(
     Create a new lead under the current tenant.
     """
     tenant_id = request.state.tenant.id
+    user = getattr(request.state, "user", None)
+    created_by_email = user.get("email") if user else "Admin"
     lead = await lead_service.create_lead(
         data=payload.model_dump(),
         tenant_id=tenant_id,
+        created_by=created_by_email,
     )
     return success_response(data=lead, message="Lead created successfully", status_code=201)
 
@@ -95,12 +98,29 @@ async def update_lead(
     Update details of an existing sales lead.
     """
     tenant_id = request.state.tenant.id
+    user = getattr(request.state, "user", None)
+    changed_by_email = user.get("email") if user else "Admin"
     updated_lead = await lead_service.update_lead(
         lead_id=lead_id,
         tenant_id=tenant_id,
         data=payload.model_dump(exclude_unset=True),
+        changed_by=changed_by_email,
     )
     return success_response(data=updated_lead, message="Lead updated successfully")
+
+
+@router.get("/{lead_id}/audit-logs", dependencies=[Depends(PermissionChecker("crm", "view"))])
+async def get_lead_audit_logs(
+    request: Request,
+    lead_id: str,
+    lead_service: LeadService = Depends(get_lead_service),
+):
+    """
+    Get audit history logs of changes for a specific lead.
+    """
+    tenant_id = request.state.tenant.id
+    logs = await lead_service.get_lead_audit_logs(lead_id=lead_id, tenant_id=tenant_id)
+    return success_response(data=logs, message="Lead audit logs retrieved successfully")
 
 
 @router.delete("/{lead_id}", dependencies=[Depends(PermissionChecker("crm", "delete"))])

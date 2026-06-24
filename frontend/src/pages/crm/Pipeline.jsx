@@ -6,7 +6,7 @@ import { X } from 'lucide-react';
 export default function Pipeline() {
   const { 
     addToast, leads = [], setLeads, 
-    fetchLeadFollowups, createLeadFollowup, updateLead 
+    fetchLeadFollowups, fetchLeadAuditLogs, createLeadFollowup, updateLead 
   } = useApp();
   
   const [search, setSearch] = useState('');
@@ -36,6 +36,8 @@ export default function Pipeline() {
   const [selectedLeadId, setSelectedLeadId] = useState(null);
   const [followups, setFollowups] = useState([]);
   const [loadingFollowups, setLoadingFollowups] = useState(false);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [loadingAuditLogs, setLoadingAuditLogs] = useState(false);
   const [newFollowupNote, setNewFollowupNote] = useState('');
   const [nextFollowupDate, setNextFollowupDate] = useState('');
   const [nextFollowupRemarks, setNextFollowupRemarks] = useState('');
@@ -68,10 +70,16 @@ export default function Pipeline() {
   const handleOpenDetails = async (id) => {
     setSelectedLeadId(id);
     setIsEditing(false);
+    
     setLoadingFollowups(true);
     const data = await fetchLeadFollowups(id);
     setFollowups(data || []);
     setLoadingFollowups(false);
+
+    setLoadingAuditLogs(true);
+    const aData = await fetchLeadAuditLogs(id);
+    setAuditLogs(aData || []);
+    setLoadingAuditLogs(false);
     
     const lead = leads.find(l => l.id === id);
     if (lead) {
@@ -125,6 +133,12 @@ export default function Pipeline() {
     });
     setIsEditing(false);
     addToast('Lead details updated successfully', 'success');
+
+    // Refresh audit logs
+    setLoadingAuditLogs(true);
+    const aData = await fetchLeadAuditLogs(selectedLeadId);
+    setAuditLogs(aData || []);
+    setLoadingAuditLogs(false);
   };
 
   const deals = leads.map(l => ({
@@ -132,14 +146,15 @@ export default function Pipeline() {
     stage: l.stage || 'New',
     name: l.name || `Deal - ${l.company}`,
     company: l.company || l.name,
+    phone: l.phone || '',
     value: Number(l.value) || 0,
     source: l.source || 'Website',
     score: l.score || 50,
-    rep: l.assignedTo || 'Rep',
-    days: 1,
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCEtKQPcmT818U7NmXsWLGpg--sLLoaJj2Yaz93EJ82OVS_5FOwnn0zFQ02baKg2BhT7ej6Cowz8PIcDuuuBv7C3lA0ik_xqtGYHPGn_q1bmwZw2DIXcO4V5MIfimYx1BySVkSIPuZk5AO29v6pEJuoFAjn5t2h1yZ8uDCibDtiILbrdPu98-piyswq_emYdnWrOsHsx5Ue5KO0layy4JM14MpLatfVgmZmRzj_78-7u_JBXoqwGQvpA__RhwocMYEQv58UVsHiZ6w',
+    rep: l.assignedTo || l.assigned_to || 'Unassigned',
+    createdBy: l.created_by || 'Admin',
+    remarks: l.notes || '',
+    nextFollowupDate: l.next_followup_date || '',
     probability: l.stage === 'Won' ? 100 : l.stage === 'Lost' ? 0 : 70,
-    hot: l.value >= 500000
   }));
 
   const filteredDeals = deals.filter(d => {
@@ -248,13 +263,16 @@ export default function Pipeline() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-900/40 text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase tracking-wider border-b border-slate-100 dark:border-slate-800/80">
-                <th className="py-4 px-5">Deal & Company</th>
-                <th className="py-4 px-5">Stage</th>
-                <th className="py-4 px-5">Value (₹)</th>
-                <th className="py-4 px-5">Assigned Agent</th>
-                <th className="py-4 px-5">Source</th>
-                <th className="py-4 px-5">Score / Prob.</th>
-                <th className="py-4 px-5 text-right">Actions</th>
+                <th className="py-4 px-4 text-center">Hot</th>
+                <th className="py-4 px-4">Created By</th>
+                <th className="py-4 px-4">Contact</th>
+                <th className="py-4 px-4">Source</th>
+                <th className="py-4 px-4">Status</th>
+                <th className="py-4 px-4">Assigned To</th>
+                <th className="py-4 px-4">Expected Income</th>
+                <th className="py-4 px-4">Remarks</th>
+                <th className="py-4 px-4">Follow-ups</th>
+                <th className="py-4 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -265,16 +283,37 @@ export default function Pipeline() {
                     onClick={() => handleOpenDetails(deal.id)}
                     className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10 transition-colors cursor-pointer"
                   >
-                    <td className="py-4 px-5">
-                      <div className="font-bold text-xs text-slate-800 dark:text-white">{deal.name}</div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">{deal.company}</div>
+                    <td className="py-3 px-4 text-center" onClick={e => e.stopPropagation()}>
+                      <button 
+                        onClick={async () => {
+                          const isHot = deal.stage === 'Hot Lead';
+                          const newStage = isHot ? 'New' : 'Hot Lead';
+                          await updateLead(deal.id, { stage: newStage });
+                          setLeads(prev => prev.map(l => l.id === deal.id ? { ...l, stage: newStage, status: newStage } : l));
+                          addToast(`Lead marked as ${newStage}`, 'success');
+                        }}
+                        className={`p-1 rounded transition-colors ${deal.stage === 'Hot Lead' ? 'bg-orange-100 text-orange-600 dark:bg-orange-950/30 text-xs' : 'text-slate-300 hover:text-orange-500 text-xs'}`}
+                        title={deal.stage === 'Hot Lead' ? "Hot Lead (Click to demote)" : "Mark as Hot Lead"}
+                      >
+                        🔥
+                      </button>
                     </td>
-                    <td className="py-4 px-5" onClick={e => e.stopPropagation()}>
+                    <td className="py-3 px-4 text-xs text-slate-655 dark:text-slate-300 font-medium">
+                      {deal.createdBy}
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="font-bold text-xs text-slate-800 dark:text-white">{deal.name}</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">{deal.phone || deal.company}</div>
+                    </td>
+                    <td className="py-3 px-4 text-[11px] text-slate-500 font-semibold uppercase">{deal.source}</td>
+                    <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
                       <select 
                         value={deal.stage} 
-                        onChange={(e) => {
-                          setLeads(prev => prev.map(l => l.id === deal.id ? { ...l, stage: e.target.value } : l));
-                          addToast(`"${deal.name}" stage updated to ${e.target.value}`, 'success');
+                        onChange={async (e) => {
+                          const newStage = e.target.value;
+                          await updateLead(deal.id, { stage: newStage });
+                          setLeads(prev => prev.map(l => l.id === deal.id ? { ...l, stage: newStage, status: newStage } : l));
+                          addToast(`"${deal.name}" stage updated to ${newStage}`, 'success');
                         }}
                         className="text-[11px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                       >
@@ -283,27 +322,34 @@ export default function Pipeline() {
                         ))}
                       </select>
                     </td>
-                    <td className="py-4 px-5 text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                    <td className="py-3 px-4 text-xs text-slate-655 dark:text-slate-300">
+                      {deal.rep}
+                    </td>
+                    <td className="py-3 px-4 text-xs font-bold text-indigo-650 dark:text-indigo-400">
                       ₹{deal.value.toLocaleString('en-IN')}
                     </td>
-                    <td className="py-4 px-5">
-                      <div className="flex items-center gap-2">
-                        <img alt="Rep" className="w-5 h-5 rounded-full" src={deal.avatar} />
-                        <span className="text-xs text-slate-655 dark:text-slate-300">{deal.rep}</span>
-                      </div>
+                    <td className="py-3 px-4 text-[11px] text-slate-500 dark:text-slate-400 max-w-[150px] truncate" title={deal.remarks}>
+                      {deal.remarks || 'No remarks'}
                     </td>
-                    <td className="py-4 px-5 text-[11px] text-slate-500 font-semibold uppercase">{deal.source}</td>
-                    <td className="py-4 px-5">
-                      <div className="flex items-center gap-3">
-                        <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-1.5 py-0.5 rounded font-bold">
-                          Score: {deal.score}
-                        </span>
-                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
-                          {deal.probability}%
-                        </span>
-                      </div>
+                    <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
+                      {deal.nextFollowupDate ? (
+                        <button 
+                          onClick={() => handleOpenDetails(deal.id)}
+                          className="text-[10px] bg-amber-55/60 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 px-2 py-1 rounded font-bold border border-amber-200/50 hover:bg-amber-100 transition-colors"
+                          title={`Next follow-up: ${deal.nextFollowupDate}`}
+                        >
+                          📅 {deal.nextFollowupDate}
+                        </button>
+                      ) : (
+                        <button 
+                          onClick={() => handleOpenDetails(deal.id)}
+                          className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 py-1 rounded font-bold hover:bg-slate-200 transition-colors"
+                        >
+                          + Log/Schedule
+                        </button>
+                      )}
                     </td>
-                    <td className="py-4 px-5 text-right" onClick={e => e.stopPropagation()}>
+                    <td className="py-3 px-4 text-right" onClick={e => e.stopPropagation()}>
                       <button 
                         onClick={() => {
                           setLeads(prev => prev.filter(l => l.id !== deal.id));
@@ -319,7 +365,7 @@ export default function Pipeline() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="7" className="py-10 text-center text-xs text-slate-400 italic">
+                  <td colSpan="10" className="py-10 text-center text-xs text-slate-400 italic">
                     No deals or leads found in this pipeline stage.
                   </td>
                 </tr>
@@ -416,85 +462,153 @@ export default function Pipeline() {
                     <p className="text-xs font-bold mt-0.5 text-indigo-650 dark:text-indigo-400">{selectedLead.stage}</p>
                   </div>
                 </div>
+                {/* Followup logs & scheduling (Only visible if lead stage is 'Follow-up') */}
+                {selectedLead.stage === 'Follow-up' ? (
+                  <div className="space-y-4">
+                    <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center justify-between">
+                      <span>Follow-Up Logs & Reminders</span>
+                      <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded">
+                        {followups.length} logs
+                      </span>
+                    </h4>
 
-                {/* Followup logs & scheduling */}
-                <div className="space-y-4">
+                    <form onSubmit={handleLogFollowup} className="space-y-3 bg-slate-50 dark:bg-slate-900/40 p-3 rounded-xl border border-slate-100 dark:border-slate-800/80">
+                      <div className="flex gap-2">
+                        <select 
+                          value={followupType} 
+                          onChange={e => setFollowupType(e.target.value)} 
+                          className="text-[10px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-1"
+                        >
+                          <option value="Call">📞 Call</option>
+                          <option value="WhatsApp">💬 WhatsApp</option>
+                          <option value="Email">✉️ Email</option>
+                          <option value="F2F Meeting">🤝 F2F Meeting</option>
+                        </select>
+                        <span className="text-[9px] text-slate-400 font-semibold self-center">
+                          First: {followups.length > 0 ? followups[0].followup_date : 'None yet'}
+                        </span>
+                      </div>
+
+                      <div>
+                        <label className="text-[9px] font-bold text-slate-400 block mb-1">Follow-Up Remarks *</label>
+                        <textarea 
+                          value={newFollowupNote}
+                          onChange={e => setNewFollowupNote(e.target.value)}
+                          placeholder="What was discussed?" 
+                          className="w-full text-xs p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500" 
+                          rows="2"
+                          required
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <label className="text-[9px] font-bold text-slate-400 block mb-1">Next Date</label>
+                          <input type="date" value={nextFollowupDate} onChange={e => setNextFollowupDate(e.target.value)} className="w-full text-xs p-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded" />
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-bold text-slate-400 block mb-1">Next Remarks</label>
+                          <input type="text" value={nextFollowupRemarks} onChange={e => setNextFollowupRemarks(e.target.value)} placeholder="e.g. Call back" className="w-full text-xs p-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded" />
+                        </div>
+                      </div>
+
+                      <button type="submit" className="w-full py-1.5 bg-indigo-650 hover:bg-indigo-700 text-white text-[11px] font-bold rounded-lg transition-colors cursor-pointer">
+                        Log Follow-Up & Schedule
+                      </button>
+                    </form>
+
+                    {/* List of followups */}
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                      {loadingFollowups ? (
+                        <p className="text-[10px] text-slate-400 italic">Loading...</p>
+                      ) : followups.length === 0 ? (
+                        <p className="text-[10px] text-slate-400 italic">No follow-ups logged yet.</p>
+                      ) : (
+                        followups.slice().reverse().map((item, index) => {
+                          const logNum = followups.length - index;
+                          return (
+                            <div key={item.id || index} className="p-2.5 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-800/80 rounded-xl relative shadow-xs">
+                              <span className="absolute top-2 right-2 text-[8px] bg-slate-100 dark:bg-slate-900 text-slate-500 px-1 rounded uppercase font-bold">
+                                {item.followup_type}
+                              </span>
+                              <p className="text-[10px] font-bold text-slate-700 dark:text-slate-200">
+                                {logNum === 1 ? 'First Follow-Up' : `${logNum}th Follow-Up`}
+                              </p>
+                              <p className="text-[9px] text-slate-400">{item.followup_date} • {item.created_by || 'Agent'}</p>
+                              <p className="text-xs text-slate-655 dark:text-slate-305 mt-1 italic">"{item.remarks}"</p>
+                              {item.next_followup_date && (
+                                <div className="mt-2 text-[9px] text-amber-600 dark:text-amber-400 font-semibold border-t border-dashed dark:border-slate-800 pt-1">
+                                  📅 Next: {item.next_followup_date} {item.next_followup_remarks && `(${item.next_followup_remarks})`}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-slate-50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-800 rounded-xl text-center text-xs text-slate-400 italic">
+                    Follow-up forms are only active when the lead stage is set to "Follow-up".
+                  </div>
+                )}
+
+                {/* Activity & Audit Logs */}
+                <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-850/80">
                   <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center justify-between">
-                    <span>Follow-Up Logs & Reminders</span>
-                    <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded">
-                      {followups.length} logs
+                    <span>Activity History & Audit Logs</span>
+                    <span className="text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-500 px-1.5 py-0.5 rounded">
+                      {auditLogs.length} changes
                     </span>
                   </h4>
 
-                  <form onSubmit={handleLogFollowup} className="space-y-3 bg-slate-50 dark:bg-slate-900/40 p-3 rounded-xl border border-slate-100 dark:border-slate-800/80">
-                    <div className="flex gap-2">
-                      <select 
-                        value={followupType} 
-                        onChange={e => setFollowupType(e.target.value)} 
-                        className="text-[10px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-1"
-                      >
-                        <option value="Call">📞 Call</option>
-                        <option value="WhatsApp">💬 WhatsApp</option>
-                        <option value="Email">✉️ Email</option>
-                        <option value="F2F Meeting">🤝 F2F Meeting</option>
-                      </select>
-                      <span className="text-[9px] text-slate-400 font-semibold self-center">
-                        First: {followups.length > 0 ? followups[0].followup_date : 'None yet'}
-                      </span>
-                    </div>
-
-                    <div>
-                      <label className="text-[9px] font-bold text-slate-400 block mb-1">Follow-Up Remarks *</label>
-                      <textarea 
-                        value={newFollowupNote}
-                        onChange={e => setNewFollowupNote(e.target.value)}
-                        placeholder="What was discussed?" 
-                        className="w-full text-xs p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500" 
-                        rows="2"
-                        required
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div>
-                        <label className="text-[9px] font-bold text-slate-400 block mb-1">Next Date</label>
-                        <input type="date" value={nextFollowupDate} onChange={e => setNextFollowupDate(e.target.value)} className="w-full text-xs p-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded" />
-                      </div>
-                      <div>
-                        <label className="text-[9px] font-bold text-slate-400 block mb-1">Next Remarks</label>
-                        <input type="text" value={nextFollowupRemarks} onChange={e => setNextFollowupRemarks(e.target.value)} placeholder="e.g. Call back" className="w-full text-xs p-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded" />
-                      </div>
-                    </div>
-
-                    <button type="submit" className="w-full py-1.5 bg-indigo-650 hover:bg-indigo-700 text-white text-[11px] font-bold rounded-lg transition-colors cursor-pointer">
-                      Log Follow-Up & Schedule
-                    </button>
-                  </form>
-
-                  {/* List of followups */}
-                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                    {loadingFollowups ? (
-                      <p className="text-[10px] text-slate-400 italic">Loading...</p>
-                    ) : followups.length === 0 ? (
-                      <p className="text-[10px] text-slate-400 italic">No follow-ups logged yet.</p>
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    {loadingAuditLogs ? (
+                      <p className="text-[10px] text-slate-400 italic">Loading activity history...</p>
+                    ) : auditLogs.length === 0 ? (
+                      <p className="text-[10px] text-slate-400 italic">No activity recorded yet.</p>
                     ) : (
-                      followups.slice().reverse().map((item, index) => {
-                        const logNum = followups.length - index;
+                      auditLogs.map((log) => {
+                        // Convert UTC time to Indian Standard Time (IST)
+                        // Indian timezone offset is UTC+5:30
+                        const utcDate = new Date(log.changed_at);
+                        const istOptions = {
+                          timeZone: 'Asia/Kolkata',
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hour12: true
+                        };
+                        const istTimeString = utcDate.toLocaleString('en-IN', istOptions);
+
+                        // Format column name to friendly text
+                        const fieldNameMap = {
+                          full_name: 'Name',
+                          email: 'Email',
+                          phone_primary: 'Phone',
+                          company_name: 'Company',
+                          lead_source: 'Source',
+                          lead_status: 'Status/Stage',
+                          lead_score: 'Score',
+                          assigned_agent_id: 'Assigned Agent',
+                          deal_value_expected: 'Expected Income'
+                        };
+                        const friendlyField = fieldNameMap[log.field_name] || log.field_name;
+
                         return (
-                          <div key={item.id || index} className="p-2.5 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-800/80 rounded-xl relative shadow-xs">
-                            <span className="absolute top-2 right-2 text-[8px] bg-slate-100 dark:bg-slate-900 text-slate-500 px-1 rounded uppercase font-bold">
-                              {item.followup_type}
-                            </span>
-                            <p className="text-[10px] font-bold text-slate-700 dark:text-slate-200">
-                              {logNum === 1 ? 'First Follow-Up' : `${logNum}th Follow-Up`}
+                          <div key={log.id} className="p-2.5 bg-slate-50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-800/80 rounded-xl relative text-[11px]">
+                            <p className="font-semibold text-slate-705 dark:text-slate-200">
+                              Updated <span className="text-indigo-600 dark:text-indigo-400 font-bold">{friendlyField}</span>
                             </p>
-                            <p className="text-[9px] text-slate-400">{item.followup_date} • {item.created_by || 'Agent'}</p>
-                            <p className="text-xs text-slate-655 dark:text-slate-305 mt-1 italic">"{item.remarks}"</p>
-                            {item.next_followup_date && (
-                              <div className="mt-2 text-[9px] text-amber-600 dark:text-amber-400 font-semibold border-t border-dashed dark:border-slate-800 pt-1">
-                                📅 Next: {item.next_followup_date} {item.next_followup_remarks && `(${item.next_followup_remarks})`}
-                              </div>
-                            )}
+                            <p className="text-[10px] text-slate-500 mt-0.5">
+                              From: <span className="italic">"{log.old_value || 'None'}"</span> → To: <span className="font-semibold">"{log.new_value || 'None'}"</span>
+                            </p>
+                            <div className="mt-1 flex items-center justify-between text-[9px] text-slate-400 font-medium">
+                              <span>By: {log.changed_by || 'System/Admin'}</span>
+                              <span className="text-amber-600 dark:text-amber-500 font-bold">🇮🇳 {istTimeString}</span>
+                            </div>
                           </div>
                         );
                       })

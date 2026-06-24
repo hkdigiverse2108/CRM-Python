@@ -38,21 +38,25 @@ class LeadService:
             },
         }
 
-    async def create_lead(self, data: dict[str, Any], tenant_id: str) -> dict:
+    async def create_lead(self, data: dict[str, Any], tenant_id: str, created_by: Optional[str] = "Admin") -> dict:
         lead = Lead(
             name=data["name"], email=data["email"],
             phone=data.get("phone"), company=data.get("company"),
             source=data.get("source", "website"),
             value=data.get("value", 0.0), notes=data.get("notes"),
+            created_by=created_by,
             tenant_id=tenant_id,
         )
         created = await self._repo.create(lead)
         return created.to_dict()
 
-    async def update_lead(self, lead_id: str, tenant_id: str, data: dict[str, Any]) -> dict:
-        updated = await self._repo.update(lead_id, tenant_id, data)
+    async def update_lead(self, lead_id: str, tenant_id: str, data: dict[str, Any], changed_by: Optional[str] = None) -> dict:
+        updated = await self._repo.update(lead_id, tenant_id, data, changed_by)
         if updated is None:
             raise NotFoundException(f"Lead '{lead_id}' not found")
+
+    async def get_lead_audit_logs(self, lead_id: str, tenant_id: str) -> list[dict]:
+        return await self._repo.get_audit_logs(lead_id, tenant_id)
             
         # If lead is assigned, ensure corresponding client and project exist
         if "assigned_to" in data and data["assigned_to"]:

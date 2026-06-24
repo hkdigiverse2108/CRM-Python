@@ -38,6 +38,13 @@ class LeadRepository(BaseRepository[Lead]):
         elif updated_at and not updated_at.tzinfo:
             updated_at = updated_at.replace(tzinfo=timezone.utc)
 
+        next_f_date = row.get("next_followup_date")
+        if next_f_date:
+            if hasattr(next_f_date, "strftime"):
+                next_f_date = next_f_date.strftime("%Y-%m-%d")
+            else:
+                next_f_date = str(next_f_date)
+
         return Lead(
             id=row["lead_id"],
             name=row["full_name"],
@@ -48,6 +55,7 @@ class LeadRepository(BaseRepository[Lead]):
             status=row["lead_status"] or "new",
             score=row["lead_score"] or 0,
             assigned_to=row["assigned_agent_id"],
+            created_by=row.get("created_by") or "Admin",
             tenant_id=row["workspace_id"],
             notes=row.get("latest_note"),
             value=float(row["deal_value_expected"] or 0.0),
@@ -55,14 +63,15 @@ class LeadRepository(BaseRepository[Lead]):
             updated_at=updated_at or datetime.now(timezone.utc),
             product_interest=row.get("product_interest"),
             tags=row.get("tags"),
+            next_followup_date=next_f_date,
         )
 
     async def get_by_id(self, entity_id: str, tenant_id: str) -> Optional[Lead]:
-        """Retrieve a lead by ID with its latest note, filtered by workspace_id."""
+        """Retrieve a lead by ID with its latest note and next follow up date, filtered by workspace_id."""
         def _get():
             with get_db() as db:
                 sql = text("""
-                    SELECT l.*, n.note as latest_note 
+                    SELECT l.*, n.note as latest_note, f.next_followup_date
                     FROM leads l
                     LEFT JOIN (
                         SELECT n1.lead_id, n1.note 
@@ -73,6 +82,15 @@ class LeadRepository(BaseRepository[Lead]):
                             GROUP BY lead_id
                         ) n2 ON n1.lead_id = n2.lead_id AND n1.created_at = n2.max_created
                     ) n ON l.lead_id = n.lead_id
+                    LEFT JOIN (
+                        SELECT f1.lead_id, f1.next_followup_date
+                        FROM lead_followups f1
+                        JOIN (
+                            SELECT lead_id, MAX(created_at) as max_created
+                            FROM lead_followups
+                            GROUP BY lead_id
+                        ) f2 ON f1.lead_id = f2.lead_id AND f1.created_at = f2.max_created
+                    ) f ON l.lead_id = f.lead_id
                     WHERE l.lead_id = :lead_id AND l.workspace_id = :workspace_id AND l.deleted_at IS NULL
                 """)
                 res = db.execute(sql, {"lead_id": entity_id, "workspace_id": tenant_id}).mappings().first()
@@ -89,7 +107,7 @@ class LeadRepository(BaseRepository[Lead]):
         def _get_all():
             with get_db() as db:
                 query_str = """
-                    SELECT l.*, n.note as latest_note 
+                    SELECT l.*, n.note as latest_note, f.next_followup_date
                     FROM leads l
                     LEFT JOIN (
                         SELECT n1.lead_id, n1.note 
@@ -100,6 +118,15 @@ class LeadRepository(BaseRepository[Lead]):
                             GROUP BY lead_id
                         ) n2 ON n1.lead_id = n2.lead_id AND n1.created_at = n2.max_created
                     ) n ON l.lead_id = n.lead_id
+                    LEFT JOIN (
+                        SELECT f1.lead_id, f1.next_followup_date
+                        FROM lead_followups f1
+                        JOIN (
+                            SELECT lead_id, MAX(created_at) as max_created
+                            FROM lead_followups
+                            GROUP BY lead_id
+                        ) f2 ON f1.lead_id = f2.lead_id AND f1.created_at = f2.max_created
+                    ) f ON l.lead_id = f.lead_id
                     WHERE l.workspace_id = :workspace_id AND l.deleted_at IS NULL
                 """
                 params = {"workspace_id": tenant_id}
@@ -146,11 +173,11 @@ class LeadRepository(BaseRepository[Lead]):
                 # Insert lead record
                 sql_lead = text("""
                     INSERT INTO leads (
-                        lead_id, workspace_id, assigned_agent_id, full_name, phone_primary, 
+                        lead_id, workspace_id, assigned_agent_id, created_by, full_name, phone_primary, 
                         email, company_name, lead_source, lead_status, lead_score, 
                         deal_value_expected, created_at, updated_at
                     ) VALUES (
-                        :lead_id, :workspace_id, :assigned_agent_id, :full_name, :phone_primary, 
+                        :lead_id, :workspace_id, :assigned_agent_id, :created_by, :full_name, :phone_primary, 
                         :email, :company_name, :lead_source, :lead_status, :lead_score, 
                         :deal_value_expected, :created_at, :updated_at
                     )
@@ -159,6 +186,7 @@ class LeadRepository(BaseRepository[Lead]):
                     "lead_id": entity.id,
                     "workspace_id": entity.tenant_id,
                     "assigned_agent_id": entity.assigned_to,
+                    "created_by": entity.created_by,
                     "full_name": entity.name,
                     "phone_primary": entity.phone,
                     "email": entity.email,
@@ -199,7 +227,7 @@ class LeadRepository(BaseRepository[Lead]):
                 return entity
         return await anyio.to_thread.run_sync(_create)
 
-    async def update(self, entity_id: str, tenant_id: str, data: dict[str, Any]) -> Optional[Lead]:
+    async def update(self, entity_id: str, tenant_id: str, data: dict[str, Any], changed_by: Optional[str] = None) -> Optional[Lead]:
         """Update an existing lead's fields, log changes, and record notes."""
         def _update():
             with get_db() as db:
@@ -242,11 +270,11 @@ class LeadRepository(BaseRepository[Lead]):
                         if old_val != new_val:
                             audit_id = str(uuid.uuid4())
                             db.execute(text("""
-                                INSERT INTO lead_audit_logs (id, workspace_id, lead_id, field_name, old_value, new_value)
-                                VALUES (:id, :workspace_id, :lead_id, :field, :old, :new)
+                                INSERT INTO lead_audit_logs (id, workspace_id, lead_id, field_name, old_value, new_value, changed_by)
+                                VALUES (:id, :workspace_id, :lead_id, :field, :old, :new, :changed_by)
                             """), {
                                 "id": audit_id, "workspace_id": tenant_id, "lead_id": entity_id,
-                                "field": col_name, "old": old_val, "new": new_val
+                                "field": col_name, "old": old_val, "new": new_val, "changed_by": changed_by
                             })
                 
                 if update_parts:
@@ -334,6 +362,20 @@ class LeadRepository(BaseRepository[Lead]):
                 
                 return db.execute(text(query_str), params).scalar()
         return await anyio.to_thread.run_sync(_count)
+
+    async def get_audit_logs(self, lead_id: str, tenant_id: str) -> list[dict]:
+        """Fetch audit logs for a lead, sorted by changed_at DESC."""
+        def _get():
+            with get_db() as db:
+                sql = text("""
+                    SELECT id, field_name, old_value, new_value, changed_by, changed_at 
+                    FROM lead_audit_logs 
+                    WHERE lead_id = :lead_id AND workspace_id = :workspace_id 
+                    ORDER BY changed_at DESC
+                """)
+                res = db.execute(sql, {"lead_id": lead_id, "workspace_id": tenant_id}).mappings().all()
+                return [dict(r) for r in res]
+        return await anyio.to_thread.run_sync(_get)
 
 
 # Global singleton instance
