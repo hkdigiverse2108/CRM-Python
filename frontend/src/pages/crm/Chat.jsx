@@ -4,7 +4,7 @@ import {
   Search, Send, Users, User, Plus, MessageSquare, Hash, 
   X, UserPlus, Paperclip, Pin, Smile, Check, CheckCheck, Loader2,
   Mic, Square, Volume2, CornerUpLeft, VolumeX, AlertCircle,
-  Trash2, Share2, Info, LogOut
+  Trash2, Share2, Info, LogOut, Bookmark
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -21,6 +21,7 @@ export default function Chat() {
   const [users, setUsers] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [newMessage, setNewMessage] = useState('');
+  const [activeTab, setActiveTab] = useState('Personal'); // 'Personal', 'Groups', 'General', 'Saved'
   
   // Advanced Chat states
   const [searchMessageQuery, setSearchMessageQuery] = useState('');
@@ -745,35 +746,56 @@ export default function Chat() {
   };
 
   const displayChannels = (() => {
-    const list = [...channels];
+    let list = [];
     
-    users.forEach(u => {
-      if (u.user_id === user?.id) return;
+    if (activeTab === 'Personal') {
+      const directChans = channels.filter(ch => ch.type === 'direct');
+      list = [...directChans];
       
-      const hasDirect = channels.some(ch => 
-        ch.type === 'direct' && ch.recipient && ch.recipient.user_id === u.user_id
-      );
-      
-      if (!hasDirect) {
-        list.push({
-          channel_id: `virtual_direct_${u.user_id}`,
-          name: u.full_name,
-          type: 'direct',
-          is_muted: false,
-          recipient: u,
-          virtual: true,
-          latest_message: null,
-          created_at: new Date().toISOString()
-        });
-      }
-    });
+      users.forEach(u => {
+        const isSelf = u.user_id === user?.id;
+        const displayName = isSelf ? `${u.full_name} (You)` : u.full_name;
+        
+        const hasDirect = channels.some(ch => 
+          ch.type === 'direct' && ch.recipient && ch.recipient.user_id === u.user_id
+        );
+        
+        if (!hasDirect) {
+          list.push({
+            channel_id: `virtual_direct_${u.user_id}`,
+            name: displayName,
+            type: 'direct',
+            is_muted: false,
+            recipient: u,
+            virtual: true,
+            latest_message: null,
+            created_at: new Date().toISOString()
+          });
+        } else {
+          if (isSelf) {
+            const idx = list.findIndex(ch => ch.recipient && ch.recipient.user_id === u.user_id);
+            if (idx !== -1) {
+              list[idx] = { ...list[idx], name: displayName };
+            }
+          }
+        }
+      });
+    } else if (activeTab === 'Groups') {
+      list = channels.filter(ch => ch.type === 'group');
+    } else if (activeTab === 'General') {
+      list = channels.filter(ch => ch.type === 'general');
+    } else if (activeTab === 'Saved') {
+      list = [];
+    }
 
     return list.filter(ch => 
       ch.name.toLowerCase().includes(searchQuery.toLowerCase())
     ).sort((a, b) => {
-      if (a.type === 'general' && b.type !== 'general') return -1;
-      if (b.type === 'general' && a.type !== 'general') return 1;
-      
+      const isSelfA = a.recipient && a.recipient.user_id === user?.id;
+      const isSelfB = b.recipient && b.recipient.user_id === user?.id;
+      if (isSelfA && !isSelfB) return -1;
+      if (isSelfB && !isSelfA) return 1;
+
       const timeA = a.latest_message ? new Date(a.latest_message.created_at) : new Date(a.created_at || 0);
       const timeB = b.latest_message ? new Date(b.latest_message.created_at) : new Date(b.created_at || 0);
       return timeB - timeA;
@@ -796,9 +818,8 @@ export default function Chat() {
         
         {/* Sidebar Header */}
         <div className="p-4 border-b border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between shrink-0">
-          <h1 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-            <MessageSquare className="w-5 h-5 text-indigo-500" />
-            Chat Rooms
+          <h1 className="text-lg font-bold text-slate-850 dark:text-slate-100 flex items-center gap-2">
+            Messages
           </h1>
           
           <div className="flex gap-2">
@@ -825,17 +846,50 @@ export default function Chat() {
             <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
             <input 
               type="text" 
-              placeholder="Search chat or group..." 
+              placeholder="Search contacts..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder-slate-455 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="w-full pl-9 pr-4 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
             />
           </div>
         </div>
 
+        {/* Tabs selector */}
+        <div className="px-3 py-2 border-b border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between shrink-0 bg-slate-50/20 dark:bg-slate-900/10">
+          {['Personal', 'Groups', 'General', 'Saved'].map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                activeTab === tab
+                  ? 'bg-teal-650 dark:bg-teal-700 text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+
         {/* Scrollable channels list */}
         <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
-          {displayChannels.length === 0 ? (
+          {activeTab === 'Saved' ? (
+            <div className="p-3 space-y-4">
+              <h2 className="text-xs font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Later</h2>
+              <div className="flex gap-2.5 border-b border-slate-200 dark:border-slate-800 pb-1 text-[11px] font-bold">
+                <span className="text-teal-650 border-b-2 border-teal-650 pb-1 cursor-pointer">In progress</span>
+                <span className="text-slate-400 hover:text-slate-600 cursor-pointer">Archived</span>
+                <span className="text-slate-400 hover:text-slate-600 cursor-pointer">Completed</span>
+              </div>
+              <div className="flex flex-col items-center justify-center py-12 text-center text-slate-400">
+                <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-500 mb-3 shadow-sm">
+                  <Bookmark className="w-6 h-6" />
+                </div>
+                <p className="text-xs font-bold text-slate-700 dark:text-slate-350">No in progress messages</p>
+                <p className="text-[10px] text-slate-400 mt-1 max-w-[200px]">Save important messages to see them here for quick access later.</p>
+              </div>
+            </div>
+          ) : displayChannels.length === 0 ? (
             <div className="text-center py-8 text-xs text-slate-400 dark:text-slate-500">
               No conversations found.
             </div>
@@ -848,22 +902,26 @@ export default function Chat() {
                 <button
                   key={ch.channel_id}
                   onClick={() => handleSelectChannel(ch)}
-                  className={`w-full flex items-start gap-3 p-3 rounded-xl transition-all text-left ${
+                  className={`w-full flex items-start gap-3 p-3 rounded-xl transition-all text-left relative ${
                     isSelected 
-                      ? 'bg-indigo-500 text-white shadow-md shadow-indigo-500/10' 
-                      : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-350'
+                      ? 'bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-150 border-l-4 border-teal-600 rounded-l-none' 
+                      : 'hover:bg-slate-100/50 dark:hover:bg-slate-800/50 text-slate-700 dark:text-slate-350'
                   }`}
                 >
                   <div className="relative shrink-0">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-sm ${
-                      isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shadow-sm font-bold text-xs uppercase ${
+                      ch.type === 'general'
+                        ? 'bg-teal-50 dark:bg-slate-900 text-teal-600'
+                        : isSelected 
+                          ? 'bg-teal-100 dark:bg-slate-850 text-teal-700' 
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
                     }`}>
                       {ch.type === 'general' ? (
                         <Hash className="w-5 h-5" />
                       ) : ch.type === 'group' ? (
                         <Users className="w-5 h-5" />
                       ) : (
-                        <User className="w-5 h-5" />
+                        ch.name?.charAt(0) || <User className="w-5 h-5" />
                       )}
                     </div>
                     {isOnline && (
@@ -874,23 +932,25 @@ export default function Chat() {
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-baseline mb-0.5">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <h2 className={`text-xs font-bold truncate ${isSelected ? 'text-white' : 'text-slate-800 dark:text-slate-100'}`}>
+                        <h2 className="text-xs font-bold truncate text-slate-800 dark:text-slate-100">
                           {ch.name}
                         </h2>
                         {ch.is_muted && (
-                          <VolumeX className={`w-3 h-3 shrink-0 ${isSelected ? 'text-white/80' : 'text-slate-400'}`} />
+                          <VolumeX className="w-3 h-3 shrink-0 text-slate-400" />
                         )}
                       </div>
                       {ch.latest_message && (
-                        <span className={`text-[9px] shrink-0 ${isSelected ? 'text-white/80' : 'text-slate-400 dark:text-slate-500'}`}>
+                        <span className="text-[9px] shrink-0 text-slate-400 dark:text-slate-500">
                           {new Date(ch.latest_message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       )}
                     </div>
                     
-                    <p className={`text-[11px] truncate ${isSelected ? 'text-white/90' : 'text-slate-400 dark:text-slate-500'}`}>
+                    <p className="text-[11px] truncate text-slate-400 dark:text-slate-500">
                       {typingUsers[ch.channel_id] && Object.keys(typingUsers[ch.channel_id]).length > 0 ? (
-                        <span className="italic font-medium">Typing...</span>
+                        <span className="italic font-medium text-teal-650">Typing...</span>
+                      ) : ch.virtual ? (
+                        <span className="text-slate-400/80">Click to start chatting</span>
                       ) : (
                         ch.latest_message ? ch.latest_message.text : 'No messages yet'
                       )}
@@ -904,20 +964,27 @@ export default function Chat() {
       </div>
 
       {/* ─── CHAT MAIN AREA ────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col bg-slate-50/20 dark:bg-slate-900/10">
+      <div className="flex-1 flex flex-col bg-[#efeae2]/15 dark:bg-slate-900/10">
         
         {selectedChannel ? (
           <>
             {/* Header */}
             <div className="px-6 py-4 border-b border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between bg-white dark:bg-slate-950 shadow-sm shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-slate-900 flex items-center justify-center text-indigo-500 shadow-sm">
-                  {selectedChannel.type === 'general' ? (
-                    <Hash className="w-5 h-5" />
-                  ) : selectedChannel.type === 'group' ? (
-                    <Users className="w-5 h-5" />
-                  ) : (
-                    <User className="w-5 h-5" />
+                <div className="relative">
+                  <div className="w-10 h-10 rounded-full bg-teal-50 dark:bg-slate-900 text-teal-600 flex items-center justify-center font-bold text-xs uppercase shadow-sm">
+                    {selectedChannel.type === 'general' ? (
+                      <Hash className="w-5 h-5" />
+                    ) : selectedChannel.type === 'group' ? (
+                      <Users className="w-5 h-5" />
+                    ) : (
+                      selectedChannel.name?.charAt(0) || 'U'
+                    )}
+                  </div>
+                  {selectedChannel.type === 'direct' && selectedChannel.recipient && (
+                    <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-slate-950 ${
+                      onlineUsers.has(selectedChannel.recipient.user_id) ? 'bg-emerald-500' : 'bg-slate-400'
+                    }`} />
                   )}
                 </div>
                 
@@ -926,7 +993,11 @@ export default function Chat() {
                     {selectedChannel.name}
                   </h1>
                   <span className="text-[10px] text-slate-400 capitalize">
-                    {renderTypingText() || `${selectedChannel.type} chat room`}
+                    {renderTypingText() || (
+                      selectedChannel.type === 'direct' && selectedChannel.recipient
+                        ? (onlineUsers.has(selectedChannel.recipient.user_id) ? 'Online' : 'Offline')
+                        : `${selectedChannel.type} chat room`
+                    )}
                   </span>
                 </div>
               </div>
@@ -936,7 +1007,7 @@ export default function Chat() {
                   onClick={() => setShowMsgSearch(!showMsgSearch)}
                   className={`p-2 rounded-xl transition-all ${
                     showMsgSearch 
-                      ? 'bg-indigo-50 text-indigo-500 dark:bg-slate-900' 
+                      ? 'bg-teal-50 text-teal-650 dark:bg-slate-900' 
                       : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500'
                   }`}
                   title="Search Messages"
@@ -1014,11 +1085,26 @@ export default function Chat() {
 
             {/* Messages Thread Container */}
             <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-slate-50/10 dark:bg-slate-950/5">
+              <div className="flex justify-center mb-6 mt-2">
+                <span className="px-4 py-1.5 rounded-full bg-slate-200/50 dark:bg-slate-800 text-[10px] font-bold text-slate-500 dark:text-slate-400 tracking-wider uppercase">
+                  Conversation with {selectedChannel.name}
+                </span>
+              </div>
+              
               {filteredMessages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center text-slate-400">
-                  <AlertCircle className="w-8 h-8 text-slate-300 dark:text-slate-800 mb-2" />
-                  <p className="text-xs">No messages found matching search filter.</p>
-                </div>
+                searchMessageQuery ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center text-slate-400">
+                    <AlertCircle className="w-8 h-8 text-slate-300 dark:text-slate-805 mb-2" />
+                    <p className="text-xs">No messages found matching search filter.</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-20 text-center text-slate-400">
+                    <MessageSquare className="w-10 h-10 text-slate-300 dark:text-slate-800 mb-3" />
+                    <p className="text-xs font-bold text-slate-700 dark:text-slate-350">
+                      No messages yet. Say hi to {selectedChannel.name}!
+                    </p>
+                  </div>
+                )
               ) : (
                 filteredMessages.map((msg, idx) => {
                   const isOwn = msg.sender_id === user?.id;
@@ -1261,7 +1347,7 @@ export default function Chat() {
             {/* Input Bar Form */}
             <form 
               onSubmit={handleSendMessage}
-              className="p-4 border-t border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-950 flex items-center gap-3 shrink-0"
+              className="p-4 border-t border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-950 flex items-center justify-center shrink-0"
             >
               <input 
                 type="file" 
@@ -1270,70 +1356,81 @@ export default function Chat() {
                 className="hidden" 
               />
               
-              <button 
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading || isRecording}
-                className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 disabled:opacity-50"
-              >
-                {uploading ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />
+              <div className="w-full max-w-5xl flex items-center gap-2 bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-full px-4 py-2 shadow-sm">
+                <button 
+                  type="button"
+                  onClick={() => setActiveReactionPicker(activeReactionPicker ? null : 'input')}
+                  className="p-1 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
+                  title="Emojis"
+                >
+                  <Smile className="w-4 h-4" />
+                </button>
+
+                <button 
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading || isRecording}
+                  className="p-1 rounded-full text-slate-400 hover:text-slate-600 transition-colors disabled:opacity-50"
+                >
+                  {uploading ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />
+                  ) : (
+                    <Paperclip className="w-4 h-4" />
+                  )}
+                </button>
+
+                {isRecording ? (
+                  <div className="flex-1 flex items-center justify-between text-xs text-red-500 select-none px-2">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                      <span className="font-bold">Recording voice note... {formatTime(recordingSeconds)}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button 
+                        type="button" 
+                        onClick={cancelRecording}
+                        className="px-2 py-0.5 hover:bg-red-500/10 rounded font-bold"
+                      >
+                        Cancel
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={stopRecording}
+                        className="px-2.5 py-0.5 bg-red-500 hover:bg-red-600 text-white rounded font-bold"
+                      >
+                        Send
+                      </button>
+                    </div>
+                  </div>
                 ) : (
-                  <Paperclip className="w-4 h-4" />
+                  <>
+                    <input 
+                      type="text" 
+                      placeholder="Type a message..."
+                      value={newMessage}
+                      onChange={handleInputChange}
+                      className="flex-1 bg-transparent text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none"
+                    />
+                    <button 
+                      type="button"
+                      onClick={startRecording}
+                      disabled={uploading}
+                      className="p-1 rounded-full text-slate-400 hover:text-slate-600 transition-colors disabled:opacity-50"
+                      title="Record Voice Note"
+                    >
+                      <Mic className="w-4 h-4" />
+                    </button>
+                  </>
                 )}
-              </button>
 
-              {isRecording ? (
-                <div className="flex-1 px-4 py-1.5 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-between text-xs text-red-500 dark:text-red-400 select-none">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
-                    <span className="font-bold">Recording voice message... {formatTime(recordingSeconds)}</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button 
-                      type="button" 
-                      onClick={cancelRecording}
-                      className="px-2.5 py-1 hover:bg-red-500/20 rounded-lg font-bold"
-                    >
-                      Cancel
-                    </button>
-                    <button 
-                      type="button" 
-                      onClick={stopRecording}
-                      className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded-lg flex items-center gap-1 font-bold shadow-sm"
-                    >
-                      <Square className="w-3.5 h-3.5 fill-white" /> Stop & Send
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <input 
-                    type="text" 
-                    placeholder="Type a message..."
-                    value={newMessage}
-                    onChange={handleInputChange}
-                    className="flex-1 px-4 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder-slate-455 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  />
-                  <button 
-                    type="button"
-                    onClick={startRecording}
-                    disabled={uploading}
-                    className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 disabled:opacity-50"
-                    title="Record Voice Note"
-                  >
-                    <Mic className="w-4 h-4" />
-                  </button>
-                </>
-              )}
-
-              <button 
-                type="submit"
-                disabled={(!newMessage.trim() && !attachedFile) || uploading || isRecording}
-                className="p-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white disabled:opacity-50 transition-all shadow-md shadow-indigo-500/10"
-              >
-                <Send className="w-4 h-4" />
-              </button>
+                <button 
+                  type="submit"
+                  disabled={(!newMessage.trim() && !attachedFile) || uploading || isRecording}
+                  className="p-1.5 rounded-full bg-teal-500 hover:bg-teal-600 text-white disabled:opacity-50 transition-all shadow-sm"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </form>
           </>
         ) : (
