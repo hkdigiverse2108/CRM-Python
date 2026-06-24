@@ -136,7 +136,7 @@ class LeadRepository(BaseRepository[Lead]):
                     from backend.app.core.rbac import get_security_context
                     context = get_security_context(db, filters["current_user_id"], tenant_id, "crm")
                     if context["scope"] == "own":
-                        query_str += " AND (l.assigned_agent_id = :current_user_id OR l.created_by = :current_user_id OR l.assigned_agent_id IS NULL OR l.assigned_agent_id = 'Unassigned')"
+                        query_str += " AND (l.assigned_agent_id = :current_user_id OR l.created_by = :current_user_id)"
                         params["current_user_id"] = filters["current_user_id"]
                     elif context["scope"] in ("team", "department"):
                         query_str += " AND l.assigned_agent_id IN :allowed_user_ids"

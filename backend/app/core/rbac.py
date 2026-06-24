@@ -29,13 +29,21 @@ def get_security_context(db, user_id: str, tenant_id: str, module: str) -> Dict[
     # 2. Check if user is Super Admin or Org Admin
     role_sql = text("SELECT role_name FROM roles WHERE role_id = :role_id")
     role_name = db.execute(role_sql, {"role_id": role_id}).scalar() or ""
+    role_name_lower = role_name.lower()
     
-    if role_name in ("Super Admin", "Organization Admin") or role_id == "admin":
+    if role_name in ("Super Admin", "Organization Admin") or "admin" in role_name_lower or role_id == "admin":
         return {"scope": "all", "user_ids": [], "current_user_id": user_id}
 
     # 3. Retrieve permission scope for target module
     perm_sql = text("SELECT record_scope FROM role_permissions WHERE role_id = :role_id AND module = :module")
     scope = db.execute(perm_sql, {"role_id": role_id, "module": module}).scalar() or "all"
+
+    # Enforce strict overrides for CRM leads module based on role name
+    if module == "crm":
+        if "manager" in role_name_lower:
+            scope = "team"
+        else:
+            scope = "own"
 
     if scope == "all":
         return {"scope": "all", "user_ids": [], "current_user_id": user_id}
