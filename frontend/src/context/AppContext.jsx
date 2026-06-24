@@ -1930,6 +1930,83 @@ export function AppProvider({ children }) {
     };
   }, []);
 
+  const fetchLeadFollowups = useCallback(async (leadId) => {
+    if (!token) return [];
+    try {
+      const resp = await fetch(`${API_BASE}/followups/leads/${leadId}/followups`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || getTenantId(),
+        }
+      });
+      const data = await resp.json();
+      if (data.success && data.data) {
+        return data.data;
+      }
+      return [];
+    } catch (err) {
+      console.error('Failed to fetch lead followups:', err);
+      return [];
+    }
+  }, [token, tenantId]);
+
+  const createLeadFollowup = useCallback(async (leadId, followupData) => {
+    if (!token) return null;
+    try {
+      const resp = await fetch(`${API_BASE}/followups/leads/${leadId}/followups`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || getTenantId(),
+        },
+        body: JSON.stringify(followupData)
+      });
+      const data = await resp.json();
+      if (data.success && data.data) {
+        addToast('Follow-up logged successfully', 'success');
+        fetchLeads();
+        return data.data;
+      } else {
+        throw new Error(data.message || 'Failed to log follow-up');
+      }
+    } catch (err) {
+      console.error('Failed to create lead followup:', err);
+      addToast(err.message, 'error');
+      return null;
+    }
+  }, [token, tenantId, fetchLeads, addToast]);
+
+  const checkDueFollowups = useCallback(async () => {
+    if (!token || !hasModulePermission('crm')) return;
+    try {
+      const resp = await fetch(`${API_BASE}/followups/due-today`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || getTenantId(),
+        }
+      });
+      const data = await resp.json();
+      if (data.success && data.data && data.data.length > 0) {
+        data.data.forEach(item => {
+          const msg = `Follow-up due today with ${item.lead_name} (${item.lead_phone || 'No phone'}): ${item.next_followup_remarks || 'No remarks'}`;
+          addToast(msg, 'info');
+          setNotifications(nPrev => {
+            if (nPrev.some(n => n.text === msg)) return nPrev;
+            return [
+              { id: Date.now() + Math.random(), text: msg, time: 'Due Today', read: false },
+              ...nPrev
+            ];
+          });
+        });
+      }
+    } catch (err) {
+      console.error('Failed to check due followups:', err);
+    }
+  }, [token, tenantId, hasModulePermission, addToast]);
+
   useEffect(() => {
     if (!token) return;
 
@@ -2338,83 +2415,6 @@ export function AppProvider({ children }) {
       addToast(err.message, 'error');
     }
   }, [token, tenantId, addToast]);
-
-  const fetchLeadFollowups = useCallback(async (leadId) => {
-    if (!token) return [];
-    try {
-      const resp = await fetch(`${API_BASE}/followups/leads/${leadId}/followups`, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || getTenantId(),
-        }
-      });
-      const data = await resp.json();
-      if (data.success && data.data) {
-        return data.data;
-      }
-      return [];
-    } catch (err) {
-      console.error('Failed to fetch lead followups:', err);
-      return [];
-    }
-  }, [token, tenantId]);
-
-  const createLeadFollowup = useCallback(async (leadId, followupData) => {
-    if (!token) return null;
-    try {
-      const resp = await fetch(`${API_BASE}/followups/leads/${leadId}/followups`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || getTenantId(),
-        },
-        body: JSON.stringify(followupData)
-      });
-      const data = await resp.json();
-      if (data.success && data.data) {
-        addToast('Follow-up logged successfully', 'success');
-        fetchLeads();
-        return data.data;
-      } else {
-        throw new Error(data.message || 'Failed to log follow-up');
-      }
-    } catch (err) {
-      console.error('Failed to create lead followup:', err);
-      addToast(err.message, 'error');
-      return null;
-    }
-  }, [token, tenantId, fetchLeads, addToast]);
-
-  const checkDueFollowups = useCallback(async () => {
-    if (!token || !hasModulePermission('crm')) return;
-    try {
-      const resp = await fetch(`${API_BASE}/followups/due-today`, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || getTenantId(),
-        }
-      });
-      const data = await resp.json();
-      if (data.success && data.data && data.data.length > 0) {
-        data.data.forEach(item => {
-          const msg = `Follow-up due today with ${item.lead_name} (${item.lead_phone || 'No phone'}): ${item.next_followup_remarks || 'No remarks'}`;
-          addToast(msg, 'info');
-          setNotifications(nPrev => {
-            if (nPrev.some(n => n.text === msg)) return nPrev;
-            return [
-              { id: Date.now() + Math.random(), text: msg, time: 'Due Today', read: false },
-              ...nPrev
-            ];
-          });
-        });
-      }
-    } catch (err) {
-      console.error('Failed to check due followups:', err);
-    }
-  }, [token, tenantId, hasModulePermission, addToast]);
 
   const deleteLead = useCallback(async (leadId) => {
     if (!token) return;
