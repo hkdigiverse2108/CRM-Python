@@ -302,16 +302,50 @@ export default function Chat() {
   }, [messages]);
 
   // Handle Channel Selection
-  const handleSelectChannel = (channel) => {
-    setSelectedChannel(channel);
-    setSearchMessageQuery('');
-    setShowMsgSearch(false);
-    setReplyMessage(null);
-    setForwardingMessage(null);
-    setShowGroupSettings(false);
-    fetchMessages(channel.channel_id);
-    if (channel.type === 'group') {
-      fetchGroupMembers(channel.channel_id);
+  const handleSelectChannel = async (channel) => {
+    if (channel.virtual) {
+      try {
+        const res = await fetch(`${API_BASE}/chat/channels`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify({
+            type: 'direct',
+            recipient_id: channel.recipient.user_id
+          })
+        });
+        const d = await res.json();
+        if (res.ok) {
+          const realChan = d.data;
+          const updatedChan = {
+            ...channel,
+            channel_id: realChan.channel_id,
+            virtual: false
+          };
+          setSelectedChannel(updatedChan);
+          setSearchMessageQuery('');
+          setShowMsgSearch(false);
+          setReplyMessage(null);
+          setForwardingMessage(null);
+          setShowGroupSettings(false);
+          fetchMessages(realChan.channel_id);
+          fetchChannels();
+        } else {
+          toast.error('Failed to start chat with employee');
+        }
+      } catch (err) {
+        toast.error('Error starting direct chat');
+      }
+    } else {
+      setSelectedChannel(channel);
+      setSearchMessageQuery('');
+      setShowMsgSearch(false);
+      setReplyMessage(null);
+      setForwardingMessage(null);
+      setShowGroupSettings(false);
+      fetchMessages(channel.channel_id);
+      if (channel.type === 'group') {
+        fetchGroupMembers(channel.channel_id);
+      }
     }
   };
 
@@ -710,9 +744,41 @@ export default function Chat() {
     return `${names.join(', ')} are typing...`;
   };
 
-  const filteredChannels = channels.filter(ch => 
-    ch.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const displayChannels = (() => {
+    const list = [...channels];
+    
+    users.forEach(u => {
+      if (u.user_id === user?.id) return;
+      
+      const hasDirect = channels.some(ch => 
+        ch.type === 'direct' && ch.recipient && ch.recipient.user_id === u.user_id
+      );
+      
+      if (!hasDirect) {
+        list.push({
+          channel_id: `virtual_direct_${u.user_id}`,
+          name: u.full_name,
+          type: 'direct',
+          is_muted: false,
+          recipient: u,
+          virtual: true,
+          latest_message: null,
+          created_at: new Date().toISOString()
+        });
+      }
+    });
+
+    return list.filter(ch => 
+      ch.name.toLowerCase().includes(searchQuery.toLowerCase())
+    ).sort((a, b) => {
+      if (a.type === 'general' && b.type !== 'general') return -1;
+      if (b.type === 'general' && a.type !== 'general') return 1;
+      
+      const timeA = a.latest_message ? new Date(a.latest_message.created_at) : new Date(a.created_at || 0);
+      const timeB = b.latest_message ? new Date(b.latest_message.created_at) : new Date(b.created_at || 0);
+      return timeB - timeA;
+    });
+  })();
 
   const filteredMessages = messages.filter(m => {
     if (!searchMessageQuery) return true;
@@ -769,12 +835,12 @@ export default function Chat() {
 
         {/* Scrollable channels list */}
         <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
-          {filteredChannels.length === 0 ? (
+          {displayChannels.length === 0 ? (
             <div className="text-center py-8 text-xs text-slate-400 dark:text-slate-500">
               No conversations found.
             </div>
           ) : (
-            filteredChannels.map((ch) => {
+            displayChannels.map((ch) => {
               const isSelected = selectedChannel?.channel_id === ch.channel_id;
               const isOnline = ch.type === 'direct' && ch.recipient && onlineUsers.has(ch.recipient.user_id);
               
