@@ -152,10 +152,13 @@ export default function Chat() {
 
   // ── WebSocket Connection (needs token for auth) ──
   useEffect(() => {
-    const tok = getToken();
-    if (!tok) return;
+      const tok = getToken();
+      if (!tok) return;
 
-    const wsUrl = `${WS_BASE}/chat/ws?token=${tok}`;
+      // Prevent multiple WebSocket connections in React StrictMode
+      if (wsRef.current) return;
+
+      const wsUrl = `${WS_BASE}/chat/ws?token=${tok}`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
@@ -314,7 +317,10 @@ export default function Chat() {
     };
 
     return () => {
-      if (wsRef.current) wsRef.current.close();
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
     };
@@ -1510,6 +1516,29 @@ export default function Chat() {
                 >
                   <Send className="w-3.5 h-3.5" />
                 </button>
+                {/* Emoji picker for input */}
+                {activeReactionPicker === 'input' && (
+                  <div className="flex gap-1.5 mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-1.5 shadow-xl">
+                    {['👍', '❤️', '🔥', '👏', '😂', '😮'].map((emoji) => (
+                      <button
+                        key={emoji}
+                        onClick={() => {
+                          setNewMessage((prev) => prev + emoji);
+                          setActiveReactionPicker(null);
+                        }}
+                        className="text-xs hover:scale-125 transition-transform"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setActiveReactionPicker(null)}
+                      className="text-[9px] font-bold text-slate-400 hover:text-slate-600 pl-1 border-l border-slate-200 dark:border-slate-800"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
               </div>
             </form>
           </>
