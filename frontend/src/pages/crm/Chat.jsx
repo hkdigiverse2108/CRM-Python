@@ -12,7 +12,11 @@ export default function Chat() {
   const { user } = useApp();
   const token = localStorage.getItem('token') || '';
   
-  const API_BASE = import.meta.env.VITE_API_BASE_URL;
+  const isAdmin = user?.role === 'super_admin' || user?.role_name === 'Super Admin' || 
+                  user?.role === 'admin' || user?.role_name === 'Admin' || 
+                  user?.role_name === 'Organization Admin' || user?.role_name === 'Workspace Admin';
+  
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
   const WS_BASE = API_BASE.replace(/^http/, 'ws').replace(/^https/, 'wss');
   
   const [channels, setChannels] = useState([]);
@@ -53,6 +57,8 @@ export default function Chat() {
   // Modals
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+  const [showCreateGeneralModal, setShowCreateGeneralModal] = useState(false);
+  const [generalChannelName, setGeneralChannelName] = useState('');
   
   // Group creation state
   const [groupName, setGroupName] = useState('');
@@ -489,6 +495,40 @@ export default function Chat() {
     }
   };
 
+  const handleCreateGeneralChannel = async (e) => {
+    e.preventDefault();
+    if (!generalChannelName.trim()) return;
+    try {
+      const res = await fetch(`${API_BASE}/chat/channels`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          type: 'general',
+          name: generalChannelName.trim()
+        })
+      });
+      const d = await res.json();
+      if (res.ok) {
+        toast.success('General channel created');
+        setShowCreateGeneralModal(false);
+        setGeneralChannelName('');
+        await fetchChannels();
+        const newChan = d.data;
+        if (newChan && newChan.channel_id) {
+          handleSelectChannel({
+            channel_id: newChan.channel_id,
+            type: 'general',
+            name: generalChannelName.trim()
+          });
+        }
+      } else {
+        toast.error(d.message || 'Failed to create General channel');
+      }
+    } catch (err) {
+      toast.error('Error creating General channel');
+    }
+  };
+
 
   // Add Group Member
   const handleAddGroupMembers = async (e) => {
@@ -823,20 +863,33 @@ export default function Chat() {
           </h1>
           
           <div className="flex gap-2">
-            <button 
-              onClick={() => setShowCreateGroupModal(true)}
-              className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400"
-              title="New Group"
-            >
-              <Users className="w-4 h-4" />
-            </button>
-            <button 
-              onClick={() => setShowNewChatModal(true)}
-              className="p-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white shadow-sm"
-              title="New Message"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
+            {activeTab === 'General' && isAdmin && (
+              <button 
+                onClick={() => setShowCreateGeneralModal(true)}
+                className="p-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white shadow-sm flex items-center gap-1 text-[10px] font-bold"
+                title="New General Channel"
+              >
+                <Plus className="w-3.5 h-3.5" /> General
+              </button>
+            )}
+            {activeTab === 'Groups' && (
+              <button 
+                onClick={() => setShowCreateGroupModal(true)}
+                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400"
+                title="New Group"
+              >
+                <Users className="w-4 h-4" />
+              </button>
+            )}
+            {activeTab === 'Personal' && (
+              <button 
+                onClick={() => setShowNewChatModal(true)}
+                className="p-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white shadow-sm"
+                title="New Message"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -862,7 +915,7 @@ export default function Chat() {
               onClick={() => setActiveTab(tab)}
               className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all ${
                 activeTab === tab
-                  ? 'bg-teal-650 dark:bg-teal-700 text-white shadow-sm'
+                  ? 'bg-teal-600 dark:bg-teal-700 text-white shadow-sm'
                   : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
               }`}
             >
@@ -877,7 +930,7 @@ export default function Chat() {
             <div className="p-3 space-y-4">
               <h2 className="text-xs font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Later</h2>
               <div className="flex gap-2.5 border-b border-slate-200 dark:border-slate-800 pb-1 text-[11px] font-bold">
-                <span className="text-teal-650 border-b-2 border-teal-650 pb-1 cursor-pointer">In progress</span>
+                <span className="text-teal-600 border-b-2 border-teal-600 pb-1 cursor-pointer">In progress</span>
                 <span className="text-slate-400 hover:text-slate-600 cursor-pointer">Archived</span>
                 <span className="text-slate-400 hover:text-slate-600 cursor-pointer">Completed</span>
               </div>
@@ -948,7 +1001,7 @@ export default function Chat() {
                     
                     <p className="text-[11px] truncate text-slate-400 dark:text-slate-500">
                       {typingUsers[ch.channel_id] && Object.keys(typingUsers[ch.channel_id]).length > 0 ? (
-                        <span className="italic font-medium text-teal-650">Typing...</span>
+                        <span className="italic font-medium text-teal-600">Typing...</span>
                       ) : ch.virtual ? (
                         <span className="text-slate-400/80">Click to start chatting</span>
                       ) : (
@@ -1007,7 +1060,7 @@ export default function Chat() {
                   onClick={() => setShowMsgSearch(!showMsgSearch)}
                   className={`p-2 rounded-xl transition-all ${
                     showMsgSearch 
-                      ? 'bg-teal-50 text-teal-650 dark:bg-slate-900' 
+                      ? 'bg-teal-50 text-teal-600 dark:bg-slate-900' 
                       : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500'
                   }`}
                   title="Search Messages"
@@ -1805,6 +1858,63 @@ export default function Chat() {
                 className="btn bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs disabled:opacity-50"
               >
                 Add Selected
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ─── MODAL: CREATE GENERAL CHANNEL ─────────────────────────── */}
+      {showCreateGeneralModal && (
+        <div className="fixed inset-0 bg-slate-950/40 dark:bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <form 
+            onSubmit={handleCreateGeneralChannel}
+            className="w-full max-w-md bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 rounded-2xl shadow-2xl flex flex-col max-h-[80vh]"
+          >
+            <div className="p-4 border-b border-slate-250/50 dark:border-slate-800/80 flex items-center justify-between">
+              <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <Hash className="w-4 h-4 text-teal-600" />
+                Create New General Channel
+              </h2>
+              <button 
+                type="button"
+                onClick={() => setShowCreateGeneralModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="p-4 space-y-3">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-455 dark:text-slate-500 mb-1.5">
+                  Channel Name *
+                </label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. Company News, Announcements"
+                  value={generalChannelName}
+                  onChange={(e) => setGeneralChannelName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder-slate-455 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  required
+                />
+              </div>
+            </div>
+            
+            <div className="p-4 border-t border-slate-200/50 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/30 flex justify-end gap-2 shrink-0">
+              <button 
+                type="button"
+                onClick={() => setShowCreateGeneralModal(false)}
+                className="btn-ghost px-4 py-2 rounded-xl text-xs"
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit"
+                disabled={!generalChannelName.trim()}
+                className="btn bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-xs disabled:opacity-50"
+              >
+                Create Channel
               </button>
             </div>
           </form>

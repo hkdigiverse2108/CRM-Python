@@ -98,7 +98,7 @@ manager = ConnectionManager()
 # Request Models
 class ChannelCreatePayload(BaseModel):
     name: Optional[str] = None
-    type: str = "direct" # "direct" or "group"
+    type: str = "direct" # "direct", "group", or "general"
     recipient_id: Optional[str] = None
     member_ids: Optional[List[str]] = None
 
@@ -251,7 +251,7 @@ async def forward_chat_message(
             text("SELECT full_name FROM users WHERE user_id = :uid"),
             {"uid": user_id}
         ).scalar() or "User"
-
+ 
         # 1. Fetch original message
         orig = db.execute(text("""
             SELECT message_text, file_url, file_name, file_type FROM chat_messages 
@@ -573,8 +573,67 @@ async def create_chat_channel(
                             INSERT INTO chat_channel_members (id, workspace_id, channel_id, user_id)
                             VALUES (:id, :ws_id, :ch_id, :uid)
                         """), {"id": str(uuid.uuid4()), "ws_id": workspace_id, "ch_id": channel_id, "uid": uid})
+
+            # Add an initial system message
+            msg_id = str(uuid.uuid4())
+            timestamp = datetime.now()
+            creator_name = db.execute(
+                text("SELECT full_name FROM users WHERE user_id = :uid"),
+                {"uid": user_id}
+            ).scalar() or "User"
+            
+            db.execute(text("""
+                INSERT INTO chat_messages (message_id, workspace_id, channel_id, sender_id, message_text, created_at)
+                VALUES (:msg_id, :ws_id, :ch_id, :sender_id, :text, :timestamp)
+            """), {
+                "msg_id": msg_id,
+                "ws_id": workspace_id,
+                "ch_id": channel_id,
+                "sender_id": user_id,
+                "text": f"👥 Group created by {creator_name}.",
+                "timestamp": timestamp
+            })
                         
             return success_response(data={"channel_id": channel_id}, message="Group channel created.")
+            
+        elif payload.type == "general":
+            if current_user.get("role_name") not in ("Super Admin", "Organization Admin"):
+                raise HTTPException(status_code=403, detail="Only admins can create General channels.")
+            if not payload.name or not payload.name.strip():
+                raise HTTPException(status_code=400, detail="General channel name is required.")
+                
+            channel_id = str(uuid.uuid4())
+            db.execute(text("""
+                INSERT INTO chat_channels (channel_id, workspace_id, name, type)
+                VALUES (:ch_id, :ws_id, :name, 'general')
+            """), {"ch_id": channel_id, "ws_id": workspace_id, "name": payload.name.strip()})
+            
+            db.execute(text("""
+                INSERT INTO chat_channel_members (id, workspace_id, channel_id, user_id)
+                VALUES (:id, :ws_id, :ch_id, :uid)
+            """), {"id": str(uuid.uuid4()), "ws_id": workspace_id, "ch_id": channel_id, "uid": user_id})
+
+            # Add an initial system message
+            msg_id = str(uuid.uuid4())
+            timestamp = datetime.now()
+            creator_name = db.execute(
+                text("SELECT full_name FROM users WHERE user_id = :uid"),
+                {"uid": user_id}
+            ).scalar() or "Admin"
+            
+            db.execute(text("""
+                INSERT INTO chat_messages (message_id, workspace_id, channel_id, sender_id, message_text, created_at)
+                VALUES (:msg_id, :ws_id, :ch_id, :sender_id, :text, :timestamp)
+            """), {
+                "msg_id": msg_id,
+                "ws_id": workspace_id,
+                "ch_id": channel_id,
+                "sender_id": user_id,
+                "text": f"📢 General channel #{payload.name.strip()} created by {creator_name}.",
+                "timestamp": timestamp
+            })
+
+            return success_response(data={"channel_id": channel_id}, message="General channel created.")
             
         else:
             raise HTTPException(status_code=400, detail="Invalid channel type.")
