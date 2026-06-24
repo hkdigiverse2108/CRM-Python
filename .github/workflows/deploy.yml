@@ -37,9 +37,8 @@ jobs:
               venv/bin/pip install -r backend/requirements.txt --quiet
             fi
 
-            # Install frontend dependencies and build
+            # Install frontend dependencies (build is handled automatically by app.py on startup)
             npm install
-            npm run build
 
             pm2 restart CRM
           EOF
