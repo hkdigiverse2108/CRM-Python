@@ -17,8 +17,8 @@ export default function Leads() {
     updateLead, deleteLead, createLead, token, tenantId,
     fetchLeadFollowups, createLeadFollowup
   } = useApp();
-  const [selectedLeadId, setSelectedLeadId] = useState(allLeads[0]?.id || '');
-  const selectedLead = allLeads.find(l => l.id === selectedLeadId) || allLeads[0];
+  const [selectedLeadId, setSelectedLeadId] = useState(null);
+  const selectedLead = allLeads.find(l => l.id === selectedLeadId);
   const [search, setSearch] = useState('');
   const [selectedStage, setSelectedStage] = useState('All');
   const [selectedSource, setSelectedSource] = useState('All');
@@ -299,137 +299,108 @@ export default function Leads() {
         </ButtonGuard>
       </PageHeader>
 
-      {/* 3-Pane Layout Container */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* LEFT PANE - Filters & Segments */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="glass-card p-4 space-y-4">
-            <div>
-              <h3 className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Deal Stages</h3>
-              <div className="space-y-1">
-                {stages.map(s => (
-                  <button
-                    key={s}
-                    onClick={() => setSelectedStage(s)}
-                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold ${
-                      selectedStage === s 
-                        ? 'bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 font-bold' 
-                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50'
-                    }`}
-                  >
-                    <span>{s}</span>
-                    <span className="text-[10px] px-1.5 py-0.2 bg-slate-100 dark:bg-slate-800 text-slate-400 rounded-full">
-                      {s === 'All' ? allLeads.length : allLeads.filter(l => l.stage === s).length}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
+      {/* Filters Row */}
+      <div className="glass-card p-3.5 flex flex-wrap items-center gap-3 bg-white/70 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800/80">
+        <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 mr-2">
+          <Filter size={14} />
+          <span>Filters:</span>
+        </div>
+        
+        {/* Stage Filter */}
+        <select
+          value={selectedStage}
+          onChange={e => setSelectedStage(e.target.value)}
+          className="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-semibold"
+        >
+          <option value="All">All Stages</option>
+          {stages.filter(s => s !== 'All').map(s => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
 
-            <div className="border-t border-slate-100 dark:border-slate-800 pt-3">
-              <h3 className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Sources</h3>
-              <div className="space-y-1">
-                {sources.slice(0, 5).map(src => (
-                  <button
-                    key={src}
-                    onClick={() => setSelectedSource(src)}
-                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold ${
-                      selectedSource === src 
-                        ? 'bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 font-bold' 
-                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50'
-                    }`}
-                  >
-                    <span>{src}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+        {/* Source Filter */}
+        <select
+          value={selectedSource}
+          onChange={e => setSelectedSource(e.target.value)}
+          className="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-semibold"
+        >
+          <option value="All">All Sources</option>
+          {sources.filter(s => s !== 'All').map(s => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
 
-            <div className="border-t border-slate-100 dark:border-slate-800 pt-3">
-              <h3 className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Lead Tags</h3>
-              <div className="space-y-1">
-                {tags.map(t => (
-                  <button
-                    key={t}
-                    onClick={() => setSelectedTag(t)}
-                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold ${
-                      selectedTag === t 
-                        ? 'bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 font-bold' 
-                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50'
-                    }`}
-                  >
-                    <span>{t}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+        {/* Tag Filter */}
+        <select
+          value={selectedTag}
+          onChange={e => setSelectedTag(e.target.value)}
+          className="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-semibold"
+        >
+          <option value="All">All Tags</option>
+          {tags.filter(t => t !== 'All').map(t => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
 
-            <div className="border-t border-slate-100 dark:border-slate-800 pt-3">
-              <h3 className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Product Interest</h3>
-              <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
-                <button
-                  onClick={() => setSelectedLabel('All')}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold ${
-                    selectedLabel === 'All'
-                      ? 'bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 font-bold'
-                      : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50'
-                  }`}
-                >
-                  <span>All</span>
-                  <span className="text-[10px] px-1.5 py-0.2 bg-slate-100 dark:bg-slate-800 text-slate-400 rounded-full">
-                    {allLeads.length}
-                  </span>
-                </button>
-                {workspaceLabels.map(lbl => (
-                  <button
-                    key={lbl}
-                    onClick={() => setSelectedLabel(lbl)}
-                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold ${
-                      selectedLabel === lbl
-                        ? 'bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 font-bold'
-                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50'
-                    }`}
-                  >
-                    <span className="truncate">{lbl}</span>
-                    <span className="text-[10px] px-1.5 py-0.2 bg-slate-100 dark:bg-slate-800 text-slate-400 rounded-full shrink-0">
-                      {allLeads.filter(l => l.product_interest === lbl).length}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+        {/* Product/Label Filter */}
+        <select
+          value={selectedLabel}
+          onChange={e => setSelectedLabel(e.target.value)}
+          className="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-semibold"
+        >
+          <option value="All">All Interests</option>
+          {workspaceLabels.map(lbl => (
+            <option key={lbl} value={lbl}>{lbl}</option>
+          ))}
+        </select>
+
+        {/* Clear Filters Button */}
+        {(selectedStage !== 'All' || selectedSource !== 'All' || selectedTag !== 'All' || selectedLabel !== 'All' || search) && (
+          <button
+            onClick={() => {
+              setSelectedStage('All');
+              setSelectedSource('All');
+              setSelectedTag('All');
+              setSelectedLabel('All');
+              setSearch('');
+            }}
+            className="text-xs text-rose-500 hover:text-rose-600 font-bold flex items-center gap-1 transition-colors px-2.5 py-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/20"
+          >
+            <X size={12} /> Clear Filters
+          </button>
+        )}
+      </div>
+
+      {/* Main Table Layout */}
+      <div className="space-y-3">
+        <div className="glass-card p-3 flex items-center gap-3">
+          <Search size={15} className="text-slate-400 dark:text-slate-500 shrink-0" />
+          <input 
+            type="text" 
+            placeholder="Search leads by name or company..." 
+            value={search} 
+            onChange={e => setSearch(e.target.value)} 
+            className="flex-1 bg-transparent border-0 outline-none text-xs text-slate-700 dark:text-slate-200 placeholder-slate-400" 
+          />
         </div>
 
-        {/* CENTER PANE - Lead Table list */}
-        <div className="lg:col-span-7 space-y-3">
-          <div className="glass-card p-3 flex items-center gap-3">
-            <Search size={15} className="text-slate-400 dark:text-slate-500 shrink-0" />
-            <input 
-              type="text" 
-              placeholder="Search leads by name or company..." 
-              value={search} 
-              onChange={e => setSearch(e.target.value)} 
-              className="flex-1 bg-transparent border-0 outline-none text-xs text-slate-700 dark:text-slate-200 placeholder-slate-400" 
-            />
-          </div>
-
-          <div className="glass-card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Lead Name</th>
-                    <th>Company</th>
-                    <th>Label</th>
-                    <th>Value</th>
-                    <th>Stage</th>
-                    <th>Source</th>
-                    <th className="text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map(lead => (
+        <div className="glass-card overflow-hidden rounded-2xl border border-slate-100 dark:border-slate-800/80">
+          <div className="overflow-x-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Lead Name</th>
+                  <th>Company</th>
+                  <th>Label</th>
+                  <th>Value</th>
+                  <th>Stage</th>
+                  <th>Source</th>
+                  <th className="text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.length > 0 ? (
+                  filtered.map(lead => (
                     <tr 
                       key={lead.id}
                       onClick={() => setSelectedLeadId(lead.id)}
@@ -446,7 +417,7 @@ export default function Leads() {
                       <td className="text-xs text-slate-600 dark:text-slate-300 font-medium">{lead.company}</td>
                       <td>
                         {lead.product_interest ? (
-                          <span className="text-[10px] bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                          <span className="text-[10px] bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider whitespace-nowrap">
                             {lead.product_interest}
                           </span>
                         ) : (
@@ -454,7 +425,7 @@ export default function Leads() {
                         )}
                       </td>
                       <td className="text-xs font-bold text-slate-800 dark:text-white">{formatCurrency(lead.value)}</td>
-                      <td><span className={`badge ${getStatusColor(lead.stage || 'New')}`}>{lead.stage || 'New'}</span></td>
+                      <td><span className={`badge ${getStatusColor(lead.stage || 'New')} whitespace-nowrap`}>{lead.stage || 'New'}</span></td>
                       <td className="text-xs text-slate-400 dark:text-slate-500 font-semibold">{lead.source || 'Website'}</td>
                       <td className="text-right" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-end gap-1">
@@ -479,41 +450,42 @@ export default function Leads() {
                         </div>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="7" className="py-8 text-center text-xs text-slate-400 italic">No leads found matching filters.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
+      </div>
 
-        {/* RIGHT PANE - Detailed Lead Profile Panel */}
-        <div className="lg:col-span-3">
-          {selectedLead ? (
-            <div className="glass-card p-5 space-y-5">
-              <div className="flex justify-end gap-1.5 mb-2 -mt-2">
+      {/* RIGHT DRAWER - Detailed Lead Profile Sheet (Slide-out) */}
+      {selectedLeadId && selectedLead && (
+        <>
+          <div className="sheet-overlay animate-fade-in" onClick={() => setSelectedLeadId(null)} />
+          <div className="sheet-content w-full max-w-lg p-6 overflow-y-auto z-50">
+            <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <h2 className="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider">Lead Profile & Timeline</h2>
+              <div className="flex items-center gap-2">
                 <ButtonGuard module="crm" action="edit">
-                  <button
+                  <button 
                     onClick={() => handleStartEdit(selectedLead)}
-                    className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-1 text-[10px] font-bold cursor-pointer"
-                    title="Edit Lead"
+                    className="px-2.5 py-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 cursor-pointer"
                   >
-                    <Edit size={12} /> Edit
+                    Edit Info
                   </button>
                 </ButtonGuard>
-                <ButtonGuard module="crm" action="delete">
-                  <button
-                    onClick={() => handleDeleteClick(selectedLead.id)}
-                    className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-1 text-[10px] font-bold cursor-pointer"
-                    title="Delete Lead"
-                  >
-                    <Trash2 size={12} /> Delete
-                  </button>
-                </ButtonGuard>
+                <button onClick={() => setSelectedLeadId(null)} className="btn-ghost p-1"><X size={18} /></button>
               </div>
+            </div>
 
+            <div className="space-y-5">
               <div className="text-center pb-4 border-b border-slate-100 dark:border-slate-800/80">
                 <div className="w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-white font-bold flex items-center justify-center mx-auto shadow-md">
-                  {selectedLead.name.split(' ').map(n => n.charAt(0)).join('')}
+                  {selectedLead.name ? selectedLead.name.split(' ').map(n => n.charAt(0)).join('') : 'LD'}
                 </div>
                 <h3 className="font-bold text-sm text-slate-800 dark:text-white mt-3">{selectedLead.name}</h3>
                 <p className="text-[11px] text-slate-400 font-medium">{selectedLead.company}</p>
@@ -528,7 +500,7 @@ export default function Leads() {
                 </div>
                 <div className="p-2.5 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800/60">
                   <span className="text-[9px] font-bold text-slate-400 uppercase">Stage</span>
-                  <div><span className={`badge ${getStatusColor(selectedLead.stage || 'New')} mt-0.5`}>{selectedLead.stage || 'New'}</span></div>
+                  <div><span className={`badge ${getStatusColor(selectedLead.stage || 'New')} mt-0.5 whitespace-nowrap`}>{selectedLead.stage || 'New'}</span></div>
                 </div>
               </div>
 
@@ -599,7 +571,7 @@ export default function Leads() {
                 {selectedLead.notes && (
                   <div className="bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/60">
                     <span className="text-[9px] font-bold text-slate-400 uppercase block">Notes</span>
-                    <span className="text-slate-655 dark:text-slate-305 text-[11px] leading-relaxed mt-0.5 block italic">"{selectedLead.notes}"</span>
+                    <span className="text-slate-655 dark:text-slate-355 text-[11px] leading-relaxed mt-0.5 block italic">"{selectedLead.notes}"</span>
                   </div>
                 )}
                 {(selectedLead.city || selectedLead.state || selectedLead.pincode) && (
@@ -623,14 +595,14 @@ export default function Leads() {
               <div className="flex items-center gap-2 border-t border-slate-100 dark:border-slate-800 pt-4">
                 <button 
                   onClick={() => addToast(`Opening WhatsApp chat with ${selectedLead.name}`)}
-                  className="flex-1 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
+                  className="flex-1 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <MessageCircle size={13} />
                   <span>WhatsApp</span>
                 </button>
                 <button 
                   onClick={() => addToast(`Calling ${selectedLead.name}...`)}
-                  className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
+                  className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <Phone size={13} />
                   <span>Call Dialer</span>
@@ -742,13 +714,9 @@ export default function Leads() {
                 </div>
               </div>
             </div>
-          ) : (
-            <div className="glass-card p-8 text-center text-slate-400">
-              Select a lead from the workspace list to view their detailed timeline profile.
-            </div>
-          )}
-        </div>
-      </div>
+          </div>
+        </>
+      )}
 
       {/* Add Lead Slide-out Sheet */}
       {showAddLead && (
