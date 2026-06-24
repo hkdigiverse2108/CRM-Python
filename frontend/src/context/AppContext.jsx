@@ -2368,7 +2368,7 @@ export function AppProvider({ children }) {
       const idx = prevLeads.findIndex(l => l.id === leadId);
       if (idx === -1) return prevLeads;
       const nextLeads = [...prevLeads];
-      nextLeads[idx] = { ...nextLeads[idx], stage: 'Won' };
+      nextLeads[idx] = { ...nextLeads[idx], stage: 'Converted' };
       leadName = nextLeads[idx].name;
       
       const lead = nextLeads[idx];

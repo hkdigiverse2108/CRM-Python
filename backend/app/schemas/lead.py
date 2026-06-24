@@ -31,7 +31,7 @@ class LeadUpdate(BaseModel):
     source: Optional[str] = None
     status: Optional[str] = Field(
         default=None,
-        pattern=r"^(new|contacted|qualified|proposal|won|lost)$",
+        pattern=r"^(New Lead|Contacted|Follow-up|Negotiation|Hot Lead|Proposal Sent|Converted|new lead|contacted|follow-up|negotiation|hot lead|proposal sent|converted|new|qualified|won|lost)$",
     )
     score: Optional[int] = Field(default=None, ge=0, le=100)
     assigned_to: Optional[str] = None

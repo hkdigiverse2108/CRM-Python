@@ -59,8 +59,8 @@ export default function Leads() {
     website: '',
     industry: '',
     source: 'Website',
-    status: 'New',
-    stage: 'New',
+    status: 'New Lead',
+    stage: 'New Lead',
     priority: 'Medium',
     tags: '',
     requirement: '',
@@ -80,7 +80,7 @@ export default function Leads() {
     pincode: ''
   });
 
-  const stages = ['All', 'New', 'Contacted', 'Qualified', 'Negotiation', 'Won', 'Lost'];
+  const stages = ['All', 'New Lead', 'Contacted', 'Follow-up', 'Negotiation', 'Hot Lead', 'Proposal Sent', 'Converted'];
   const sources = ['All', 'Website', 'LinkedIn', 'Referral', 'Google Ads', 'WhatsApp', 'Cold Call'];
   const tags = ['All', 'High Value', 'Warm Lead', 'Enterprise', 'Retail'];
 
@@ -124,8 +124,8 @@ export default function Leads() {
           website: '',
           industry: '',
           source: 'Website',
-          status: 'New',
-          stage: 'New',
+          status: 'New Lead',
+          stage: 'New Lead',
           priority: 'Medium',
           tags: '',
           requirement: '',
@@ -149,8 +149,8 @@ export default function Leads() {
       const lead = {
         id: `LD-${String(allLeads.length + 1).padStart(3, '0')}`,
         ...newLead,
-        status: 'New',
-        stage: 'New',
+        status: 'New Lead',
+        stage: 'New Lead',
         value: Number(newLead.value) || 0,
         createdAt: new Date().toISOString().split('T')[0],
         lastActivity: new Date().toISOString().split('T')[0],
@@ -169,8 +169,8 @@ export default function Leads() {
         website: '',
         industry: '',
         source: 'Website',
-        status: 'New',
-        stage: 'New',
+        status: 'New Lead',
+        stage: 'New Lead',
         priority: 'Medium',
         tags: '',
         requirement: '',
@@ -645,12 +645,12 @@ export default function Leads() {
               
               <div><label className="text-xs font-semibold mb-1 block">Lead Status</label>
                 <select value={newLead.status} onChange={e => setNewLead({...newLead, status: e.target.value})} className="input-field">
-                  <option value="New">New</option><option value="Contacted">Contacted</option><option value="Qualified">Qualified</option><option value="Unqualified">Unqualified</option>
+                  <option value="New Lead">New Lead</option><option value="Contacted">Contacted</option><option value="Follow-up">Follow-up</option><option value="Negotiation">Negotiation</option><option value="Hot Lead">Hot Lead</option><option value="Proposal Sent">Proposal Sent</option><option value="Converted">Converted</option>
                 </select>
               </div>
               <div><label className="text-xs font-semibold mb-1 block">Lead Stage</label>
                 <select value={newLead.stage} onChange={e => setNewLead({...newLead, stage: e.target.value})} className="input-field">
-                  <option value="New">New</option><option value="Contacted">Contacted</option><option value="Qualified">Qualified</option><option value="Negotiation">Negotiation</option><option value="Won">Won</option><option value="Lost">Lost</option>
+                  <option value="New Lead">New Lead</option><option value="Contacted">Contacted</option><option value="Follow-up">Follow-up</option><option value="Negotiation">Negotiation</option><option value="Hot Lead">Hot Lead</option><option value="Proposal Sent">Proposal Sent</option><option value="Converted">Converted</option>
                 </select>
               </div>
 
@@ -742,13 +742,13 @@ export default function Leads() {
               </div>
               
               <div><label className="text-xs font-semibold mb-1 block">Lead Status</label>
-                <select value={editLeadData.status || 'New'} onChange={e => setEditLeadData({...editLeadData, status: e.target.value})} className="input-field">
-                  <option value="New">New</option><option value="Contacted">Contacted</option><option value="Qualified">Qualified</option><option value="Unqualified">Unqualified</option>
+                <select value={editLeadData.status || 'New Lead'} onChange={e => setEditLeadData({...editLeadData, status: e.target.value})} className="input-field">
+                  <option value="New Lead">New Lead</option><option value="Contacted">Contacted</option><option value="Follow-up">Follow-up</option><option value="Negotiation">Negotiation</option><option value="Hot Lead">Hot Lead</option><option value="Proposal Sent">Proposal Sent</option><option value="Converted">Converted</option>
                 </select>
               </div>
               <div><label className="text-xs font-semibold mb-1 block">Lead Stage</label>
-                <select value={editLeadData.stage || 'New'} onChange={e => setEditLeadData({...editLeadData, stage: e.target.value})} className="input-field">
-                  <option value="New">New</option><option value="Contacted">Contacted</option><option value="Qualified">Qualified</option><option value="Negotiation">Negotiation</option><option value="Won">Won</option><option value="Lost">Lost</option>
+                <select value={editLeadData.stage || 'New Lead'} onChange={e => setEditLeadData({...editLeadData, stage: e.target.value})} className="input-field">
+                  <option value="New Lead">New Lead</option><option value="Contacted">Contacted</option><option value="Follow-up">Follow-up</option><option value="Negotiation">Negotiation</option><option value="Hot Lead">Hot Lead</option><option value="Proposal Sent">Proposal Sent</option><option value="Converted">Converted</option>
                 </select>
               </div>
 

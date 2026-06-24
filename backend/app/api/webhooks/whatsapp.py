@@ -181,7 +181,7 @@ async def _create_lead_if_not_exists(workspace_id: str, name: str, phone: str, b
             db.execute(
                 text("""
                 INSERT INTO leads (lead_id, workspace_id, full_name, phone_primary, company_name, lead_source, lead_status, lead_score, created_at, updated_at)
-                VALUES (:lead_id, :workspace_id, :name, :phone, 'WhatsApp Contact', 'WhatsApp', 'new', 10, NOW(), NOW())
+                VALUES (:lead_id, :workspace_id, :name, :phone, 'WhatsApp Contact', 'WhatsApp', 'New Lead', 10, NOW(), NOW())
                 """),
                 {
                     "lead_id": lead_id,
