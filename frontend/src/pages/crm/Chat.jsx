@@ -829,7 +829,7 @@ export default function Chat() {
     }
 
     return list.filter(ch => 
-      ch.name.toLowerCase().includes(searchQuery.toLowerCase())
+      ch.name?.toLowerCase().includes(searchQuery.toLowerCase())
     ).sort((a, b) => {
       const isSelfA = a.recipient && a.recipient.user_id === user?.id;
       const isSelfB = b.recipient && b.recipient.user_id === user?.id;

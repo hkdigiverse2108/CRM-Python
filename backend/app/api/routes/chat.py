@@ -415,21 +415,23 @@ async def list_chat_users_duplicate(
 ):
     workspace_id = current_user.get("tenant_id")
     with get_db() as db:
-        users = db.execute(text("""
-            SELECT u.user_id, u.full_name, u.email, u.role_id, r.role_name
-            FROM users u
-            LEFT JOIN roles r ON u.role_id = r.role_id
-            WHERE u.workspace_id = :ws_id AND u.deleted_at IS NULL
+        employees = db.execute(text("""
+            SELECT e.employee_id, e.name AS full_name, e.email, e.role AS role_name, u.user_id, e.deleted_at
+            FROM hrms_employees e
+            LEFT JOIN users u ON e.email = u.email AND u.workspace_id = e.workspace_id
+            WHERE e.workspace_id = :ws_id
         """), {"ws_id": workspace_id}).mappings().all()
         
         users_list = []
-        for u in users:
+        for emp in employees:
+            uid = emp["user_id"] or f"emp_{emp['employee_id']}"
+            name_suffix = " (Former Employee)" if emp["deleted_at"] is not None else ""
             users_list.append({
-                "user_id": u["user_id"],
-                "full_name": u["full_name"],
-                "email": u["email"],
-                "role_name": u["role_name"] or "Sales Executive",
-                "is_online": u["user_id"] in manager.active_connections
+                "user_id": uid,
+                "full_name": emp["full_name"] + name_suffix,
+                "email": emp["email"],
+                "role_name": emp["role_name"] or "Sales Executive",
+                "is_online": uid in manager.active_connections if emp["user_id"] else False
             })
     return success_response(data=users_list)
 
@@ -520,6 +522,34 @@ async def create_chat_channel(
             if not payload.recipient_id:
                 raise HTTPException(status_code=400, detail="Recipient ID is required for direct chat.")
             
+            recipient_id = payload.recipient_id
+            if recipient_id.startswith("emp_"):
+                emp_id = recipient_id.replace("emp_", "")
+                emp_row = db.execute(text("""
+                    SELECT name, email, role FROM hrms_employees 
+                    WHERE employee_id = :emp_id AND workspace_id = :ws_id
+                """), {"emp_id": emp_id, "ws_id": workspace_id}).mappings().first()
+                if not emp_row:
+                    raise HTTPException(status_code=404, detail="Employee not found.")
+                
+                usr_id = db.execute(text("""
+                    SELECT user_id FROM users WHERE email = :email AND workspace_id = :ws_id
+                """), {"email": emp_row["email"], "ws_id": workspace_id}).scalar()
+                
+                if not usr_id:
+                    usr_id = str(uuid.uuid4())
+                    db.execute(text("""
+                        INSERT INTO users (user_id, workspace_id, username, full_name, email, role_id, status)
+                        VALUES (:uid, :ws_id, :email, :name, :email, :role, 'active')
+                    """), {
+                        "uid": usr_id,
+                        "ws_id": workspace_id,
+                        "email": emp_row["email"],
+                        "name": emp_row["name"],
+                        "role": "role_employee_" + workspace_id
+                    })
+                recipient_id = usr_id
+
             existing_channel_id = db.execute(text("""
                 SELECT m1.channel_id 
                 FROM chat_channel_members m1
@@ -527,7 +557,7 @@ async def create_chat_channel(
                 JOIN chat_channels c ON m1.channel_id = c.channel_id
                 WHERE c.type = 'direct' AND c.workspace_id = :ws_id
                   AND m1.user_id = :uid1 AND m2.user_id = :uid2
-            """), {"ws_id": workspace_id, "uid1": user_id, "uid2": payload.recipient_id}).scalar()
+            """), {"ws_id": workspace_id, "uid1": user_id, "uid2": recipient_id}).scalar()
             
             if existing_channel_id:
                 return success_response(data={"channel_id": existing_channel_id}, message="Direct channel already exists.")
@@ -535,7 +565,7 @@ async def create_chat_channel(
             channel_id = str(uuid.uuid4())
             recipient_name = db.execute(
                 text("SELECT full_name FROM users WHERE user_id = :uid"),
-                {"uid": payload.recipient_id}
+                {"uid": recipient_id}
             ).scalar() or "User"
             
             db.execute(text("""
@@ -543,7 +573,7 @@ async def create_chat_channel(
                 VALUES (:ch_id, :ws_id, :name, 'direct')
             """), {"ch_id": channel_id, "ws_id": workspace_id, "name": f"Direct: {recipient_name}"})
             
-            for uid in [user_id, payload.recipient_id]:
+            for uid in [user_id, recipient_id]:
                 db.execute(text("""
                     INSERT INTO chat_channel_members (id, workspace_id, channel_id, user_id)
                     VALUES (:id, :ws_id, :ch_id, :uid)
